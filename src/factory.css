@@ -1,0 +1,12 @@
+.park-map{position:absolute;right:24px;top:140px;width:108px;padding:5px;background:#12201bd6;border:2px ridge #77816c;box-shadow:3px 3px #0c100dc0;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.park-map>span,.park-map>small{font:bold 8px/1.2 'Courier New',monospace;color:#cfcc9f;letter-spacing:.7px;text-align:center;text-shadow:1px 1px #000}
+.park-map>small{font-size:6px;letter-spacing:0;color:#dad5a8}
+.park-map canvas{width:94px;height:135px;image-rendering:pixelated}
+.park-mode .wave-map{display:none}
+.park-start-wrap{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 9px;color:#e7dfb5;font:bold 9px 'Courier New',monospace;letter-spacing:1px;text-shadow:1px 1px #17221e}
+.park-start-wrap select{max-width:70%;min-width:160px;border:2px solid #283833;background:#d8cfb7;color:#263b35;padding:6px 24px 6px 8px;border-radius:0;font:bold 10px 'Courier New',monospace}
+.park-start-wrap select:focus-visible{outline:3px solid #d67b33;outline-offset:2px}
+@media(max-height:650px){.park-start-wrap{margin-bottom:4px;font-size:7px}.park-start-wrap select{padding:3px 20px 3px 6px;font-size:8px}}
+@media(max-height:590px){.park-map{top:127px;width:82px;right:22px}.park-map canvas{width:68px;height:98px}.park-map>span{font-size:6px}.park-map>small{font-size:5px}}
+@media(max-width:750px){.park-map{right:12px;top:142px;width:62px;padding:3px}.park-map canvas{width:52px;height:75px}.park-map>span{font-size:5px}.park-map>small{display:none}}
+@media(max-width:480px){.park-map{top:182px;right:8px;opacity:.82}}
