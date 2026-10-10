@@ -1,5 +1,8 @@
 import { SurfGame, RUN_SECONDS, POP_COOLDOWN, clamp } from './game.js';
 
+const CUTBACK_SECONDS=.72;
+const CUTBACK_TURN=145*Math.PI/180;
+
 // Ramp coordinates: u is across the ramp and v runs from its foot to its lip.
 // Rotation zero points towards -Z, matching the rider's heading.
 export const PARK_RAMPS = [
@@ -335,6 +338,34 @@ export class WaveParkGame extends SurfGame {
 
   bank() { return this.grinding||this.pipeRide||this.lipMove ? false : super.bank(); }
 
+  doCutback(direction=0) {
+    if(this.phase!=='running'||this.airborne||this.bailTime>0||this.grinding||this.pipeRide||this.lipMove||this.cutbackActive||this.cutbackCooldown>0||this.speed<8)return false;
+    // Match ocean pose/event directions: left is -1, right is +1. Park
+    // heading runs the opposite way, so only the physical yaw negates this.
+    this.cutbackDirection=Number.isFinite(direction)&&direction!==0?Math.sign(direction):this.steering>0?-1:1;
+    this.cutbackActive=true;this.cutbackAge=0;this.cutbackProgress=0;this.cutback=.001;this.cutbackCooldown=1.5;
+    this.cutbackLaunchTime=0;this.charge=0;this.carveTime=0;
+    this.onEvent({type:'cutbackStart',mode:'park',direction:this.cutbackDirection});return true;
+  }
+
+  cancelCutback() {
+    this.cutbackActive=false;this.cutback=0;this.cutbackProgress=0;this.cutbackAge=0;this.cutbackLaunchTime=0;
+  }
+
+  updateCutback(dt) {
+    const before=this.cutbackProgress;
+    this.cutbackAge+=dt;this.cutbackProgress=clamp(this.cutbackAge/CUTBACK_SECONDS,0,1);
+    const smooth=value=>value*value*(3-2*value);
+    this.heading-=this.cutbackDirection*CUTBACK_TURN*(smooth(this.cutbackProgress)-smooth(before));
+    this.cutback=Math.sin(this.cutbackProgress*Math.PI);
+  }
+
+  approachingCoping(surface) {
+    const ramp=surface.ramp;
+    return ramp?.type==='quarter'&&surface.progress>=.72&&Math.abs(surface.lateral)<ramp.width/2-1.35&&
+      -(this.vx*Math.sin(ramp.rotation)+this.vz*Math.cos(ramp.rotation))>.8;
+  }
+
   bail(reason = 'WIPEOUT') {
     if(this.phase!=='running'||this.bailTime>0)return;
     if(this.pipeRide) {this.pipeRide.angle=0;this.applyPipeRide();this.endPipeRide();}
@@ -348,6 +379,7 @@ export class WaveParkGame extends SurfGame {
       this.y=parkHeight(this.x,this.z);
     }
     this.lipMove=null;this.lipGrab=0;this.rampReturn=null;
+    this.cancelCutback();
     this.grinding = null;
     this.railCooldown = 1.2;
     super.bail(reason);
@@ -381,6 +413,7 @@ export class WaveParkGame extends SurfGame {
   }
 
   launch(velocity, name = 'LIP LAUNCH', points = 200) {
+    this.cancelCutback();
     this.lastJump = this.elapsed;
     this.rampReturn=null;
     this.popRecovery=POP_COOLDOWN;this.airLaunchSource='ramp';this.launchTricks=0;
@@ -423,20 +456,30 @@ export class WaveParkGame extends SurfGame {
     this.railCooldown = Math.max(0, this.railCooldown - dt);
     this.rampCooldown = Math.max(0, this.rampCooldown - dt);
     this.pipeCooldown=Math.max(0,this.pipeCooldown-dt);
+    this.cutbackCooldown=Math.max(0,this.cutbackCooldown-dt);
     const steering = (input.left ? 1 : 0) - (input.right ? 1 : 0);
     this.steering = steering;
     const previous = parkRideSurface(this.x,this.z,this.y);
 
     if(input.action&&!this.pipeRide&&!this.lipMove&&!this.grinding&&!this.airborne&&this.bailTime<=0&&this.pipeCooldown===0)this.tryPipeRide();
+    const chord=input.grind?-steering:0;
+    if(chord!==this.cutbackChord){this.cutbackChord=chord;this.cutbackChordArmed=true;}
+    const copingPriority=input.grind&&this.approachingCoping(previous);
+    const reserved=input.action||this.pipeRide||this.lipMove||this.grinding||copingPriority;
+    if(reserved) {
+      if(this.cutbackActive)this.cancelCutback();
+      if(chord)this.cutbackChordArmed=false;
+    } else if(chord&&this.cutbackChordArmed&&this.doCutback(chord))this.cutbackChordArmed=false;
     if(this.pipeRide)this.updatePipeRide(dt,input);
     else if(this.lipMove)this.updateLipMove(dt);
     else if (this.grinding) this.updateRail(dt, input);
     else {
       const active = this.bailTime <= 0;
-      if (active&&!this.rampReturn) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
-      const targetSpeed = active ? input.brake ? 3.5 : input.pump ? 23.5 : 15 : 3;
+      if(this.cutbackActive)this.updateCutback(dt);
+      else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
+      const targetSpeed = active ? (input.brake ? 3.5 : input.pump ? 23.5 : 15)*(this.cutbackActive?.72:1) : 3;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * (input.brake ? 3.6 : 1.5)));
-      const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : 11));
+      const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:11));
       if(this.rampReturn)this.updateRampReturn(dt,steering);
       else {
         // A ramp pop redirects some speed upward. Keep that short climbing
@@ -502,11 +545,15 @@ export class WaveParkGame extends SurfGame {
         else this.charge = Math.max(0, this.charge - dt * 3);
         if (!this.airborne && movement.type !== 'wall') this.tryRamp(surface,previous,input);
         if (!this.airborne && surface.ramp?.type === 'bank' && surface.progress > .28 && surface.progress < .72 && !this.visitedRamps.has(surface.ramp.id)) this.recordRamp(surface.ramp);
-        if (Math.abs(steering) > 0 && this.speed > 8 && !input.brake) {
+        if(this.cutbackActive&&this.cutbackProgress>=1) {
+          this.cutbackActive=false;this.cutback=0;
+          this.onEvent({type:'cutback',mode:'park',direction:this.cutbackDirection,launchTime:0});
+        }
+        if (!this.cutbackActive&&!input.grind&&Math.abs(steering) > 0 && this.speed > 8 && !input.brake) {
           this.carveTime += dt;
           if (this.carveTime > 0.85) { this.score += 30; this.carveTime = 0; }
         } else this.carveTime = 0;
-        if (!this.airborne&&!this.grinding&&!this.lipMove && this.comboBase) {
+        if (!this.airborne&&!this.grinding&&!this.lipMove&&!this.cutbackActive && this.comboBase) {
           this.comboTime -= dt;
           if (this.comboTime <= 0) this.bank();
         }
@@ -517,7 +564,8 @@ export class WaveParkGame extends SurfGame {
     if(!this.pipeRide){this.y=Math.max(this.y,rideHeight(this.x,this.z,this.y).height);this.surface=parkRideSurface(this.x,this.z,this.y);}
     this.distance = -this.z;
     if (this.time <= 0) {
-      if (this.airborne || this.grinding ||this.pipeRide||this.lipMove) this.clearCombo(); else this.bank();
+      if (this.airborne || this.grinding ||this.pipeRide||this.lipMove||this.cutbackActive) this.clearCombo(); else this.bank();
+      this.cancelCutback();
       this.grinding = null;
       this.phase = 'finished';
       this.onEvent({ type: 'finish' });
@@ -588,6 +636,7 @@ export class WaveParkGame extends SurfGame {
       if(Math.abs(local.v)>pipe.length/2-3||Math.abs(local.u)>inner*.75||this.y>pipe.centerY||Math.abs(along)<Math.max(3,this.speed*.5))continue;
       if(Math.abs(this.y-pipeSurfaceHeight(pipe,local.u))>.3)continue;
       const angle=Math.atan2(local.u,pipe.centerY-this.y);
+      this.cancelCutback();
       this.pipeRide={pipe,angle,cycleStart:angle,local:local.v,dir:Math.sign(along)||1,age:0,releasePending:false};
       this.airborne=false;this.trick=null;this.vy=0;this.charge=0;
       this.heading=pipe.rotation+(along<0?Math.PI:0);
@@ -647,6 +696,7 @@ export class WaveParkGame extends SurfGame {
   }
 
   startLipMove(ramp) {
+    this.cancelCutback();
     this.lipMove={ramp,age:0,duration:.76,progress:0,x:this.x,y:this.y,z:this.z,heading:this.heading,speed:this.speed};
     this.lipGrab=0;this.vx=0;this.vz=0;this.vy=0;this.speed=0;this.charge=0;
     this.onEvent({type:'lipStart',id:ramp.id});
@@ -692,6 +742,7 @@ export class WaveParkGame extends SurfGame {
   }
 
   catchRail(rail,local,along) {
+    this.cancelCutback();
     this.grinding={rail,kind:rail.kind||'rail',rampId:rail.rampId,dir:Math.sign(along)||1,local,age:0,ticks:0};
     this.x=rail.x-Math.sin(rail.rotation)*local;this.z=rail.z-Math.cos(rail.rotation)*local;
     this.airborne=false;this.vy=0;this.y=railTopHeight(rail,local);this.grindCount++;
@@ -739,6 +790,7 @@ export class WaveParkGame extends SurfGame {
       reflected = true;
     }
     if (reflected) {
+      this.cancelCutback();
       this.heading = Math.atan2(-this.vx, -this.vz);
       this.speed *= 0.78;
       this.onEvent({ type: 'boundary' });
@@ -748,6 +800,7 @@ export class WaveParkGame extends SurfGame {
   reflectWall(normal) {
     const size=Math.hypot(normal.x,normal.z);
     if(size<.001) return;
+    this.cancelCutback();
     normal={x:normal.x/size,z:normal.z/size};
     const into = this.vx*normal.x+this.vz*normal.z;
     if (into < 0) {

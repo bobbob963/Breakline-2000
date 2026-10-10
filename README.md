@@ -12,6 +12,8 @@ Waterworks cruising and pumping are now about 7% faster, with a slightly wider s
 
 Waterworks ramps now carry the rider to the lip before launching. Charged pops preserve uphill momentum, kickers clear their rising surface, and quarterpipe airs turn smoothly back into the bowl. The coping sits at the actual ramp lip, with direct Shift grinds and E grab turnbacks still available.
 
+Hold **Shift + A/D** for a sharp grounded cutback in Waterworks. The rider leans into the turn with a fan of spray; near the top of a quarterpipe, Shift still takes priority for coping. The bottom corner button groups have been removed. **Restart**, **Pixels / Video**, and **Main Menu** are available from Pause.
+
 The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; riding keeps the mellow surf score.
 
 The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.
@@ -103,7 +105,7 @@ The selected character, outfit, board, mode, sound preference and personal bests
 | H | Method Air while airborne. |
 | F | 360 Air while airborne. |
 | B | Tweaked Grab in any mode: tucked knees, board pulled beside the body, one hand on the rail and the free arm raised. |
-| Shift + A / D (or Left / Right) | Turn while holding Shift to cut back on the wave face in any ocean mode. Either key order works. Release the steering/Shift or change direction to trigger another cutback after the cooldown. |
+| Shift + A / D (or Left / Right) | Cut back on the wave face, or make a sharp grounded turn in Waterworks. Near a quarterpipe lip, Shift catches the coping instead. Either key order works. Release the steering/Shift or change direction to trigger another cutback after the cooldown. |
 | C | Alternative cutback button. Steer A/D to choose the direction, or press C to reverse your current carving line. |
 | I | Rodeo Air while airborne when the **SPECIAL** meter is full. |
 | Enter | Bank a landed combo; start or replay from the menu/results. |
@@ -118,7 +120,7 @@ The **? Controls** panel pauses an active session. This version focuses on keybo
 - In an ocean mode, pump toward the pale crest band on the wave meter until the HUD says **LIP LAUNCH READY**, or complete a **Shift + A/D cutback**. Hold Space, release while that launch is ready, press K, finish the flip, land and press Enter. Flat-water hops cannot start aerial tricks.
 - Every manual pop starts a **1.4-second recovery** that counts down only on the ground. It stays full while airborne. The pop meter shows when you can jump again. Natural ramp launches still carry you into the air and restart recovery.
 - Landings tolerate ordinary steering drift. Use S to settle a rough approach; only a severe sideways slide causes a landing wipeout. An almost-finished trick gets a short automatic recovery window in every mode.
-- Shift + A/D performs a short cutback with a fan of spray. C is an alternative. Finish it to earn a **2.2-second powered-pop window**; charge and release Space during that window for airtime. The cutback itself gives no score or SPECIAL charge. It has its own cooldown and cannot start during a jump or wipeout. A held Shift/turn combination waits until you are back on the water and ready, then fires once.
+- Shift + A/D performs a short cutback with a fan of spray. C is an alternative. In ocean modes, finish it to earn a **2.2-second powered-pop window**; charge and release Space during that window for airtime. In Waterworks it turns the board sharply, with no extra pop boost. The cutback itself gives no score or SPECIAL charge. It has its own cooldown and cannot start during a jump or wipeout. A held Shift/turn combination waits until you are back on the water and ready, then fires once.
 - B performs the **Tweaked Grab**, worth 650 base points. It replaces the old spinning barrel-roll move. In Storm Rider, a barrel is now the **wave curling overhead**: line up with its open mouth and ride through for a barrel bonus.
 - Aim to finish each trick before landing. The final 20% of a move, up to 0.16 seconds, can recover at touchdown; a badly unfinished move still bails. One trick plays at a time. Each completed trick increases the multiplier, up to **×8**; repeated moves lose value within a combo.
 - After landing, pop again within **3.8 seconds** to continue the combo. Enter banks it immediately; letting the combo meter expire also banks it. A wipeout loses the active combo.
@@ -134,7 +136,7 @@ The **? Controls** panel pauses an active session. This version focuses on keybo
 
 Sound begins on your first menu click or **DROP IN**, unless you previously switched it off. Use **SOUND** or M to toggle it. Music stops while gameplay is paused. Browsers require a user interaction before audio can start.
 
-The **PIXELS / VIDEO** button switches between the 640-pixel retro view and a cleaner resolution. Both retain the low-poly models and textures.
+Open **Pause** to find **PIXELS / VIDEO**, which switches between the 640-pixel retro view and a cleaner resolution. Both retain the low-poly models and textures. Restart and Main Menu are also in Pause; use **P / Esc** to open it or **R** to restart directly.
 
 ## Run locally
 

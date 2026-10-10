@@ -233,14 +233,16 @@ export class SurfWorld {
     this.rain=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x9fb2bb,transparent:true,opacity:.45}));
     this.rain.frustumCulled=false;this.rain.visible=false;this.scene.add(this.rain);
   }
-  cutbackSpray(x,y,z,direction,amount) {
+  cutbackSpray(x,y,z,direction,amount,heading=0) {
     // A fan peels off the rear rail, following the snap turn rather than the wake.
     for(let i=0;i<5;i++){
       const p=this.particles[this.particleIndex++%this.particles.length];
       const a=-.7+Math.random()*1.4;
-      p.mesh.position.set(x-direction*.4,y+.18,z+.2);p.mesh.visible=true;
-      p.life=.5+Math.random()*.45;p.vx=-direction*(4+Math.random()*5)*amount;
-      p.vy=(3+Math.random()*6)*amount;p.vz=3+Math.sin(a)*7;
+      const c=Math.cos(heading),s=Math.sin(heading),side=-direction*.4;
+      p.mesh.position.set(x+c*side+s*.2,y+.18,z-s*side+c*.2);p.mesh.visible=true;
+      const vx=-direction*(4+Math.random()*5)*amount,vz=3+Math.sin(a)*7;
+      p.life=.5+Math.random()*.45;p.vx=c*vx+s*vz;
+      p.vy=(3+Math.random()*6)*amount;p.vz=-s*vx+c*vz;
     }
   }
   onEvent(event, game) {
@@ -303,14 +305,14 @@ export class SurfWorld {
     const s = this.surfer;
     const rideUp=game.pipeRide?game.rideUp:{x:0,y:1,z:0};
     s.rig.position.set(x+rideUp.x*.055, y+rideUp.y*.055, z+rideUp.z*.055);
-    const cutback=!isPark&&!attract?(game.cutback||0):0;
+    const cutback=!attract?(game.cutback||0):0;
     const turn=(game.cutbackDirection||1)*cutback;
     const lean = attract ? Math.sin(t * .7) * .10 : isPark ? -(game.steering||0)*.16 : -game.vx * .024;
     const air = !attract && game.airborne;
     const bail = !attract && game.bailTime > 0;
     const {spin,flip,boardSpin,grab,lipGrab,tweak=0,boardBank=0,boardPitch=0,boardLift=0,boardSide=0,boardBack=0}=sampleRiderTrick(game,{air});
     s.rig.rotation.order='YXZ';
-    s.rig.rotation.y=heading-turn*1.05;
+    s.rig.rotation.y=heading-(isPark?0:turn*1.05);
     s.yaw.rotation.y = spin - (isPark?(game.grinding?Math.PI/2:0):(attract ? .3 : game.vx * .035));
     const surface=isPark?(!attract&&game.surface?game.surface:parkSurface(x,z)):null;
     const slope=surface?Math.atan(surface.dx*-Math.sin(heading)+surface.dz*-Math.cos(heading)):0;
@@ -318,7 +320,7 @@ export class SurfWorld {
     s.rig.rotation.z = game.pipeRide?game.rideRoll:bail ? -1.8 : isPark&&!air&&!game.grinding?clamp(crossSlope,-1.1,1.1)+lean*.3:lean;
     s.rig.rotation.x = game.pipeRide?0:bail ? -.45 : air ? -.09 : game.grinding?0:isPark?clamp(slope,-1.1,1.1):.045 + Math.sin(t * 3.3) * .035;
     if(game.lipMove){s.rig.rotation.x*=1-lipGrab;s.rig.rotation.z*=1-lipGrab;}
-    if(!isPark){s.rig.rotation.z-=turn*.48;s.rig.rotation.x-=cutback*.10;}
+    s.rig.rotation.z-=turn*(isPark?.32:.48);s.rig.rotation.x-=cutback*.10;
     s.boardPivot.rotation.order='YXZ';
     s.boardPivot.rotation.set(boardPitch,boardSpin,flip+boardBank);
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
@@ -330,7 +332,7 @@ export class SurfWorld {
     this.shadow.visible = !bail&&!game.pipeRide;
     if (game.phase !== 'paused' && game.phase !== 'finished') {
       this.sprayClock += dt;
-      if (!air && !bail && this.sprayClock > .025 && game.speed>2) { if(cutback>.2)this.cutbackSpray(x,y,z,game.cutbackDirection,cutback);else this.spray(x, y, z, .6, 2); this.sprayClock = 0; }
+      if (!air && !bail && this.sprayClock > .025 && game.speed>2) { if(cutback>.2)this.cutbackSpray(x,y,z,game.cutbackDirection,cutback,heading);else this.spray(x, y, z, .6, 2); this.sprayClock = 0; }
       for (const p of this.particles) {
         if (p.life <= 0) continue;
         p.life -= dt; p.vy -= 9 * dt;

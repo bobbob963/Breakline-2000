@@ -205,11 +205,12 @@ test('Shift-turn held during a controlled air waits until grounded before cuttin
   assert.equal(events.filter(event=>event.type==='cutbackStart').length,1);
 });
 
-test('opposed steering does not form a chord and Waterworks retains its existing Shift controls',()=>{
+test('opposed steering does not form a chord while Waterworks supports its grounded Shift cutback',()=>{
   const surf=new SurfGame();surf.start();advance(surf,.2,{grind:true,left:true,right:true});
   assert.equal(surf.cutbackActive,false);assert.equal(surf.doCutback(1),true,'C remains a separate cutback action');
   const events=[],park=new WaveParkGame(event=>events.push(event));park.start();
+  advance(park,.2,{grind:true,left:true,right:true});assert.equal(park.cutbackActive,false);
   advance(park,.5,{grind:true,left:true});
-  assert.ok(park.heading>0);assert.equal(park.cutbackActive,false);assert.equal(park.doCutback(-1),false);
-  assert.equal(events.filter(event=>event.type==='cutbackStart').length,0);
+  assert.ok(park.heading>0);assert.equal(park.cutbackActive,true);assert.equal(park.cutbackDirection,-1);
+  assert.equal(events.filter(event=>event.type==='cutbackStart').length,1);
 });

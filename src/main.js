@@ -30,7 +30,7 @@ let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm'].includes(selectedMode))selectedMode='surf';
 $('loading-tip').textContent={
   surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
-  park:'Hold E inside a rust tunnel and steer around its walls. Hold SHIFT at a ramp lip to catch the coping.',
+  park:'Hold SHIFT while turning for a sharp cutback. At a ramp lip, SHIFT catches the coping. E rides pipe walls.',
   rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
   storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
 }[selectedMode];
@@ -46,12 +46,10 @@ const input={left:false,right:false,pump:false,brake:false,jump:false,action:fal
 const keyMap={KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',KeyW:'pump',ArrowUp:'pump',KeyS:'brake',ArrowDown:'brake',Space:'jump',KeyE:'action',ShiftLeft:'grind',ShiftRight:'grind'};
 const trickKeys={KeyJ:'spin',KeyK:'flip',KeyL:'grab',KeyU:'shuvit',KeyO:'heelflip',KeyH:'method',KeyF:'spin360',KeyI:'special',KeyB:'tweak'};
 const special=new SpecialMeter();
-const pressed=new Set(),touchPressed=new Set();
+const pressed=new Set();
 let world,game,preview,parkMap,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))||0),newBest=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
-let touchEnabled=matchMedia('(pointer:coarse)').matches;
 let portraitKey='';
-document.body.classList.toggle('touch-enabled',touchEnabled);
 const modeInfo={
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
@@ -59,8 +57,8 @@ const modeInfo={
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread the rust tunnels and grind the old pipework.'},
 };
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
-function clearInput(){pressed.clear();touchPressed.clear();for(const k in input)input[k]=false;document.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));}
-function syncInput(){for(const name in input)input[name]=touchPressed.has(name)||[...pressed].some(code=>keyMap[code]===name);}
+function clearInput(){pressed.clear();for(const k in input)input[k]=false;}
+function syncInput(){for(const name in input)input[name]=[...pressed].some(code=>keyMap[code]===name);}
 function loadBest(){best=Math.max(0,Number(read(`breakline99-best-${selectedMode}`,selectedMode==='surf'?read('breakline99-best','0'):'0'))||0);}
 function saveBest(){if(!game)return;if(selectedMode==='storm'&&game.elapsed>bestSurvival){bestSurvival=game.elapsed;write('breakline99-survival-time',String(bestSurvival));}if(game.score<=best)return;best=game.score;newBest=true;write(`breakline99-best-${selectedMode}`,String(best));}
 function completedGoals(){return [game.score>=5000,game.bestCombo>=1500,selectedMode==='park'?game.visitedRamps.size>=5:selectedMode==='rush'?game.gates>=12:selectedMode==='storm'?game.barrelsSurvived>=3:game.gates>=6];}
@@ -71,7 +69,7 @@ function onEvent(e){
   if(e.type==='trick')special.gain(.22);
   if(e.type==='bail'){special.bail();toast(e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
-  if(e.type==='cutback')toast('CUTBACK SET · POP FOR AIR!');
+  if(e.type==='cutback')toast(selectedMode==='park'?'SHARP CUTBACK':'CUTBACK SET · POP FOR AIR!');
   if(e.type==='grind')toast('WATER SLIDE!');
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
   if(e.type==='barrelExit'){toast(`BARREL RIDE · +${fmt(e.points||0)}`);saveBest();}
@@ -103,19 +101,19 @@ async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?
 function startRun(){
   closeWorkshop();closeModal(false);clearInput();newBest=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
-  audio.setScene('ride');game.start(selectedMode==='park'?selectedParkStart:undefined);updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');$('touch').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
+  audio.setScene('ride');game.start(selectedMode==='park'?selectedParkStart:undefined);updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function goHome(){
   saveBest();closeWorkshop();closeModal(false);clearInput();special.reset();makeGame();
-  $('hud').classList.add('hidden');$('touch').classList.add('hidden');$('intro').classList.remove('hidden');document.body.classList.remove('playing');updateModeMenu();updateSoundLabel();$('start').focus({preventScroll:true});
+  $('hud').classList.add('hidden');$('intro').classList.remove('hidden');document.body.classList.remove('playing');updateModeMenu();updateSoundLabel();$('start').focus({preventScroll:true});
 }
 function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
   $('modal').dataset.mode=mode;
   const active=game.phase==='running';if(active){game.pause();clearInput();}if(!modalMode)resumeAfterModal=active;
   modalMode=mode;$('modal-title').textContent=title;$('modal-kicker').textContent=kicker;$('modal-content').innerHTML=content;$('modal-action').textContent=action;
-  $('modal').classList.remove('hidden');$('touch').classList.add('hidden');$('modal-action').focus({preventScroll:true});
+  $('modal').classList.remove('hidden');$('modal-action').focus({preventScroll:true});
 }
-function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;if(game?.phase==='running')$('touch').classList.remove('hidden');$('stage').focus({preventScroll:true});}
+function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;$('stage').focus({preventScroll:true});}
 function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
 function showHelp(){
   if(modalMode==='help'){closeModal();return;}
@@ -128,12 +126,12 @@ function showHelp(){
   <span><kbd>U</kbd> <kbd>O</kbd></span><span>Shuv-it / heelflip.</span>
   <span><kbd>H</kbd> <kbd>F</kbd></span><span>Method air / 360 air.</span>
   <span><kbd>B</kbd></span><span>Tweaked grab: tuck your knees, pull the surfboard to your side and raise the free arm.</span>
-  ${selectedMode!=='park'?'<span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>Turn while holding Shift to snap a cutback on the wave face. Release and turn again for another cutback. C also works.</span>':''}
+  <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${selectedMode==='park'?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${selectedMode==='park'?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding and tighter barrels build as you survive.'}</p>
-  <button id="toggle-touch" class="input-toggle">ON-SCREEN CONTROLS: ${touchEnabled?'ON':'OFF'}</button>`,'GOT IT','CONTROLS');
+`,'GOT IT','CONTROLS');
 }
 function showResults(){
   clearInput();const complete=completedGoals(),stars=complete.filter(Boolean).length;const rank=['GROM','LOCAL','LINEUP LEGEND','COAST ROYALTY'][stars];
@@ -194,7 +192,7 @@ function updateHud(){
   const surface=selectedMode==='park'?(game.surface?.pipe?.name||game.surface?.ramp?.name):null;
   $('ride-state').textContent=game.bailTime>0?'WIPEOUT':game.pipeRide?'PIPE WALL RIDE':game.lipMove?'LIP GRAB 180':game.grinding?(game.grinding.kind==='coping'?'COPING GRIND':'WATER SLIDE'):game.airborne?'AIRBORNE':game.barrel?.inside?'IN THE BARREL':game.cutback>0?'SNAP CUTBACK':selectedMode==='park'?(surface||'WATERWORKS'):game.launchSource==='lip'?'AT THE WAVE LIP':'ON THE FACE';
   const popCooldown=game.popCooldown||0,powered=selectedMode!=='park'&&game.launchSource!=='flat';
-  $('pop-label').textContent=game.bailTime>0?'RECOVERING':game.airborne?'LAND TO RECOVER POP':game.lipMove?'FINISH LIP TURN':game.pipeRide&&!game.popReady?'RETURN TO PIPE FLOOR':popCooldown>0?`POP RECOVERY · ${popCooldown.toFixed(1)}s`:game.cutbackActive?'CUTBACK · SETTING UP AIR':selectedMode==='park'?'POP READY':game.launchSource==='cutback'?`CUTBACK AIR · ${game.cutbackLaunchTime.toFixed(1)}s`:game.launchSource==='lip'?'LIP LAUNCH READY':'FIND LIP / CUT BACK';
+  $('pop-label').textContent=game.bailTime>0?'RECOVERING':game.airborne?'LAND TO RECOVER POP':game.lipMove?'FINISH LIP TURN':game.pipeRide&&!game.popReady?'RETURN TO PIPE FLOOR':popCooldown>0?`POP RECOVERY · ${popCooldown.toFixed(1)}s`:game.cutbackActive?(selectedMode==='park'?'CUTBACK · TURNING':'CUTBACK · SETTING UP AIR'):selectedMode==='park'?'POP READY':game.launchSource==='cutback'?`CUTBACK AIR · ${game.cutbackLaunchTime.toFixed(1)}s`:game.launchSource==='lip'?'LIP LAUNCH READY':'FIND LIP / CUT BACK';
   $('pop-ready-bar').style.width=`${Math.max(0,1-popCooldown/POP_COOLDOWN)*100}%`;
   $('pop-status').classList.toggle('cooling',popCooldown>0);$('pop-status').classList.toggle('powered',powered&&game.popReady);
   $('charge-label').textContent=selectedMode==='park'?'LOAD THE POP':game.launchSource==='cutback'?'LOAD CUTBACK AIR':game.launchSource==='lip'?'LOAD LIP LAUNCH':'FLAT HOP · FIND THE LIP';
@@ -234,7 +232,7 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Escape'||e.code==='KeyP'){pause();return;}
   if(e.code==='KeyR'&&game.phase!=='ready'){startRun();return;}
   if(game.phase!=='running'||modalMode)return;
-  if(e.code==='KeyC'&&selectedMode!=='park'&&game.doCutback){if(!game.doCutback(input.left?-1:input.right?1:0))toast(game.airborne?'CUTBACK ON THE WAVE FACE':'BUILD SPEED · C TO CUTBACK');return;}
+  if(e.code==='KeyC'&&game.doCutback){if(!game.doCutback(input.left?-1:input.right?1:0))toast(game.airborne?'LAND BEFORE CUTTING BACK':'BUILD SPEED · C TO CUTBACK');return;}
   if(e.code==='KeyB'&&selectedMode==='park')return;
   if(keyMap[e.code]){pressed.add(e.code);syncInput();}if(trickKeys[e.code])tryTrick(trickKeys[e.code]);
 });
@@ -243,7 +241,7 @@ window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')paus
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
 document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',startRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
-$('home').addEventListener('click',goHome);$('modal-home').addEventListener('click',goHome);
+$('modal-home').addEventListener('click',goHome);
 $('modal-action').addEventListener('click',()=>modalMode==='results'?startRun():modalMode==='graphics'?location.reload():closeModal());
 $('quality').addEventListener('click',()=>{$('quality').textContent=world.toggleQuality()?'VIDEO: 1999':'VIDEO: CLEAN';});
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();goHome();});
@@ -256,14 +254,6 @@ $('rotate-left').addEventListener('click',()=>preview?.rotate(-.5));$('rotate-ri
 $('wardrobe-toggle').addEventListener('click',()=>$('wardrobe').classList.toggle('hidden'));$('wardrobe-close').addEventListener('click',()=>$('wardrobe').classList.add('hidden'));
 document.querySelectorAll('[data-workshop]').forEach(b=>b.addEventListener('click',()=>openWorkshop(b.dataset.workshop)));
 $('workshop').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.character)setProfile({character:b.dataset.character});if(b.dataset.outfit)setProfile({outfit:b.dataset.outfit});if(b.dataset.boardColor)setProfile({boardColor:b.dataset.boardColor});if(b.dataset.boardDesign)setProfile({boardDesign:b.dataset.boardDesign});});
-$('modal-content').addEventListener('click',e=>{if(e.target.id!=='toggle-touch')return;touchEnabled=!touchEnabled;document.body.classList.toggle('touch-enabled',touchEnabled);e.target.textContent=`ON-SCREEN CONTROLS: ${touchEnabled?'ON':'OFF'}`;});
-$('touch-bank').addEventListener('click',()=>game.bank());
-document.querySelectorAll('[data-hold]').forEach(b=>{
-  const name=b.dataset.hold;b.addEventListener('pointerdown',e=>{e.preventDefault();if(game.phase!=='running')return;b.setPointerCapture(e.pointerId);touchPressed.add(name);syncInput();b.classList.add('pressed');});
-  const release=e=>{e.preventDefault();const held=touchPressed.has(name);touchPressed.delete(name);syncInput();b.classList.remove('pressed');if(name==='jump'&&held&&!input.jump&&game.phase==='running'&&e.type==='pointerup')tryPop();};
-  b.addEventListener('pointerup',release);b.addEventListener('pointercancel',release);b.addEventListener('lostpointercapture',release);
-});
-document.querySelectorAll('[data-trick]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();tryTrick(b.dataset.trick);}));
 
 try{
   await paintLoadingStage();
