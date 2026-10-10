@@ -8,6 +8,8 @@ Version 8 further reshapes the chest, waist and back, adds an uneven shirt hem, 
 
 The Waterworks camera follows turns smoothly, retracts around obstacles, recovers its distance gradually, and maintains stable orientation through pipe loops.
 
+Waterworks cruising and pumping are now about 7% faster, with a slightly wider side angle and a gentle speed-dependent lens change. Braking and the centered pipe-loop camera keep their existing behavior. Shorts now conceal the covered upper-thigh mesh so skin cannot poke through the hip and seat during riding poses.
+
 The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; riding keeps the mellow surf score.
 
 The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.

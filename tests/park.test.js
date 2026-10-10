@@ -27,6 +27,20 @@ test('park reset, steering, pause and restart keep a finite two-minute arena', (
   assert.equal(game.visitedRamps.size, 0);
 });
 
+test('Waterworks builds a little more speed while retaining controlled braking', () => {
+  const cruise=new WaveParkGame(),pumped=new WaveParkGame();
+  cruise.start();pumped.start();
+  advance(cruise,2);advance(pumped,2,{pump:true});
+  assert.ok(cruise.speed>14.8&&cruise.speed<15,'cruise approaches 15m/s');
+  assert.ok(pumped.speed>22.9&&pumped.speed<23.5,'pumping approaches 23.5m/s');
+  assert.ok(pumped.z<cruise.z-10,'pumping visibly gains distance on the clear starting run');
+  assert.equal(cruise.airborne,false);assert.equal(pumped.airborne,false);
+  assert.equal(cruise.wipeouts+pumped.wipeouts,0);
+  advance(pumped,.6,{brake:true});
+  assert.ok(pumped.speed>3.5&&pumped.speed<6,'braking still settles the faster board promptly');
+  assert.equal(pumped.wipeouts,0);
+});
+
 test('renderable ramp profiles match the physical surface at every orientation', () => {
   for (const ramp of PARK_RAMPS) {
     for (const t of [0.2, 0.5, 0.8]) {

@@ -425,7 +425,7 @@ export class WaveParkGame extends SurfGame {
     else {
       const active = this.bailTime <= 0;
       if (active) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
-      const targetSpeed = active ? input.brake ? 3.5 : input.pump ? 22 : 14 : 3;
+      const targetSpeed = active ? input.brake ? 3.5 : input.pump ? 23.5 : 15 : 3;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * (input.brake ? 3.6 : 1.5)));
       const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : 11));
       this.vx += (-Math.sin(this.heading) * this.speed - this.vx) * decay;

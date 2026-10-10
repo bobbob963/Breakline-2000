@@ -7,7 +7,7 @@ const vector=p=>new THREE.Vector3(p.x,p.y,p.z);
 
 export function createParkCameraState() {
   return {initialized:false,position:new THREE.Vector3(),look:new THREE.Vector3(),up:WORLD_UP.clone(),
-    anchor:new THREE.Vector3(),offset:new THREE.Vector3(),focusOffset:new THREE.Vector3(),forward:new THREE.Vector3(0,0,-1),heading:0};
+    anchor:new THREE.Vector3(),offset:new THREE.Vector3(),focusOffset:new THREE.Vector3(),forward:new THREE.Vector3(0,0,-1),heading:0,fov:50};
 }
 
 // Stateful, renderer-independent follow rig. Camera and aim are both relative
@@ -25,7 +25,12 @@ export function stepParkCamera(state,input,seconds) {
     // Catch a 90/180 degree physics turn with a continuous orbit, not a cut.
     state.heading+=THREE.MathUtils.clamp(difference*alpha(4.6,dt),-3.4*dt,3.4*dt);
   }
-  const angle=state.heading+(pipe?0:.20),boom=pipe?5.3:5.0;
+  // A small side view and a gently widening lens give pumping more presence;
+  // retain the centered pipe view and all collision-safe boom geometry.
+  const speed=Number.isFinite(input.speed)?input.speed:12;
+  const targetFov=50+3*THREE.MathUtils.clamp((speed-12)/11.5,0,1);
+  state.fov=reset?targetFov:THREE.MathUtils.lerp(state.fov,targetFov,alpha(3,dt));
+  const angle=state.heading+(pipe?0:.24),boom=pipe?5.3:5.0;
   const desired=anchor.clone().add(new THREE.Vector3(Math.sin(angle)*boom,0,Math.cos(angle)*boom)).addScaledVector(up,pipe?2.4:2.6);
   const options={terrainLift:false,focus};
   const safe=vector(resolveParkCamera(anchor.x,anchor.y,anchor.z,desired,pipe?up:null,options));

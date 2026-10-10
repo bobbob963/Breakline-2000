@@ -136,6 +136,43 @@ function exerciseSequence(path,dt=1/60) {
   return {state,maxStep,maxTurn,maxUpTurn};
 }
 
+test('subtle side framing reveals more board while pipe views stay centered',()=>{
+  const rider={x:0,y:parkHeight(0,75),z:75,heading:0,speed:15};
+  const side=stepParkCamera(createParkCameraState(),rider,1/60);
+  assert.ok(Math.abs(Math.atan2(side.offset.x,side.offset.z)-.24)<1e-8);
+  assert.ok(Math.abs(Math.hypot(side.offset.x,side.offset.z)-5)<1e-8,'follow distance stays unchanged');
+  assertTemporalView(side);
+  const pipe=PARK_PIPES[0],riding=pipeRideFrame(pipe,0,0,1);
+  const centered=stepParkCamera(createParkCameraState(),{...riding,heading:pipe.rotation,rideUp:riding.up,speed:11},1/60);
+  assert.ok(Math.abs(centered.offset.x)<1e-8,'pipe view has no side-angle bias');
+  assert.equal(centered.fov,50);
+  assertTemporalView(centered);
+});
+
+test('speed lens is restrained, smooth and consistent across frame rates',()=>{
+  const outcomes=[];
+  for(const hz of[30,60,120]) {
+    const state=createParkCameraState(),rider={x:0,y:parkHeight(0,75),z:75,heading:0};
+    stepParkCamera(state,{...rider,speed:3.5},1/hz);
+    assert.equal(state.fov,50);
+    let previous=state.fov;
+    for(let i=0;i<hz;i++) {
+      stepParkCamera(state,{...rider,speed:23.5},1/hz);
+      assert.ok(state.fov>=previous&&state.fov<=53,'lens widens without overshoot');
+      assert.ok(state.fov-previous<9/hz,'a speed change cannot snap the lens');
+      previous=state.fov;
+    }
+    assert.ok(state.fov>52.8&&state.fov<53);
+    outcomes.push(state.fov);
+    stepParkCamera(state,{...rider,speed:500},1/hz);
+    assert.ok(state.fov<=53,'extreme transient velocities cannot widen the lens further');
+    for(let i=0;i<hz*2;i++)stepParkCamera(state,{...rider,speed:3.5},1/hz);
+    assert.ok(state.fov>=50&&state.fov<50.01,'braking gently restores the normal lens');
+    assertTemporalView(state);
+  }
+  assert.ok(Math.max(...outcomes)-Math.min(...outcomes)<1e-10);
+});
+
 test('instant ramp reversals and rail turns orbit smoothly at 30, 60 and 120 Hz',()=>{
   for(const hz of[30,60,120]){
     const path=Array.from({length:hz*4},(_,i)=>({x:0,y:parkHeight(0,75),z:75,heading:i<hz?0:i<hz*2?Math.PI:Math.PI/2}));

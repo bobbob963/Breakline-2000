@@ -345,7 +345,7 @@ export class SurfWorld {
         const up=game.pipeRide?new THREE.Vector3(game.rideUp.x,game.rideUp.y,game.rideUp.z):new THREE.Vector3(0,1,0);
         const focus=new THREE.Vector3(x,y,z).addScaledVector(up,.85);
         if(!game.pipeRide){const headPosition=new THREE.Vector3();s.head.getWorldPosition(headPosition);focus.copy(s.rig.position).lerp(headPosition,.57);}
-        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,rideUp:game.pipeRide?game.rideUp:null,focus},dt);
+        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:game.speed,rideUp:game.pipeRide?game.rideUp:null,focus},dt);
         target=parkFrame.position;look=parkFrame.look;
       }
     }else{
@@ -363,6 +363,8 @@ export class SurfWorld {
     if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
     else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
+    const fieldOfView=parkFrame?parkFrame.fov:50;
+    if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.renderer.render(this.scene, this.camera);
   }

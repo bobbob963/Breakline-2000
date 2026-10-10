@@ -298,6 +298,88 @@ test('loose torso meshes retain a shaped waist and uneven open hem rather than a
   t.diagnostic(`Actual loose-shirt triangle waist/chest ratio ${Math.min(...rows.map(r => r.ratio)).toFixed(4)}–${Math.max(...rows.map(r => r.ratio)).toFixed(4)}; open-edge hem variation ${(Math.min(...rows.map(r => r.drape)) * 1000).toFixed(1)}mm.`);
 });
 
+test('the photographed Reef raglan hip patch resolves to front-facing shorts rather than protruding thigh skin', t => {
+  const model = makeModel('reef', 'raglan'), ray = new THREE.Raycaster();
+  try {
+    model.pose({ mode: 'park', charge: 0 });
+    model.rider.updateMatrixWorld(true);
+    // Reproduces the supplied cream/burgundy-shirt screenshot's exposed left
+    // hip wedge. Use the actual production triangles and default FrontSide
+    // materials, so hiding a skin mesh cannot pass if it leaves an empty hole.
+    const target = model.body.localToWorld(new THREE.Vector3(-.2291667, -.0523077, 0));
+    const outward = new THREE.Vector3(0, .18, 1).normalize().transformDirection(model.body.matrixWorld);
+    ray.set(target.clone().addScaledVector(outward, 2), outward.clone().negate());
+    const renderedMeshes = () => { const meshes = []; model.rider.traverseVisible(o => { if (o.isMesh) meshes.push(o); }); return meshes; };
+    const covered = ray.intersectObjects(renderedMeshes(), false)[0];
+    assert.ok(covered, 'the photographed hip patch must retain an opaque surface');
+    assert.equal(covered.object.name, 'left-shorts', 'the hip patch must resolve to the actual shorts surface');
+    assert.equal(covered.object.material.side, THREE.FrontSide, 'the cloth must not rely on drawing a reversed face');
+
+    // Negative control: restoring the former fully enabled thigh must expose
+    // this exact defect. This guards the reproducer itself, not only a boolean
+    // visibility setting or an unrelated ray which never touched the patch.
+    const thigh = model.rider.getObjectByName('left-thigh'), wasVisible = thigh.parent.visible;
+    thigh.parent.visible = true;
+    const exposed = ray.intersectObjects(renderedMeshes(), false)[0];
+    thigh.parent.visible = wasVisible;
+    assert.equal(exposed?.object.name, 'left-thigh', 'negative control did not reproduce the original hip wedge');
+    const penetration = covered.distance - exposed.distance;
+    assert.ok(penetration > .06, `reproducer should detect the substantial skin penetration, measured ${penetration}m`);
+    t.diagnostic(`Photographic patch is covered by real FrontSide shorts; enabling the former hidden thigh reproduces ${(penetration * 1000).toFixed(1)}mm of skin protrusion.`);
+  } finally { disposeModel(model); }
+});
+
+test('all outfits keep covered thighs concealed and the intended lower legs visible through normal riding poses', t => {
+  const legPoses = [
+    { standing: true, mode: 'park' }, { mode: 'surf' },
+    { mode: 'park', charge: .3 }, { mode: 'park', charge: .6 }, { mode: 'surf', charge: 1 },
+    { mode: 'surf', air: true, grab: 1 },
+    { mode: 'surf', cutback: 1, cutbackDirection: -1 }, { mode: 'surf', cutback: 1, cutbackDirection: 1 },
+  ];
+  const ray = new THREE.Raycaster(); let combinations = 0, calfSurfaces = 0, coveredHipRays = 0;
+  for (const character of Object.keys(CHARACTERS)) for (const outfit of Object.keys(OUTFITS)) {
+    const model = makeModel(character, outfit), settings = OUTFITS[outfit], label = `${character}/${outfit}`;
+    const wet = settings.top === 'wetsuit', trousers = settings.bottom === 'trousers';
+    try {
+      for (const pose of legPoses) {
+        model.pose(pose); model.rider.updateMatrixWorld(true);
+        const meshes = []; model.rider.traverseVisible(o => { if (o.isMesh) meshes.push(o); });
+        for (const side of ['left', 'right']) {
+          const thigh = model.rider.getObjectByName(side + '-thigh'), calf = model.rider.getObjectByName(side + '-calf');
+          assert.ok(thigh && calf, `${label}: missing leg geometry`);
+          assert.equal(meshes.includes(thigh), wet, `${label}: ${side} upper leg is covered by shorts/trousers or rendered as wetsuit cloth`);
+          assert.equal(meshes.includes(calf), !trousers, `${label}: ${side} lower leg visibility must match its outfit`);
+          if (wet) assert.ok(thigh.material.map, `${label}: the visible wetsuit thigh needs its cloth material`);
+          if (!trousers) {
+            // A real point on the exposed calf, below the shorts hem. At least
+            // one surrounding view must see this actual surface: retaining a
+            // visible flag alone would not catch accidentally enclosing it.
+            const target = calf.localToWorld(new THREE.Vector3(0, .67, 0)); let seen = false;
+            for (let a = 0; a < 8; a++) {
+              const outward = new THREE.Vector3(Math.cos(a * Math.PI / 4), 0, Math.sin(a * Math.PI / 4)).transformDirection(calf.matrixWorld);
+              ray.set(target.clone().addScaledVector(outward, 1), outward.clone().negate());
+              if (ray.intersectObjects(meshes, false)[0]?.object === calf) seen = true;
+            }
+            assert.ok(seen, `${label}: ${side} below-knee surface disappeared in ${JSON.stringify(pose)}`);
+            calfSurfaces++;
+          }
+        }
+        if (!wet && !trousers) for (let a = 0; a < 8; a++) for (const x of [-.22, .22]) for (const y of [-.05, -.11, -.17]) {
+          const target = model.body.localToWorld(new THREE.Vector3(x, y, 0));
+          const outward = new THREE.Vector3(Math.sin(a * Math.PI / 4), .18, Math.cos(a * Math.PI / 4)).normalize().transformDirection(model.body.matrixWorld);
+          ray.set(target.clone().addScaledVector(outward, 2), outward.clone().negate());
+          const hit = ray.intersectObjects(meshes, false)[0];
+          assert.ok(!hit || !hit.object.name.endsWith('-thigh'), `${label}: upper-thigh skin is foremost at the covered hip in ${JSON.stringify(pose)}`);
+          coveredHipRays++;
+        }
+        combinations++;
+      }
+    } finally { disposeModel(model); }
+  }
+  assert.equal(combinations, 384);
+  t.diagnostic(`${combinations} character/outfit/pose combinations: ${calfSurfaces} actual exposed calf surfaces and ${coveredHipRays} surrounding covered-hip rays checked.`);
+});
+
 test('grabs put actual hand geometry at the exposed board-rail target', () => {
   for (const character of Object.keys(CHARACTERS)) for (const outfit of Object.keys(OUTFITS)) {
     const model = makeModel(character, outfit);

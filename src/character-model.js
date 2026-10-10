@@ -224,9 +224,14 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     const prefix=side<0?'left':'right';
     const skinUpper=segment(rider,[[0,.078,.078],[.28,.088,.08],[.7,.067,.063],[1,.047,.048]],wet?shirt:skin);
     const skinLower=segment(rider,[[0,.049,.047],[.28,.062,.051],[.67,.043,.038],[1,.027,.028]],wet?shirt:skin);
+    skinUpper.model.name=prefix+'-thigh';skinLower.model.name=prefix+'-calf';
     const kneeFold=[-.002,.006,-.011,.005,.001,-.003,.009,-.004],ankleFold=[.006,-.005,.014,-.004,-.008,.006,-.012,.004];
     const cloth=!wet?clothChain(rider,trousers?[[0,.113,.104],[.58,.118,.109],[.80,.113,.103,0,-.006],[1.01,.101,.106,0,-.004,kneeFold],[1.26,.098,.093,0,.005],[1.55,.101,.092],[1.78,.111,.105,-side*.004,.002,ankleFold],[1.91,.101,.090,side*.003,0],[2,.107,.096,0,0,ankleFold]]:[[0,.113,.102],[.58,.119,.104],[.80,.117,.105],[1.00,.111,.100,0,.003,kneeFold],[1.13,.111,.095]],shorts,prefix+(trousers?'-trousers':'-shorts')):null;
-    skinUpper.group.visible=skinLower.group.visible=!trousers;
+    // Boardshorts cover the entire thigh and end below the knee. Rendering a
+    // second, rigid skin tube beneath them lets its hip cap poke through the
+    // tailored seat when the rider bends. The wetsuit uses this tube as cloth.
+    skinUpper.group.visible=wet;
+    skinLower.group.visible=!trousers;
     const foot=segment(rider,[[0,.029,.025],[.25,.037,.029],[.55,.047,.025],[.82,.046,.018],[1,.035,.010]],skin);foot.model.name=prefix+'-foot';
     const shoe=segment(rider,[],dark,shoeGeometry());
     const sole=segment(rider,[],cream,shoeGeometry(true));shoe.model.name='shoe';sole.model.name='sole';
