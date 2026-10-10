@@ -10,6 +10,8 @@ The Waterworks camera follows turns smoothly, retracts around obstacles, recover
 
 Waterworks cruising and pumping are now about 7% faster, with a slightly wider side angle and a gentle speed-dependent lens change. Braking and the centered pipe-loop camera keep their existing behavior. Shorts now conceal the covered upper-thigh mesh so skin cannot poke through the hip and seat during riding poses.
 
+Waterworks ramps now carry the rider to the lip before launching. Charged pops preserve uphill momentum, kickers clear their rising surface, and quarterpipe airs turn smoothly back into the bowl. The coping sits at the actual ramp lip, with direct Shift grinds and E grab turnbacks still available.
+
 The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; riding keeps the mellow surf score.
 
 The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.
@@ -184,7 +186,7 @@ To tune the game, edit `SURF_RULES` in `session-modes.js` or `TRICKS` in `game.j
 
 ## Character and movement review
 
-With the development server running, open `/ride-lab.html` for pipe-loop, lip-grab and coping demonstrations, `/surf-lab.html` for grabs, curling waves and endless Survival, or `/audio-lab.html` for the original soundtrack. These pages use the production game code.
+With the development server running, open `/ride-lab.html` for pipe-loop, lip-grab, coping, quarterpipe-air and charged-ramp-pop demonstrations, `/surf-lab.html` for grabs, curling waves and endless Survival, or `/audio-lab.html` for the original soundtrack. These pages use the production game code.
 
 The separately supplied local download includes the body comparison and user-provided reference pictures. Those pictures and their review pages are deliberately excluded from this public repository; the game uses original artwork.
 

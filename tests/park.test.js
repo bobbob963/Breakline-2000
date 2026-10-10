@@ -79,9 +79,12 @@ test('quarter-pipe lip launches and returns the rider into the park', () => {
   for (let i = 0; i < 300 && !game.airborne; i++) game.update(1 / 120, { pump: true });
   assert.equal(game.airborne, true);
   assert.equal(game.visitedRamps.has('north'), true);
-  assert.ok(game.vz > 0);
+  assert.ok(parkLocal(ramp,game.x,game.z).v/ramp.length+.5>=.96,'takeoff reaches the lip');
+  assert.ok(game.vz<0&&game.vz>-3,'the board initially rises with a short outward drift');
+  assert.ok(Math.abs(game.heading)<.001,'launch does not instantly reverse the rider');
   const launchZ = game.z;
   advance(game, 0.5);
+  assert.ok(game.vz>0,'the gradual air turn returns toward the bowl');
   assert.ok(game.z > launchZ);
 });
 

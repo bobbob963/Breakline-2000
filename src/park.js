@@ -34,7 +34,7 @@ export const PARK_PIPES = [
   {id:'east-outfall',name:'EAST OUTFALL',x:52,z:17,length:50,radius:6,thickness:.45,centerY:4.4,rotation:0},
 ];
 export const PARK_COPINGS=PARK_RAMPS.filter(ramp=>ramp.type==='quarter').map(ramp=>{
-  const v=ramp.length*.43,x=ramp.x-Math.sin(ramp.rotation)*v,z=ramp.z-Math.cos(ramp.rotation)*v;
+  const v=ramp.length*.485,x=ramp.x-Math.sin(ramp.rotation)*v,z=ramp.z-Math.cos(ramp.rotation)*v;
   return {id:ramp.id+'-coping',name:ramp.name+' COPING',kind:'coping',rampId:ramp.id,x,z,length:ramp.width-4,height:parkHeight(x,z)+.16,rotation:ramp.rotation-Math.PI/2,radius:.12,supportRadius:.07,supportCount:4};
 });
 
@@ -329,7 +329,7 @@ export class WaveParkGame extends SurfGame {
       y:parkHeight(spawn.x,spawn.z),vx:-Math.sin(spawn.heading)*12,vz:-Math.cos(spawn.heading)*12,speed:12,grinding:null,
       rampHits: 0, grindCount: 0, visitedRamps: new Set(),
       railCooldown:0,rampCooldown:0,surface:parkRideSurface(spawn.x,spawn.z,parkHeight(spawn.x,spawn.z)),
-      steering:0,pipeRide:null,pipeLoops:0,pipeCooldown:0,rideRoll:0,rideUp:{x:0,y:1,z:0},lipMove:null,lipGrab:0,
+      steering:0,pipeRide:null,pipeLoops:0,pipeCooldown:0,rideRoll:0,rideUp:{x:0,y:1,z:0},lipMove:null,lipGrab:0,rampReturn:null,
     });
   }
 
@@ -347,7 +347,7 @@ export class WaveParkGame extends SurfGame {
       this.x-=Math.sin(this.heading)*.6;this.z-=Math.cos(this.heading)*.6;
       this.y=parkHeight(this.x,this.z);
     }
-    this.lipMove=null;this.lipGrab=0;
+    this.lipMove=null;this.lipGrab=0;this.rampReturn=null;
     this.grinding = null;
     this.railCooldown = 1.2;
     super.bail(reason);
@@ -367,13 +367,22 @@ export class WaveParkGame extends SurfGame {
     if(this.grinding?.kind==='coping')this.faceIntoRamp(this.grinding.rail.rampId);
     this.grinding = null;
     if (fromRail) this.railCooldown = 1;
-    this.launch(6.6 + this.charge * 3, fromRail ? 'RAIL POP' : 'OLLIE', fromRail ? 180 : 0);
-    this.airLaunchSource=fromRail?'rail':'flat';
+    const surface=parkRideSurface(this.x,this.z,this.y);
+    const uphill=surface.ramp?clamp(surface.dx*this.vx+surface.dz*this.vz,0,16):0;
+    // A climbing board already has upward surface velocity. A flat-ground
+    // jump discarded that momentum and immediately fell into the rising face.
+    if(uphill>.5) {
+      const horizontal=Math.hypot(this.vx,this.vz),scale=Math.min(1,16/Math.max(1,horizontal));
+      this.vx*=scale;this.vz*=scale;
+    }
+    this.launch(Math.min(16,6.6 + this.charge * 3 + uphill), fromRail ? 'RAIL POP' : uphill>.5?'RAMP POP':'OLLIE', fromRail ? 180 : 0);
+    this.airLaunchSource=fromRail?'rail':uphill>.5?'ramp':'flat';
     return true;
   }
 
   launch(velocity, name = 'LIP LAUNCH', points = 200) {
     this.lastJump = this.elapsed;
+    this.rampReturn=null;
     this.popRecovery=POP_COOLDOWN;this.airLaunchSource='ramp';this.launchTricks=0;
     this.airborne = true;
     this.airtime = 0;
@@ -424,12 +433,19 @@ export class WaveParkGame extends SurfGame {
     else if (this.grinding) this.updateRail(dt, input);
     else {
       const active = this.bailTime <= 0;
-      if (active) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
+      if (active&&!this.rampReturn) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
       const targetSpeed = active ? input.brake ? 3.5 : input.pump ? 23.5 : 15 : 3;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * (input.brake ? 3.6 : 1.5)));
       const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : 11));
-      this.vx += (-Math.sin(this.heading) * this.speed - this.vx) * decay;
-      this.vz += (-Math.cos(this.heading) * this.speed - this.vz) * decay;
+      if(this.rampReturn)this.updateRampReturn(dt,steering);
+      else {
+        // A ramp pop redirects some speed upward. Keep that short climbing
+        // portion controlled instead of accelerating into the face again.
+        const risingFace=this.airborne&&this.airLaunchSource==='ramp'&&previous.ramp&&previous.dx*this.vx+previous.dz*this.vz>.05;
+        const travelSpeed=risingFace?Math.min(16,this.speed):this.speed;
+        this.vx += (-Math.sin(this.heading) * travelSpeed - this.vx) * decay;
+        this.vz += (-Math.cos(this.heading) * travelSpeed - this.vz) * decay;
+      }
       const wasAirborne = this.airborne;
       const from = { x:this.x, y:this.y, z:this.z };
       if (wasAirborne) this.vy -= 11.2*dt;
@@ -462,11 +478,19 @@ export class WaveParkGame extends SurfGame {
         this.airtime += dt;
         this.updateAirTrick(dt*movement.fraction);
         if (!this.grinding && movement.type === 'land') {
-          this.airborne = false; this.vy = 0;
+          this.airborne = false; this.vy = 0;this.rampReturn=null;
           const landing=this.resolveLandingTrick();
           if(landing.landed) {
             if(this.airLaunchSource!=='flat'||this.launchTricks>0)this.addCombo('CLEAN LANDING',120);
             this.onEvent({ type:'land', points:this.comboBase*this.multiplier,assisted:landing.assisted });
+          }
+        }
+        // Manual uphill pops can already be airborne at the lip. They use
+        // the same gentle bowl return without replacing the active trick.
+        if(this.airborne&&!this.grinding&&!this.rampReturn&&surface.ramp?.type==='quarter'&&surface.progress>=.96) {
+          const forward=-(this.vx*Math.sin(surface.ramp.rotation)+this.vz*Math.cos(surface.ramp.rotation));
+          if(forward>.8&&Math.abs(surface.lateral)<surface.ramp.width/2-1.35) {
+            this.recordRamp(surface.ramp);this.beginRampReturn(surface.ramp,input);
           }
         }
       } else {
@@ -502,10 +526,10 @@ export class WaveParkGame extends SurfGame {
 
   tryRamp(surface, previous,input={}) {
     const ramp = surface.ramp;
-    if (!ramp || ['bank','access'].includes(ramp.type) || this.rampCooldown > 0 || this.speed < 7 || Math.abs(surface.lateral) > ramp.width / 2 - 1.35) return;
+    if (!ramp || ['bank','access'].includes(ramp.type) || this.speed < (ramp.type==='quarter'?2:7) || Math.abs(surface.lateral) > ramp.width / 2 - 1.35) return;
     const forward = -(this.vx * Math.sin(ramp.rotation) + this.vz * Math.cos(ramp.rotation));
-    if(ramp.type==='quarter'&&forward>4&&(input.grind||input.action)) {
-      if(surface.progress<.91)return;
+    if(ramp.type==='quarter'&&forward>.8&&(input.grind||input.action)) {
+      if(surface.progress<.96)return;
       this.recordRamp(ramp);
       if(input.grind) {
         const coping=PARK_COPINGS.find(item=>item.rampId===ramp.id);
@@ -520,19 +544,41 @@ export class WaveParkGame extends SurfGame {
     const crossingCrest = ramp.type === 'spine' && sameRamp &&
       ((forward > 4 && previous.progress < 0.49 && surface.progress >= 0.49) ||
        (forward < -4 && previous.progress > 0.51 && surface.progress <= 0.51));
-    const reachingLip = ramp.type !== 'spine' && forward > 4 && surface.progress > 0.87;
+    const reachingLip = ramp.type !== 'spine' && forward > (ramp.type==='quarter'?.8:4) && surface.progress >= (ramp.type==='quarter'?.96:.97);
     if (!crossingCrest && !reachingLip) return;
     this.recordRamp(ramp);
-    this.launch(ramp.type === 'quarter' ? 10 : ramp.type === 'spine' ? 7.6 : 8.5,
+    const uphill=clamp(surface.dx*this.vx+surface.dz*this.vz,0,16);
+    // Quarterpipes turn most approach travel upward, then back toward the
+    // basin; straight kickers retain speed and need to outrun their rising lip.
+    const launchSpeed=ramp.type==='quarter'?clamp(10+(forward-10)*.18,6,12.5):ramp.type==='spine'?7.6:Math.max(8.5,uphill+4.5);
+    this.launch(launchSpeed+this.charge*2,
       ramp.type === 'spine' ? 'SPINE TRANSFER' : 'LIP LAUNCH', 220);
-    if (ramp.type === 'quarter') {
-      // The curling lip brings the board back into the bowl automatically.
-      const normalX = -Math.sin(ramp.rotation), normalZ = -Math.cos(ramp.rotation);
-      this.vx -= 2 * forward * normalX;
-      this.vz -= 2 * forward * normalZ;
-      this.heading = Math.atan2(-this.vx, -this.vz);
-      this.speed *= 0.8;
-    }
+    if (ramp.type === 'quarter') this.beginRampReturn(ramp,input);
+  }
+
+  beginRampReturn(ramp,input={}) {
+    const s=Math.sin(ramp.rotation),c=Math.cos(ramp.rotation);
+    const lateral=clamp(this.vx*c-this.vz*s,-5,5),returnSpeed=Math.max(7,this.speed*.5);
+    const endHeading=Math.atan2(-(c*lateral+s*returnSpeed),-(-s*lateral+c*returnSpeed));
+    let turn=Math.atan2(Math.sin(endHeading-this.heading),Math.cos(endHeading-this.heading));
+    if(Math.abs(Math.abs(turn)-Math.PI)<.001)turn=input.right?-Math.PI:Math.PI;
+    this.rampReturn={ramp,age:0,duration:.75,heading:this.heading,turn,lateral,returnSpeed};
+    // Convert the fast approach into an upward lip launch before turning.
+    // The short outward drift stays over the ramp instead of crossing its back.
+    this.vx=c*lateral-s*2.2;this.vz=-s*lateral-c*2.2;
+  }
+
+  updateRampReturn(dt,steering=0) {
+    const move=this.rampReturn;
+    move.age+=dt;
+    const progress=clamp(move.age/move.duration,0,1),ease=progress*progress*(3-2*progress);
+    const forward=2.2*(1-ease)-move.returnSpeed*ease,s=Math.sin(move.ramp.rotation),c=Math.cos(move.ramp.rotation);
+    move.steer=clamp((move.steer||0)-steering*5*dt,-2.2,2.2);
+    const lateral=clamp(move.lateral+move.steer,-5,5);
+    const aimShift=Math.atan2(lateral,move.returnSpeed)-Math.atan2(move.lateral,move.returnSpeed);
+    this.heading=move.heading+(move.turn+aimShift)*ease;
+    this.vx=c*lateral-s*forward;this.vz=-s*lateral-c*forward;
+    if(progress===1)this.rampReturn=null;
   }
 
   tryPipeRide() {

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { WaveParkGame } from './park.js';
+import { WaveParkGame, parkSurface } from './park.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
 
 const $=id=>document.getElementById(id),degrees=value=>(value*180/Math.PI).toFixed(1)+'°';
-const names={pipe:'WEST PIPE LOOP',lip:'LIP GRAB TURNBACK',coping:'DIRECT COPING ENTRY'};
+const names={pipe:'WEST PIPE LOOP',lip:'LIP GRAB TURNBACK',coping:'DIRECT COPING ENTRY',air:'QUARTERPIPE AIR',pop:'CHARGED RAMP POP'};
 let world,game,scenario=null,checkpoint=0,atCheckpoint=false,completed=false,attached=false,input={},events=[];
+let popReleased=false,airStarted=false,longestAir=0,highestY=0;
 const headPosition=new THREE.Vector3();
 
 function onEvent(event) {
@@ -18,8 +19,9 @@ function onEvent(event) {
 
 function start(kind) {
   scenario=kind;checkpoint=0;atCheckpoint=false;completed=false;attached=false;events=[];
+  popReleased=false;airStarted=false;longestAir=0;highestY=0;
   game.start(kind==='pipe'?'west':'filters');
-  $('status').textContent=kind==='pipe'?'Approaching the west tunnel. The first stop is a wall ride.':kind==='lip'?'Pumping up the filter halfpipe with E held.':'Pumping up the filter halfpipe with Shift held. No jump input.';
+  $('status').textContent={pipe:'Approaching the west tunnel. The first stop is a wall ride.',lip:'Pumping up the filter halfpipe with E held.',coping:'Pumping up the filter halfpipe with Shift held. No jump input.',air:'Pumping up the filter halfpipe. No jump input; the ramp should carry the rider into the air.',pop:'Holding Space on the approach, then releasing it at 78% of the ramp.'}[kind];
   updateCounters();
 }
 
@@ -29,6 +31,7 @@ function controls() {
     return attached?{action:checkpoint<3,right:checkpoint<3,brake:true}:{action:true,pump:true};
   }
   if(scenario==='lip')return {action:true,pump:true};
+  if(scenario==='air'||scenario==='pop')return {pump:true,jump:scenario==='pop'&&!popReleased};
   return {grind:checkpoint<1,pump:checkpoint<1,brake:checkpoint>=1};
 }
 
@@ -46,15 +49,25 @@ function detectCheckpoint() {
   } else if(scenario==='lip') {
     if(checkpoint===0&&game.lipMove?.progress>=.5)stop('Grab checkpoint: the hand reaches the board during the turnback. Continue to finish.');
     else if(checkpoint===1&&!game.lipMove&&game.comboNames.includes('LIP GRAB 180')){game.bank();stop('Sequence complete: lip grab, 180° reversal, and return to the ramp.',true);}
-  } else {
+  } else if(scenario==='coping') {
     if(game.grinding)attached=true;
     if(checkpoint===0&&game.grinding?.age>=.5)stop('Coping checkpoint: entered directly from the ramp with Shift held. Continue to drop back in.');
     else if(checkpoint===1&&attached&&!game.grinding&&!game.airborne){game.bank();stop('Sequence complete: coping grind, release, and landed drop-in.',true);}
+  } else if(scenario==='air'||scenario==='pop') {
+    if(game.airborne){airStarted=true;longestAir=Math.max(longestAir,game.airtime);highestY=Math.max(highestY,game.y);}
+    if(game.wipeouts>0)stop('Sequence ended in a wipeout. Inspect the position and recent events.',true);
+    else if(checkpoint===0&&game.airborne&&game.vy<=0)stop('Apex checkpoint: the rider cleared the lip and is turning back into the halfpipe. Continue to land.');
+    else if(checkpoint===1&&airStarted&&!game.airborne){game.bank();stop('Sequence complete: ramp air, return to the bowl, and landed safely.',true);}
+    else if(game.elapsed>9)stop('Sequence did not complete. Inspect the position and recent events.',true);
   }
 }
 
 function tick() {
-  input=controls();game.update(1/120,input);detectCheckpoint();
+  input=controls();
+  if(scenario==='pop'&&!popReleased&&parkSurface(game.x,game.z).progress>=.78){
+    popReleased=true;input.jump=false;game.jump();
+  }
+  game.update(1/120,input);detectCheckpoint();
 }
 
 function resume() {
@@ -76,13 +89,16 @@ function updateCounters() {
   $('stat-time').textContent=game.elapsed.toFixed(3)+' s';
   const action=game.pipeRide?'pipe wall ride':game.lipMove?'lip grab':game.grinding?'coping grind':game.airborne?'airborne':'riding';
   $('stat-state').textContent=game.phase+' / '+action;
-  $('stat-controls').textContent=Object.entries(input).filter(([,held])=>held).map(([key])=>({action:'E',right:'D',pump:'W',brake:'S',grind:'SHIFT'}[key]||key)).join(' + ')||'none';
+  $('stat-controls').textContent=Object.entries(input).filter(([,held])=>held).map(([key])=>({action:'E',right:'D',pump:'W',brake:'S',grind:'SHIFT',jump:'SPACE'}[key]||key)).join(' + ')||'none';
   $('stat-position').textContent=[game.x,game.y,game.z].map(v=>v.toFixed(2)).join(', ');
   $('stat-heading').textContent=degrees(game.heading);
   $('stat-pipe').textContent=(game.pipeRide?degrees(game.pipeRide.angle):'none')+' / '+game.pipeLoops;
   $('stat-up').textContent=Object.values(game.rideUp).map(v=>v.toFixed(2)).join(', ');
   $('stat-lip').textContent=`${(game.lipGrab*100).toFixed(1)}% grab / ${((game.lipMove?.progress||0)*100).toFixed(1)}% turn`;
   $('stat-grind').textContent=game.grinding?`${game.grinding.rail.id} · ${game.grinding.age.toFixed(2)} s`:'none';
+  const surface=parkSurface(game.x,game.z);
+  $('stat-ramp').textContent=surface.ramp?`${surface.ramp.id} / ${(surface.progress*100).toFixed(1)}%`:'none';
+  $('stat-air').textContent=`${longestAir.toFixed(2)} s / ${highestY.toFixed(2)} m`;
   world.surfer.head.getWorldPosition(headPosition);$('stat-head').textContent=headPosition.toArray().map(v=>v.toFixed(2)).join(', ');
   $('stat-score').textContent=`${game.score} / ${game.comboBase} × ${game.multiplier}`;
   $('stat-wipeouts').textContent=String(game.wipeouts);$('events').textContent=events.join('\n');
@@ -94,7 +110,7 @@ try {
   await loadCharacterTextures();
   world=new SurfWorld($('viewport'),validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));world.setMode('park');
   game=new WaveParkGame(onEvent);$('loading').remove();
-  for(const kind of ['pipe','lip','coping'])$('run-'+kind).addEventListener('click',()=>start(kind));
+  for(const kind of ['pipe','lip','coping','air','pop'])$('run-'+kind).addEventListener('click',()=>start(kind));
   $('continue').addEventListener('click',resume);
   $('pause').addEventListener('click',()=>{if(game.phase==='running')game.pause();else resume();updateCounters();});
   $('frame').addEventListener('click',()=>step(1));$('step').addEventListener('click',()=>step(30));
