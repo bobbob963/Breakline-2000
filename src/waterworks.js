@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { retroMaterial } from './appearance.js';
+import { createClassicLogoCanvas } from './classic-logo.js';
 import * as PARK from './park.js';
 
 const TAU = Math.PI * 2;
@@ -285,11 +286,16 @@ export function createWaterworks() {
   const rust = retroMaterial(0xffffff, rustMap), darkRust = retroMaterial('#725d46', rustMap);
   const pale = retroMaterial('#c4c2a0'), yellow = retroMaterial('#bca34e');
   const lamp = new THREE.MeshBasicMaterial({ color: '#cfc78f' });
+  const logoMap = new THREE.CanvasTexture(createClassicLogoCanvas());
+  logoMap.name = 'classic-breakline-factory-banner';
+  logoMap.magFilter = THREE.NearestFilter; logoMap.minFilter = THREE.LinearMipmapLinearFilter;
+  logoMap.generateMipmaps = true; logoMap.colorSpace = THREE.SRGBColorSpace;
+  const logoMaterial = new THREE.MeshLambertMaterial({ map: logoMap, alphaTest: .1, side: THREE.DoubleSide });
   const waterMap = texture('flow'), flowingWater = retroMaterial('#798773', waterMap); flowingWater.side = THREE.DoubleSide;
   // The rideable ground intentionally skips retroMaterial's vertex snapping:
   // snapping a dense, shallow-angle heightfield can invert tiny screen triangles.
   const terrain = addTerrain(group, new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorMap, flatShading: true }));
-  const foam = [], flows = [];
+  const foam = [], flows = [], logoBanners = [];
 
   // The entire arena sits at the bottom of a treatment basin. Solid retaining
   // walls begin at the exact playable boundary and rise close above the rider.
@@ -351,6 +357,12 @@ export function createWaterworks() {
     }
     sign(group, side < 0 ? 'THE WATERWORKS / LOWER BASIN' : 'NO. 99 / SOUTH OUTFALL', 0, 18, z - side * 4.3, 69, 6, side > 0 ? Math.PI : 0);
     sign(group, side < 0 ? 'STORM SURGE / KEEP CLEAR' : 'RIDE AT YOUR OWN TIDE', -62, 8, z - side * 4.24, 35, 3, side > 0 ? Math.PI : 0, '#c4ac62');
+    // The original oval mark mounts flush with the other wall graphics,
+    // with its transparent contour showing the concrete underneath.
+    const banner = mesh(group, new THREE.PlaneGeometry(25, 10), logoMaterial, 55, 9, z - side * 4.24);
+    banner.name = side < 0 ? 'classic-logo-banner-north' : 'classic-logo-banner-south';
+    banner.rotation.y = side > 0 ? Math.PI : 0;
+    logoBanners.push(banner);
   }
 
   // Interior columns use the exact collision descriptors, without oversized
@@ -396,7 +408,7 @@ export function createWaterworks() {
     }
   }
   // Foam belongs to actual discharge, not to the stable floor material.
-  batchStatic(group, new Set([...foam.map(f => f.mesh), ...flows]));
+  batchStatic(group, new Set([...foam.map(f => f.mesh), ...flows, ...logoBanners]));
   group.userData.terrainVertexCount = terrain.geometry.attributes.position.count;
   return { group, waterMap, foam, update: time => { waterMap.offset.y = -time * .16; } };
 }

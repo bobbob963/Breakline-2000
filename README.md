@@ -10,6 +10,8 @@ The Waterworks camera follows turns smoothly, retracts around obstacles, recover
 
 The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; riding keeps the mellow surf score.
 
+The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.
+
 Grabs now have a sustained hold. The hand follows a point on the actual board edge after the board and rider transforms, rather than reaching a fixed approximation for just one instant. The model keeps its limb lengths while crouching and gripping.
 
 Every mode now requires **1.4 seconds of grounded recovery after landing before another manual pop**. In ocean modes, earn trick airtime by reaching the wave lip at speed or completing a **Shift + A/D cutback**. Flat-water hops and cutbacks alone give no points. The HUD shows pop recovery and the brief cutback-launch window.
@@ -38,6 +40,8 @@ If the launcher is blocked, import manually:
 4. Open the preview in a new tab for the largest view and reliable keyboard focus.
 
 StackBlitz normally starts the `dev` script automatically; do not start another server if one is already running. The launcher and dependency installation need an internet connection. The game needs WebGL 2 and hardware acceleration.
+
+If a school or workplace filter blocks the `webcontainer.io` preview address, the project can finish loading while its game preview stays blocked. Ask the network administrator to review that address. Signing in or reimporting the project does not remove a network filter. The supplied `Play-Breakline-99.html` remains a self-contained offline copy.
 
 Official guides: [import projects](https://developer.stackblitz.com/guides/user-guide/importing-projects) · [create with the SDK](https://developer.stackblitz.com/guides/integration/create-with-sdk).
 

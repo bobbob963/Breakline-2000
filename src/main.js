@@ -3,6 +3,8 @@ import './selection.css';
 import './factory.css';
 import './summer99.css';
 import './survival.css';
+import './classic-logo.css';
+import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
 import { SurfGame, COMBO_WINDOW, MIN_X, MAX_X, POP_COOLDOWN, waveCrest } from './game.js';
 import { WaveParkGame, PARK_BOUNDS } from './park.js';
@@ -23,6 +25,8 @@ let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm'].includes(selectedMode))selectedMode='surf';
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
+const classicLogo=createClassicLogoCanvas().toDataURL('image/png');
+document.querySelectorAll('[data-classic-logo]').forEach(img=>img.src=classicLogo);
 let selectedParkStart=read('breakline99-park-start','basin');
 if(!['basin','west','east','filters'].includes(selectedParkStart))selectedParkStart='basin';
 $('park-start').value=selectedParkStart;
@@ -95,6 +99,7 @@ function goHome(){
   $('hud').classList.add('hidden');$('touch').classList.add('hidden');$('intro').classList.remove('hidden');document.body.classList.remove('playing');updateModeMenu();updateSoundLabel();$('start').focus({preventScroll:true});
 }
 function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
+  $('modal').dataset.mode=mode;
   const active=game.phase==='running';if(active){game.pause();clearInput();}if(!modalMode)resumeAfterModal=active;
   modalMode=mode;$('modal-title').textContent=title;$('modal-kicker').textContent=kicker;$('modal-content').innerHTML=content;$('modal-action').textContent=action;
   $('modal').classList.remove('hidden');$('touch').classList.add('hidden');$('modal-action').focus({preventScroll:true});

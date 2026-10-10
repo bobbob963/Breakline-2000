@@ -1,0 +1,6 @@
+/* The oval mark is a secondary identity; the home-page surf label stays. */
+.crew-classic-logo{display:block;width:184px;height:68px;object-fit:contain;margin-left:auto;margin-right:23px;filter:drop-shadow(2px 3px 0 #080e16);pointer-events:none}
+.selection-screen .workshop-header{overflow:visible}
+.modal-classic-logo{display:block;width:230px;height:92px;object-fit:contain;margin:-8px auto 5px;filter:drop-shadow(2px 3px 0 #070c13)}
+.modal:not([data-mode="results"]):not([data-mode="pause"]) .modal-classic-logo{display:none}
+@media(max-height:700px){.modal-classic-logo{width:185px;height:74px;margin:-10px auto 2px}.crew-classic-logo{width:157px;height:61px}}
