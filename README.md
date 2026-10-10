@@ -12,6 +12,8 @@ The rectangular surfwear graphic has tall black lettering over faded red, blue a
 
 The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.
 
+A full-screen retro loading screen uses the oval badge, blue industrial grain, yellow lettering and a segmented orange bar. Progress follows actual startup stages (game files, rider textures, environments and first frame), with a tip for your selected mode. Controls unlock when the scene is ready; failed startup offers **TRY AGAIN**. It is included in both StackBlitz and the offline game.
+
 Grabs now have a sustained hold. The hand follows a point on the actual board edge after the board and rider transforms, rather than reaching a fixed approximation for just one instant. The model keeps its limb lengths while crouching and gripping.
 
 Every mode now requires **1.4 seconds of grounded recovery after landing before another manual pop**. In ocean modes, earn trick airtime by reaching the wave lip at speed or completing a **Shift + A/D cutback**. Flat-water hops and cutbacks alone give no points. The HUD shows pop recovery and the brief cutback-launch window.

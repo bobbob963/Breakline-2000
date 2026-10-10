@@ -14,8 +14,12 @@ import { SurfWorld } from './world.js';
 import { ArcadeAudio } from './audio.js';
 import { CHARACTERS, OUTFITS, BOARD_DESIGNS, validateProfile, CustomizationPreview } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
+import { createLoadingScreen, paintLoadingStage } from './loading-screen.js';
 
 const $=id=>document.getElementById(id);
+const loading=createLoadingScreen();
+let bootReady=false;
+loading.set(15,'PREPARING THE CREW','Loading the original rider textures.');
 const fmt=n=>Math.round(n).toLocaleString('en-US');
 const pad=n=>Math.round(n).toString().padStart(6,'0');
 const clockText=n=>{const seconds=Math.max(0,Math.floor(Number.isFinite(n)?n:0));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
@@ -24,9 +28,16 @@ const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage 
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm'].includes(selectedMode))selectedMode='surf';
+$('loading-tip').textContent={
+  surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
+  park:'Hold E inside a rust tunnel and steer around its walls. Hold SHIFT at a ramp lip to catch the coping.',
+  rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
+  storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
+}[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
 const classicLogo=createClassicLogoCanvas().toDataURL('image/png');
 document.querySelectorAll('[data-classic-logo]').forEach(img=>img.src=classicLogo);
+$('loading').querySelector('img').decode().then(()=>$('loading').classList.add('has-logo')).catch(()=>{/* Keep the native logo fallback. */});
 let selectedParkStart=read('breakline99-park-start','basin');
 if(!['basin','west','east','filters'].includes(selectedParkStart))selectedParkStart='basin';
 $('park-start').value=selectedParkStart;
@@ -207,6 +218,7 @@ function updateHud(){
 }
 
 window.addEventListener('keydown',e=>{
+  if(!bootReady)return;
   if(keyMap[e.code]||trickKeys[e.code]||['Enter','Escape','KeyP','KeyR','KeyM','KeyC'].includes(e.code))e.preventDefault();if(e.repeat)return;
   if(e.code==='KeyM'){toggleSound();return;}
   if(workshopMode){
@@ -226,10 +238,10 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyB'&&selectedMode==='park')return;
   if(keyMap[e.code]){pressed.add(e.code);syncInput();}if(trickKeys[e.code])tryTrick(trickKeys[e.code]);
 });
-window.addEventListener('keyup',e=>{if(!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
+window.addEventListener('keyup',e=>{if(!bootReady||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
 window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')pause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
-document.addEventListener('pointerdown',event=>{if(event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
+document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',startRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('home').addEventListener('click',goHome);$('modal-home').addEventListener('click',goHome);
 $('modal-action').addEventListener('click',()=>modalMode==='results'?startRun():modalMode==='graphics'?location.reload():closeModal());
@@ -254,8 +266,20 @@ document.querySelectorAll('[data-hold]').forEach(b=>{
 document.querySelectorAll('[data-trick]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();tryTrick(b.dataset.trick);}));
 
 try{
+  await paintLoadingStage();
   await loadCharacterTextures();
-  world=new SurfWorld($('viewport'),profile);parkMap=new ParkMap($('park-map-canvas'));makeGame();updateModeMenu();renderCustomizationChoices();updateSoundLabel();$('loading').classList.add('hidden');
+  loading.set(40,'BUILDING YOUR SESSION','Preparing the coast, wave ramps and Waterworks.');
+  await paintLoadingStage();
+  world=new SurfWorld($('viewport'),profile);
+  loading.set(78,'SETTING YOUR LINE','Getting your surfer, board and session ready.');
+  await paintLoadingStage();
+  parkMap=new ParkMap($('park-map-canvas'));makeGame();updateModeMenu();renderCustomizationChoices();updateSoundLabel();
+  loading.set(92,'WARMING UP THE WATER','Drawing the first frame. Almost there.');
+  await paintLoadingStage();
+  world.update(0,game);updateHud();
+  await paintLoadingStage();
+  bootReady=await loading.finish();
+  if(!bootReady)throw new Error('Startup stopped before the menu was ready.');
   let previous=performance.now(),accumulator=0,hudTime=0,animationId;
   const frame=now=>{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
@@ -268,4 +292,4 @@ try{
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
   if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);world.dispose();preview?.dispose();audio.dispose();});
-}catch(error){console.error(error);$('loading').textContent='COULD NOT START 3D. ENABLE WEBGL 2 / HARDWARE ACCELERATION AND RELOAD.';}
+}catch(error){console.error(error);loading.fail();}

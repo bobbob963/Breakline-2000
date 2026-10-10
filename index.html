@@ -7,9 +7,34 @@
     <meta name="description" content="Breakline '99 — a low-poly surf arcade. Ride the point break or explore a flooded factory with hollow rust tunnels, wave ramps and pipe grinds. Four modes. Four surfers. Twelve outfits. Your own board." />
     <title>Breakline '99 — Surf Arcade</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23f5d329'/%3E%3Cpath d='M4 26Q12 8 26 12Q15 18 23 27Q29 30 36 23' fill='none' stroke='%23181427' stroke-width='5'/%3E%3C/svg%3E" />
+    <style id="loading-critical">
+      html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#09111b}#app[inert][aria-busy="true"]{visibility:hidden}
+      #loading,#loading *{box-sizing:border-box}#loading{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;overflow:auto;padding:26px;color:#d5d9d6;background:repeating-linear-gradient(114deg,transparent 0 29px,#738d9b08 30px 31px,transparent 32px 68px),repeating-linear-gradient(3deg,#07101938 0 1px,transparent 2px 5px),radial-gradient(ellipse at 50% 42%,#29424c 0,#142631 45%,#070d16 100%);font:12px/1.4 'Courier New',monospace;letter-spacing:0;text-shadow:none;opacity:1;transition:opacity 180ms ease}
+      #loading::before{content:'';position:fixed;inset:0;pointer-events:none;opacity:.18;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23c5d2d6' filter='url(%23n)' d='M0 0h160v160H0z'/%3E%3C/svg%3E")}
+      #loading::after{content:'';position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 100px 30px #0009;border:8px solid #050b1299}
+      #loading.is-leaving{opacity:0;pointer-events:none}#loading.hidden,#loading[hidden]{display:none!important}
+      .loading-panel{position:relative;z-index:1;width:min(740px,100%);padding:29px 45px 24px;border-top:3px ridge #8797a0;border-bottom:3px ridge #687680;background:linear-gradient(90deg,#0a142077,#111f2988,#09142077);box-shadow:0 12px 35px #0006}
+      .loading-edition{display:flex;justify-content:space-between;gap:15px;padding-bottom:14px;border-bottom:1px solid #98aab12b;color:#899da4;font:bold 9px/1.3 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase}.loading-edition b{color:#c5b46e;white-space:nowrap}
+      #loading .loading-title{margin:17px 0 0;font:italic 47px/.98 Impact,'Arial Black',sans-serif;text-transform:uppercase;letter-spacing:1px;text-align:left;transform:skewX(-4deg);color:#e0bc48;-webkit-text-stroke:1px #7e5b24;text-shadow:2px 3px #080e15,4px 5px #03090d}
+      .loading-brand{position:relative;width:min(440px,95%);height:161px;margin:0 auto 16px;isolation:isolate}.loading-brand>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0}.has-logo .loading-brand>img{opacity:1}.has-logo .loading-logo-fallback{visibility:hidden}
+      .loading-logo-fallback{position:absolute;inset:27px 18px 12px;transform:rotate(-7deg);border:5px solid #a2b5b5;border-radius:50%;background:linear-gradient(165deg,#d8e5e570,#62777c80 40%,#0e1728 41%,#14252e 100%);box-shadow:0 0 0 3px #080e16,4px 7px #03080d,-2px -3px #e3e5d9;isolation:isolate}
+      .loading-logo-fallback::before{content:'';position:absolute;z-index:-1;width:126%;height:43%;left:-13%;top:33%;background:linear-gradient(90deg,#ba4631,#eb7a36);transform:rotate(-8deg);clip-path:polygon(0 15%,100% 0,89% 44%,98% 69%,0 100%,7% 52%)}
+      .loading-logo-fallback strong{position:absolute;top:8px;left:2%;width:96%;font:italic clamp(31px,6.6vw,55px)/1 Impact,'Arial Black',sans-serif;letter-spacing:-1.6px;text-align:center;color:#e7ebe2;-webkit-text-stroke:1px #17212b;paint-order:stroke fill;text-shadow:3px 3px #050c13,5px 5px #050c13}
+      .loading-logo-fallback em{position:absolute;right:6%;bottom:2px;color:#eb6344;font:italic 49px/.9 Impact,'Arial Black',sans-serif;-webkit-text-stroke:1px #391b29;paint-order:stroke fill;text-shadow:2px 2px #f18b50,4px 4px #040b13}
+      .loading-logo-fallback span{position:absolute;left:12%;bottom:15px;max-width:60%;font:italic 13px/1 Impact,'Arial Black',sans-serif;letter-spacing:2px;color:#eee7cf;text-shadow:2px 2px #050c13}
+      .loading-progress-copy{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:7px}#loading-status{font:bold 11px/1.35 'Courier New',monospace;letter-spacing:1.6px;color:#d3d8d3;text-transform:uppercase}#loading-percent{font:italic 23px/1 Impact,'Arial Black',sans-serif;color:#e5bc56;font-variant-numeric:tabular-nums;text-shadow:2px 2px #07111a}
+      #loading-bar{height:20px;padding:3px;border:2px inset #6d7d86;background:#060d16;box-shadow:0 1px #93a3a34d}#loading-fill{display:block;height:100%;width:0%;max-width:100%;background:repeating-linear-gradient(90deg,transparent 0 13px,#09111b 13px 16px),linear-gradient(#ffc56b,#df772e 50%,#a33c1d 51%,#df7737);box-shadow:0 0 7px #e39b3933}
+      #loading-detail{min-height:17px;margin:9px 0 0;color:#899da5;font:10px/1.5 'Courier New',monospace;letter-spacing:.3px}.loading-tip-line{display:flex;gap:12px;align-items:start;margin:24px 0 20px;padding-top:14px;border-top:1px solid #82979f33}.loading-tip-line b{color:#d5b960;font:italic 14px/1.2 Impact,'Arial Black',sans-serif;letter-spacing:1px}.loading-tip-line p{margin:0;font:11px/1.5 'Courier New',monospace;color:#afbcbb}
+      .loading-footer{display:flex;justify-content:space-between;gap:15px;color:#627d88;font:bold 8px/1.4 'Courier New',monospace;letter-spacing:1.8px}.loading-footer span:last-child{color:#a48b54}
+      #loading-retry{display:none;margin:15px 0 0;padding:10px 22px;border:2px outset #d0a94d;background:#775321;color:#f1dfac;font:italic 19px/1 Impact,'Arial Black',sans-serif;letter-spacing:1px;cursor:pointer}#loading.has-error #loading-retry{display:inline-block}#loading-retry:focus-visible{outline:3px solid #f1d575;outline-offset:4px}#loading.has-error #loading-status{color:#ecad72}#loading.has-error #loading-fill{background:repeating-linear-gradient(90deg,#b74d2e 0 13px,#09111b 13px 16px)}
+      .loading-noscript{position:fixed;inset:0;z-index:1100;display:grid;place-content:center;padding:35px;color:#ded9c7;background:#101e2a;font:14px/1.6 'Courier New',monospace}.loading-noscript h1{font:italic 36px Impact,'Arial Black',sans-serif;color:#e0bc48}.loading-noscript p{max-width:520px}
+      @media(max-height:600px){#loading{padding:16px}.loading-panel{padding:16px 35px}.loading-edition{padding-bottom:8px}.loading-brand{height:137px;margin-bottom:9px}#loading .loading-title{font-size:39px;margin-top:12px}.loading-logo-fallback{inset:22px 34px 8px}.loading-logo-fallback strong{font-size:46px}.loading-logo-fallback em{font-size:40px}.loading-logo-fallback span{font-size:11px;bottom:12px}.loading-tip-line{margin:17px 0 13px;padding-top:10px}}
+      @media(max-width:500px){#loading{padding:15px}.loading-panel{padding:20px 20px 18px}.loading-edition{font-size:7px;letter-spacing:1px}#loading .loading-title{font-size:38px}.loading-brand{width:100%;height:132px;margin-top:8px}.loading-logo-fallback{inset:25px 8px 10px;border-width:4px}.loading-logo-fallback strong{font-size:clamp(27px,8.7vw,41px);top:9px}.loading-logo-fallback em{font-size:37px;bottom:1px}.loading-logo-fallback span{font-size:9px;letter-spacing:1px;bottom:13px;left:9%}#loading-status{font-size:9px;letter-spacing:.7px}#loading-detail{font-size:9px}.loading-tip-line p{font-size:10px}.loading-footer{font-size:6px;letter-spacing:1px}}
+      @media(prefers-reduced-motion:reduce){#loading{transition:none}}
+    </style>
   </head>
   <body>
-    <div id="app">
+    <div id="app" inert aria-busy="true">
       <header class="masthead">
         <a class="brand" href="#" aria-label="Breakline 99 home"><img data-brand-art alt="Breakline 99" width="210" height="70"></a>
         <span id="music-track" class="edition">RIPTIDE RADIO 99 / SURF ROCK &amp; REVERB</span>
@@ -110,10 +135,51 @@
           <div class="touch-steering"><button data-hold="left" aria-label="Carve left">◀</button><button data-hold="right" aria-label="Carve right">▶</button><button data-hold="pump">PUMP</button><button data-hold="brake">SLOW</button></div>
           <div class="touch-tricks"><button data-trick="spin">SPIN</button><button data-trick="flip">FLIP</button><button data-trick="grab">GRAB</button><button data-trick="shuvit">SHUV-IT</button><button data-trick="heelflip">HEELFLIP</button><button data-trick="method">METHOD</button><button data-trick="spin360">360 AIR</button><button data-trick="special" class="touch-special" aria-label="Special trick when the meter is full">SPECIAL</button><button data-hold="jump" class="touch-pop">POP</button><button id="touch-bank">BANK</button></div>
         </div>
-        <div id="loading" class="loading">LOADING THE SWELL…</div>
       </main>
       <footer class="control-strip"><div><kbd>A</kbd><kbd>D</kbd><span>CARVE</span></div><div><kbd>W</kbd><span>PUMP</span></div><div><kbd>SPACE</kbd><span>HOLD + RELEASE TO POP</span></div><div><kbd>J</kbd><span>SPIN</span><kbd>K</kbd><span>FLIP</span><kbd>L</kbd><span>GRAB</span><kbd>I</kbd><span>SPECIAL</span></div><div><kbd>ENTER</kbd><span>BANK COMBO</span></div><div><kbd>B</kbd><span>TWEAKED GRAB</span></div><div class="ocean-controls"><kbd>SHIFT + A/D</kbd><span>CUTBACK</span></div><div class="factory-controls"><kbd>E</kbd><span>PIPE / LIP</span><kbd>SHIFT</kbd><span>COPING</span></div></footer>
     </div>
+    <section id="loading" class="loading" aria-labelledby="loading-title">
+      <div class="loading-panel">
+        <div class="loading-edition"><span>COASTAL DIVISION / ORIGINAL SURF ARCADE</span><b>VOL. 08</b></div>
+        <h1 id="loading-title" class="loading-title">LOADING...</h1>
+        <div class="loading-brand" role="img" aria-label="Breakline 99 Extreme Surfing">
+          <div class="loading-logo-fallback" aria-hidden="true"><strong>BREAKLINE</strong><em>'99</em><span>EXTREME SURFING</span></div>
+          <img data-classic-logo alt="" aria-hidden="true" width="440" height="161">
+        </div>
+        <div class="loading-progress-copy"><span id="loading-status" role="status" aria-live="polite">LOADING THE GAME</span><span id="loading-percent" aria-hidden="true">0%</span></div>
+        <div id="loading-bar" role="progressbar" aria-labelledby="loading-status" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="loading-fill" aria-hidden="true"></i></div>
+        <p id="loading-detail">Getting the surf arcade ready. Progress follows startup stages.</p>
+        <button id="loading-retry" type="button" hidden>TRY AGAIN ↻</button>
+        <div class="loading-tip-line"><b>LINE TIP</b><p id="loading-tip">Ride high on the wave. Hold POP, release at the lip, then land your trick.</p></div>
+        <div class="loading-footer"><span>SALT WATER. NO WHEELS.</span><span>BREAKLINE / SUMMER '99</span></div>
+      </div>
+    </section>
+    <noscript><style>#loading{display:none!important}</style><section class="loading-noscript"><h1>BREAKLINE '99</h1><p>JavaScript is needed to run this 3D game. Enable JavaScript in your browser, then reload the page to ride.</p></section></noscript>
+    <script>
+      // This runs before the game bundle, including when its download fails.
+      (() => {
+        const screen = document.getElementById('loading');
+        const fail = () => {
+          if (screen.hidden) return;
+          screen.classList.remove('is-leaving');
+          screen.classList.add('has-error');
+          document.getElementById('app').setAttribute('inert', '');
+          document.getElementById('app').setAttribute('aria-busy', 'true');
+          document.getElementById('loading-status').textContent = 'COULD NOT LOAD THE SESSION';
+          document.getElementById('loading-detail').textContent = 'Reload to try again. Check the connection if the game files could not load.';
+          document.getElementById('loading-percent').textContent = 'STOPPED';
+          document.getElementById('loading-retry').hidden = false;
+        };
+        const onError = event => { if (event.target === window || ['SCRIPT','LINK'].includes(event.target?.tagName)) fail(); };
+        document.getElementById('loading-retry').addEventListener('click', () => location.reload());
+        window.addEventListener('error', onError, true);
+        window.addEventListener('unhandledrejection', fail);
+        document.addEventListener('breakline-ready', () => {
+          window.removeEventListener('error', onError, true);
+          window.removeEventListener('unhandledrejection', fail);
+        }, { once: true });
+      })();
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
