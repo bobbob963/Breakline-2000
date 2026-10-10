@@ -1,7 +1,7 @@
 {
   "name": "breakline-99",
-  "version": "4.0.0",
-  "description": "A PS1-style surf arcade with a sunken factory park, hollow rust tunnels, solid grind rails, four custom surfers, and a mellow original surf soundtrack.",
+  "version": "8.0.0",
+  "description": "Retro 3D surfing with endless storm survival, curling barrel waves, forgiving landings and tweaked grabs.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,16 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.js"
   },
-  "dependencies": { "three": "0.180.0" },
-  "devDependencies": { "vite": "7.1.7" },
-  "engines": { "node": "^20.19.0 || >=22.12.0" },
-  "stackblitz": { "startCommand": "npm run dev" }
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "vite": "7.1.7"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "stackblitz": {
+    "startCommand": "npm run dev"
+  }
 }

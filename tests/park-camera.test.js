@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveParkCamera } from '../src/park-camera.js';
-import { PARK_BOUNDS, PARK_RAMPS, PARK_PIPES, parkHeight, pipeSurfaceHeight, parkPointBlocked } from '../src/park.js';
+import { createParkCameraState, stepParkCamera } from '../src/park-camera-rig.js';
+import { PARK_BOUNDS, PARK_RAMPS, PARK_PIPES, WaveParkGame, parkHeight, pipeSurfaceHeight, pipeRideFrame, parkPointBlocked } from '../src/park.js';
 
 function assertClear(rider,camera,insidePipe=false) {
   assert.ok(camera.x>=PARK_BOUNDS.minX && camera.x<=PARK_BOUNDS.maxX);
@@ -87,4 +88,108 @@ test('inside both pipes the camera stays in the bore across turns and high jumps
       }
     }
   }
+});
+
+test('loop camera and its head ray remain inside the pipe through every wall and ceiling angle',()=>{
+  for(const pipe of PARK_PIPES)for(const dir of [-1,1])for(const local of [-pipe.length/2+2.1,0,pipe.length/2-2.1]) {
+    for(let degrees=0;degrees<360;degrees+=10) {
+      const rider=pipeRideFrame(pipe,degrees*Math.PI/180,local,dir),up=rider.up;
+      const desired={x:rider.x+up.x*2.6+Math.sin(pipe.rotation)*dir*4.5,y:rider.y+up.y*2.6,z:rider.z+up.z*2.6+Math.cos(pipe.rotation)*dir*4.5};
+      const camera=resolveParkCamera(rider.x,rider.y,rider.z,desired,up);
+      const head={x:rider.x+up.x*1.3,y:rider.y+up.y*1.3,z:rider.z+up.z*1.3};
+      for(let i=0;i<=400;i++) {
+        const t=i/400,x=head.x+(camera.x-head.x)*t,y=head.y+(camera.y-head.y)*t,z=head.z+(camera.z-head.z)*t;
+        assert.ok(y>=parkHeight(x,z)+.245);
+        assert.equal(parkPointBlocked(x,y,z,.08),false,'inverted camera ray must not cross the shell');
+      }
+      assert.ok(Math.hypot(camera.x-pipe.x,camera.y-pipe.centerY)<pipe.radius-pipe.thickness);
+    }
+  }
+});
+
+function assertTemporalView(frame) {
+  for(const point of[frame.position,frame.look,frame.up])assert.ok([point.x,point.y,point.z].every(Number.isFinite));
+  assert.ok(frame.position.distanceTo(frame.look)>1.2,'camera reaches the subject');
+  assert.ok(Math.abs(frame.up.dot(frame.forward))<1e-8,'view/up approaches a lookAt pole');
+  assert.ok(Math.abs(frame.up.length()-1)<1e-8);
+  const steps=Math.ceil(frame.position.distanceTo(frame.look)/.02);
+  for(let i=0;i<=steps;i++) {
+    const p=frame.look.clone().lerp(frame.position,i/steps);
+    assert.ok(p.y>=parkHeight(p.x,p.z)+.245,'temporal camera looks through terrain');
+    assert.equal(parkPointBlocked(p.x,p.y,p.z,.08),false,'temporal camera looks through pipe/rail/column');
+  }
+}
+
+function exerciseSequence(path,dt=1/60) {
+  const state=createParkCameraState();let previous=null,maxStep=0,maxTurn=0,maxUpTurn=0;
+  path.forEach((input,index)=>{
+    const frame=stepParkCamera(state,input,dt);
+    if(previous&&!input.reset){
+      maxStep=Math.max(maxStep,frame.offset.distanceTo(previous.offset));
+      maxTurn=Math.max(maxTurn,Math.acos(Math.max(-1,Math.min(1,frame.forward.dot(previous.forward)))));
+      maxUpTurn=Math.max(maxUpTurn,Math.acos(Math.max(-1,Math.min(1,frame.up.dot(previous.up)))));
+    }
+    // Independent fine ray sampling across the sequence, not just endpoints.
+    if(index%4===0||index===path.length-1)assertTemporalView(frame);
+    previous={offset:frame.offset.clone(),forward:frame.forward.clone(),up:frame.up.clone()};
+  });
+  return {state,maxStep,maxTurn,maxUpTurn};
+}
+
+test('instant ramp reversals and rail turns orbit smoothly at 30, 60 and 120 Hz',()=>{
+  for(const hz of[30,60,120]){
+    const path=Array.from({length:hz*4},(_,i)=>({x:0,y:parkHeight(0,75),z:75,heading:i<hz?0:i<hz*2?Math.PI:Math.PI/2}));
+    const result=exerciseSequence(path,1/hz);
+    assert.ok(result.maxStep<20/hz,'camera cuts across an instantaneous physics heading change');
+    assert.ok(result.maxTurn<6/hz,'view direction snaps at a turn');
+    assert.ok(result.maxUpTurn<6/hz,'view rolls abruptly at a turn');
+    assert.ok(Math.abs(result.state.heading-Math.PI/2)<.02,'camera never catches the new heading');
+  }
+});
+
+test('real halfpipe launches and coping transitions retain smooth rider-relative framing',()=>{
+  for(const grind of[false,true]){
+    const game=new WaveParkGame();game.start('filters');const path=[];let launched=false,caught=false;
+    for(let i=0;i<360;i++){
+      game.update(1/60,{pump:true,grind});launched ||= game.airborne;caught ||= !!game.grinding;
+      path.push({x:game.x,y:game.y,z:game.z,heading:game.heading});
+    }
+    assert.ok(grind?caught:launched,'fixture must actually exercise the intended transition');
+    const result=exerciseSequence(path);
+    assert.ok(result.maxStep<.55,'camera jumps during a real halfpipe transition');
+    assert.ok(result.maxTurn<.14,'aim lags behind a halfpipe transition');
+  }
+});
+
+test('ramp backs and columns retract and release the boom without stepped snaps',()=>{
+  for(const kind of['back','column']){
+    const path=Array.from({length:360},(_,i)=>{
+      const a=i/60*.8,x=kind==='back'?18+i/359*24:-98+4*Math.cos(a),z=kind==='back'?-174.7:-38+4*Math.sin(a);
+      return {x,y:parkHeight(x,z),z,heading:kind==='back'?326*Math.PI/180:Math.atan2(Math.sin(a),-Math.cos(a))};
+    });
+    const result=exerciseSequence(path);
+    assert.ok(result.maxStep<.24,'collision shortening or extension creates a visible camera pop');
+    assert.ok(result.maxTurn<.065,'obstacle avoidance throws the aim away from the rider');
+  }
+});
+
+test('two complete loops in both pipes keep a continuous horizon and clear moving view',()=>{
+  for(const pipe of PARK_PIPES)for(const dir of[-1,1]){
+    const path=Array.from({length:360},(_,i)=>{
+      const rider=pipeRideFrame(pipe,i/359*Math.PI*4,-18+36*i/359,dir);
+      return {...rider,heading:pipe.rotation+(dir<0?Math.PI:0),rideUp:rider.up};
+    });
+    const result=exerciseSequence(path);
+    assert.ok(result.maxStep<.14,'camera teleports across a pipe loop');
+    assert.ok(result.maxTurn<.03,'camera direction snaps near an inverted rider');
+    assert.ok(result.maxUpTurn<.03,'camera horizon flips during a full loop');
+  }
+});
+
+test('an inverted bail reseeds at the floor instead of sweeping through the pipe shell',()=>{
+  const pipe=PARK_PIPES[0],state=createParkCameraState(),ceiling=pipeRideFrame(pipe,Math.PI,0,1),floor=pipeRideFrame(pipe,0,0,1);
+  stepParkCamera(state,{...ceiling,heading:0,rideUp:ceiling.up},1/60);
+  const frame=stepParkCamera(state,{...floor,heading:0,reset:true},1/60);
+  assertTemporalView(frame);
+  assert.ok(frame.position.y<pipe.centerY,'bail camera did not reset to the floor');
 });

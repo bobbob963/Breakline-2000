@@ -5,9 +5,12 @@ import { SurfGame, RUN_SECONDS, COMBO_WINDOW, TRICKS, waveHeight, courseItem } f
 function advance(g, seconds, input = {}) {
   for (let i = 0; i < Math.round(seconds * 120); i++) g.update(1 / 120, input);
 }
+function lipLaunch(g,charge=0){g.x=-9;g.y=waveHeight(g.x,-g.distance,g.elapsed);g.charge=charge;assert.equal(g.jump(),true);assert.equal(g.airLaunchSource,'lip');}
+function land(g){for(let i=0;i<600&&g.airborne;i++)g.update(1/120);assert.equal(g.airborne,false);}
+function nearLanding(g){for(let i=0;i<600&&g.airborne&&(g.vy>=0||g.y-waveHeight(g.x,-g.distance,g.elapsed)>.7);i++)g.update(1/120);assert.equal(g.airborne,true);}
 
 test('every trick finishes, rotates the intended body or board and banks after landing', () => {
-  assert.equal(Object.keys(TRICKS).length, 8);
+  assert.equal(Object.keys(TRICKS).length, 9);
   for (const [key, trick] of Object.entries(TRICKS)) {
     const g = new SurfGame(); g.start(); g.x=-9; g.y=waveHeight(-9,0,0); g.charge=1; g.jump();
     assert.equal(g.doTrick(key),true,key);
@@ -16,6 +19,7 @@ test('every trick finishes, rotates the intended body or board and banks after l
     assert.equal(g.rotation,trick.spin||0,key);
     assert.equal(g.flipRotation,trick.flip||0,key);
     assert.equal(g.boardRotation,trick.boardSpin||0,key);
+    assert.equal(g.rollRotation,trick.roll||0,key);
     assert.equal(g.bank(),false,key);
     for(let i=0;i<500&&g.airborne;i++)g.update(1/120);
     assert.equal(g.wipeouts,0,key);
@@ -38,22 +42,24 @@ test('charged lip launches give extra airtime', () => {
   advance(a, .9); advance(b, .9); assert.ok(b.y > a.y + 2);
 });
 test('completed tricks score only after a landing and banking', () => {
-  const g = new SurfGame(); g.start(); g.charge = 1; g.jump();
+  const g = new SurfGame(); g.start();lipLaunch(g,1);
   assert.equal(g.bank(), false); assert.equal(g.doTrick('flip'), true);
   advance(g, .7); assert.equal(g.trick, null); assert.equal(g.multiplier, 2);
-  assert.equal(g.score, 0); advance(g, 1.4);
+  assert.equal(g.score, 0); land(g);
   assert.equal(g.airborne, false); assert.equal(g.wipeouts, 0);
-  assert.equal(g.bank(), true); assert.ok(g.score >= 1500); assert.equal(g.landedTricks, 1);
+  assert.equal(g.bank(), true); assert.equal(g.score,1340); assert.equal(g.landedTricks, 1);
 });
 test('a trick unfinished on landing loses the active combo', () => {
-  const g = new SurfGame(); g.start(); g.jump(); advance(g, .95);
+  const g = new SurfGame(); g.start();lipLaunch(g);nearLanding(g);
   assert.equal(g.doTrick('flip'), true); advance(g, .55);
   assert.equal(g.wipeouts, 1); assert.equal(g.comboBase, 0); assert.equal(g.score, 0);
 });
 test('a grounded combo banks automatically; re-launching links it', () => {
-  const g = new SurfGame(); g.start(); g.jump(); advance(g, 1.5);
-  const base = g.comboBase; assert.ok(base > 0); g.jump(); assert.ok(g.comboBase > base);
-  advance(g, 1.5 + COMBO_WINDOW + .2); assert.ok(g.score > base); assert.equal(g.comboBase, 0);
+  const g = new SurfGame(); g.start();lipLaunch(g);g.doTrick('flip');land(g);
+  const base=g.comboBase;assert.ok(base>0);assert.equal(g.jump(),false);
+  for(let i=0;i<200&&!g.popReady;i++)g.update(1/120);
+  lipLaunch(g);assert.equal(g.comboBase,base,'launches themselves award no free points');g.doTrick('grab');land(g);
+  assert.ok(g.comboBase>base);advance(g,COMBO_WINDOW+.2);assert.ok(g.score>base);assert.equal(g.comboBase,0);
 });
 test('repeated moves diminish and multiplier caps at eight', () => {
   const g = new SurfGame(); g.start();
@@ -97,8 +103,7 @@ test('charged launch gives the Rodeo Air time to finish and score after landing'
   const events = [];
   const g = new SurfGame(event => events.push(event)); g.start();
   assert.equal(g.doTrick('special'), false, 'special requires a launch');
-  g.charge = 1;
-  assert.equal(g.jump(), true);
+  lipLaunch(g,1);
   assert.equal(g.doTrick('special'), true);
   advance(g, .9);
   assert.equal(g.trick, null);
@@ -106,19 +111,18 @@ test('charged launch gives the Rodeo Air time to finish and score after landing'
   assert.equal(g.airborne, true);
   assert.equal(g.score, 0);
   assert.equal(g.bank(), false);
-  advance(g, 1.2);
+  land(g);
   assert.equal(g.airborne, false);
   assert.equal(g.wipeouts, 0);
   assert.equal(g.bank(), true);
-  assert.equal(g.score, 2840);
+  assert.equal(g.score, 2640);
   assert.equal(g.landedTricks, 1);
   assert.equal(events.filter(event => event.type === 'trick' && event.name === 'RODEO AIR').length, 1);
 });
 
 test('starting a Rodeo Air too close to landing loses the combo and recovers', () => {
   const events = [];
-  const g = new SurfGame(event => events.push(event)); g.start(); g.jump();
-  advance(g, .9);
+  const g = new SurfGame(event => events.push(event)); g.start();lipLaunch(g);nearLanding(g);
   assert.equal(g.doTrick('special'), true);
   advance(g, .6);
   assert.equal(g.wipeouts, 1);

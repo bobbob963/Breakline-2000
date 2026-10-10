@@ -1,4 +1,4 @@
-import { SurfGame, RUN_SECONDS, clamp } from './game.js';
+import { SurfGame, RUN_SECONDS, POP_COOLDOWN, clamp } from './game.js';
 
 // Ramp coordinates: u is across the ramp and v runs from its foot to its lip.
 // Rotation zero points towards -Z, matching the rider's heading.
@@ -33,6 +33,10 @@ export const PARK_PIPES = [
   {id:'west-outfall',name:'WEST OUTFALL',x:-52,z:12,length:60,radius:5.5,thickness:.45,centerY:3.9,rotation:0},
   {id:'east-outfall',name:'EAST OUTFALL',x:52,z:17,length:50,radius:6,thickness:.45,centerY:4.4,rotation:0},
 ];
+export const PARK_COPINGS=PARK_RAMPS.filter(ramp=>ramp.type==='quarter').map(ramp=>{
+  const v=ramp.length*.43,x=ramp.x-Math.sin(ramp.rotation)*v,z=ramp.z-Math.cos(ramp.rotation)*v;
+  return {id:ramp.id+'-coping',name:ramp.name+' COPING',kind:'coping',rampId:ramp.id,x,z,length:ramp.width-4,height:parkHeight(x,z)+.16,rotation:ramp.rotation-Math.PI/2,radius:.12,supportRadius:.07,supportCount:4};
+});
 
 export const PARK_RAILS = [
   {id:'left-rail',name:'WEST FLOW RAIL',x:-20,z:-2,length:28,height:1.05,rotation:0},
@@ -44,7 +48,8 @@ export const PARK_RAILS = [
   {id:'south-crossing',name:'SOUTH PIPELINE',x:0,z:124,length:36,height:.4,rotation:Math.PI/2},
   {id:'north-crossing',name:'NORTH PIPELINE',x:0,z:-105,length:34,height:.2,rotation:Math.PI/2},
   ...PARK_PIPES.map(pipe=>({id:pipe.id+'-crest',name:pipe.name+' CREST',x:pipe.x,z:pipe.z,length:pipe.length-2,height:pipe.centerY+pipe.radius+.22,rotation:pipe.rotation,pipeId:pipe.id})),
-].map(rail=>({...rail,radius:.18,supportRadius:.13,supportCount:4}));
+  ...PARK_COPINGS,
+].map(rail=>({radius:.18,supportRadius:.13,supportCount:4,...rail}));
 
 export const PARK_BOUNDS = { minX:-120,maxX:120,minZ:-180,maxZ:180 };
 export const PARK_SPAWN = {x:0,z:88,heading:0};
@@ -157,13 +162,18 @@ export function parkRideSurface(x,z,referenceY=parkHeight(x,z)) {
 }
 
 const supportCache=new Map();
+export function railTopHeight(rail,local=0) {
+  if(rail.kind!=='coping')return rail.height;
+  const x=rail.x-Math.sin(rail.rotation)*local,z=rail.z-Math.cos(rail.rotation)*local;
+  return parkHeight(x,z)+.16;
+}
 export function railSupports(rail) {
   if(supportCache.has(rail.id)) return supportCache.get(rail.id);
   const pipe=PARK_PIPES.find(item=>item.id===rail.pipeId);
   const supports=Array.from({length:rail.supportCount+1},(_,i)=>{
     const local=(i/rail.supportCount-.5)*rail.length;
     const x=rail.x-Math.sin(rail.rotation)*local,z=rail.z-Math.cos(rail.rotation)*local;
-    return {x,z,bottom:pipe?pipe.centerY+pipe.radius:parkHeight(x,z),top:rail.height-rail.radius,radius:rail.supportRadius};
+    return {x,z,bottom:pipe?pipe.centerY+pipe.radius:parkHeight(x,z),top:railTopHeight(rail,local)-rail.radius,radius:rail.supportRadius};
   });
   supportCache.set(rail.id,supports);return supports;
 }
@@ -183,8 +193,9 @@ function pointContact(x,y,z,radius=0,includeRails=true) {
     if(distance<solid.radius+radius) return {type:'column',solid,normal:{x:dx/(distance||1),y:0,z:dz/(distance||1)}};
   }
   if(includeRails) for(const rail of PARK_RAILS) {
-    const {u,v}=parkLocal(rail,x,z),end=v-clamp(v,-rail.length/2,rail.length/2),dy=y-(rail.height-rail.radius);
+    const {u,v}=parkLocal(rail,x,z),end=v-clamp(v,-rail.length/2,rail.length/2);
     if(Math.abs(u)>Math.max(rail.radius,rail.supportRadius)+radius||Math.abs(end)>rail.radius+radius) continue;
+    const dy=y-(railTopHeight(rail,clamp(v,-rail.length/2,rail.length/2))-rail.radius);
     const distance=Math.hypot(u,end,dy);
     if(distance<rail.radius+radius) return {type:'rail',rail,normal:{x:Math.cos(rail.rotation)*u-Math.sin(rail.rotation)*end,y:dy,z:-Math.sin(rail.rotation)*u-Math.cos(rail.rotation)*end}};
     for(const support of railSupports(rail)) {
@@ -197,6 +208,12 @@ function pointContact(x,y,z,radius=0,includeRails=true) {
 
 export function parkPointBlocked(x,y,z,radius=.08) {return !!pointContact(x,y,z,radius);}
 
+export function pipeRideFrame(pipe,angle,local,dir=1) {
+  const radius=pipe.radius-pipe.thickness-.12,u=Math.sin(angle)*radius,c=Math.cos(pipe.rotation),s=Math.sin(pipe.rotation);
+  return {x:pipe.x+c*u-s*local,y:pipe.centerY-Math.cos(angle)*radius,z:pipe.z-s*u-c*local,
+    up:{x:-Math.sin(angle)*c,y:Math.cos(angle),z:Math.sin(angle)*s},roll:angle*dir};
+}
+
 function sweptObstacles(from,to,game) {
   const distance=Math.max(Math.hypot(to.x-from.x,to.z-from.z),Math.abs(to.y-from.y));
   const samples=Math.max(1,Math.ceil(distance/.06));
@@ -208,8 +225,10 @@ function sweptObstacles(from,to,game) {
         const {u,v}=parkLocal(rail,point.x,point.z);
         const along=-(game.vx*Math.sin(rail.rotation)+game.vz*Math.cos(rail.rotation));
         const alignment=Math.abs(along)/Math.max(1,Math.hypot(game.vx,game.vz));
-        if(Math.abs(u)<.55&&Math.abs(v)<rail.length/2-.1&&point.y>=rail.height-.06&&point.y<=rail.height+.24&&alignment>.7) {
-          return {type:'grind',rail,point:{...point,y:rail.height},fraction,along,local:v};
+        if(Math.abs(u)>=.55||Math.abs(v)>=rail.length/2-.1||alignment<=.7)continue;
+        const top=railTopHeight(rail,v);
+        if(point.y>=top-.06&&point.y<=top+.24) {
+          return {type:'grind',rail,point:{...point,y:top},fraction,along,local:v};
         }
       }
     }
@@ -310,29 +329,52 @@ export class WaveParkGame extends SurfGame {
       y:parkHeight(spawn.x,spawn.z),vx:-Math.sin(spawn.heading)*12,vz:-Math.cos(spawn.heading)*12,speed:12,grinding:null,
       rampHits: 0, grindCount: 0, visitedRamps: new Set(),
       railCooldown:0,rampCooldown:0,surface:parkRideSurface(spawn.x,spawn.z,parkHeight(spawn.x,spawn.z)),
-      steering: 0,
+      steering:0,pipeRide:null,pipeLoops:0,pipeCooldown:0,rideRoll:0,rideUp:{x:0,y:1,z:0},lipMove:null,lipGrab:0,
     });
   }
 
-  bank() { return this.grinding ? false : super.bank(); }
+  bank() { return this.grinding||this.pipeRide||this.lipMove ? false : super.bank(); }
 
   bail(reason = 'WIPEOUT') {
+    if(this.phase!=='running'||this.bailTime>0)return;
+    if(this.pipeRide) {this.pipeRide.angle=0;this.applyPipeRide();this.endPipeRide();}
+    if(this.lipMove) {
+      const move=this.lipMove;
+      this.x=move.x;this.z=move.z;this.y=parkHeight(this.x,this.z);
+      this.faceIntoRamp(move.ramp.id);
+    } else if(this.grinding?.kind==='coping') {
+      this.faceIntoRamp(this.grinding.rampId);
+      this.x-=Math.sin(this.heading)*.6;this.z-=Math.cos(this.heading)*.6;
+      this.y=parkHeight(this.x,this.z);
+    }
+    this.lipMove=null;this.lipGrab=0;
     this.grinding = null;
     this.railCooldown = 1.2;
     super.bail(reason);
   }
 
   jump() {
-    if (this.phase !== 'running' || this.airborne || this.bailTime > 0 || this.elapsed - this.lastJump < 0.3) return false;
+    if(this.phase!=='running'||this.bailTime>0)return false;
+    if(this.lipMove)return false;
+    if(this.pipeRide) {
+      const angle=Math.atan2(Math.sin(this.pipeRide.angle),Math.cos(this.pipeRide.angle));
+      if(Math.abs(angle)>.12){this.pipeRide.releasePending=true;return false;}
+      if(this.popCooldown>0)return false;
+      this.endPipeRide();
+    }
+    if(!this.popReady)return false;
     const fromRail = !!this.grinding;
+    if(this.grinding?.kind==='coping')this.faceIntoRamp(this.grinding.rail.rampId);
     this.grinding = null;
     if (fromRail) this.railCooldown = 1;
-    this.launch(6.6 + this.charge * 3, fromRail ? 'RAIL POP' : 'OLLIE', fromRail ? 180 : 100);
+    this.launch(6.6 + this.charge * 3, fromRail ? 'RAIL POP' : 'OLLIE', fromRail ? 180 : 0);
+    this.airLaunchSource=fromRail?'rail':'flat';
     return true;
   }
 
   launch(velocity, name = 'LIP LAUNCH', points = 200) {
     this.lastJump = this.elapsed;
+    this.popRecovery=POP_COOLDOWN;this.airLaunchSource='ramp';this.launchTricks=0;
     this.airborne = true;
     this.airtime = 0;
     this.trick = null;
@@ -342,8 +384,9 @@ export class WaveParkGame extends SurfGame {
     this.rotation = 0;
     this.flipRotation = 0;
     this.boardRotation = 0;
+    this.rollRotation = 0;
     this.rampCooldown = 0.8;
-    this.addCombo(name, points);
+    if(points>0)this.addCombo(name, points);
     this.onEvent({ type: 'jump' });
   }
 
@@ -359,20 +402,26 @@ export class WaveParkGame extends SurfGame {
     if (this.phase !== 'running') return;
     // Fixed-size substeps keep ramp launches and rail catches fair at 30/60/120 Hz.
     dt = clamp(dt, 0, 0.05);
+    if(dt===0)return;
     const steps = Math.max(1, Math.ceil(dt * 120 - 1e-8));
     for (let i = 0; i < steps && this.phase === 'running'; i++) this.stepPark(dt / steps, input);
   }
 
   stepPark(dt, input) {
     this.elapsed += dt;
+    this.recoverPop(dt);
     this.time = Math.max(0, RUN_SECONDS - this.elapsed);
     this.railCooldown = Math.max(0, this.railCooldown - dt);
     this.rampCooldown = Math.max(0, this.rampCooldown - dt);
+    this.pipeCooldown=Math.max(0,this.pipeCooldown-dt);
     const steering = (input.left ? 1 : 0) - (input.right ? 1 : 0);
     this.steering = steering;
     const previous = parkRideSurface(this.x,this.z,this.y);
 
-    if (this.grinding) this.updateRail(dt, input);
+    if(input.action&&!this.pipeRide&&!this.lipMove&&!this.grinding&&!this.airborne&&this.bailTime<=0&&this.pipeCooldown===0)this.tryPipeRide();
+    if(this.pipeRide)this.updatePipeRide(dt,input);
+    else if(this.lipMove)this.updateLipMove(dt);
+    else if (this.grinding) this.updateRail(dt, input);
     else {
       const active = this.bailTime <= 0;
       if (active) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
@@ -414,10 +463,10 @@ export class WaveParkGame extends SurfGame {
         this.updateAirTrick(dt*movement.fraction);
         if (!this.grinding && movement.type === 'land') {
           this.airborne = false; this.vy = 0;
-          if (this.trick) this.bail('UNFINISHED TRICK');
-          else {
-            this.addCombo('CLEAN LANDING',120);
-            this.onEvent({ type:'land', points:this.comboBase*this.multiplier });
+          const landing=this.resolveLandingTrick();
+          if(landing.landed) {
+            if(this.airLaunchSource!=='flat'||this.launchTricks>0)this.addCombo('CLEAN LANDING',120);
+            this.onEvent({ type:'land', points:this.comboBase*this.multiplier,assisted:landing.assisted });
           }
         }
       } else {
@@ -427,13 +476,13 @@ export class WaveParkGame extends SurfGame {
         }
         if (input.jump) this.charge = clamp(this.charge + dt * 1.3, 0, 1);
         else this.charge = Math.max(0, this.charge - dt * 3);
-        if (!this.airborne && movement.type !== 'wall') this.tryRamp(surface,previous);
+        if (!this.airborne && movement.type !== 'wall') this.tryRamp(surface,previous,input);
         if (!this.airborne && surface.ramp?.type === 'bank' && surface.progress > .28 && surface.progress < .72 && !this.visitedRamps.has(surface.ramp.id)) this.recordRamp(surface.ramp);
         if (Math.abs(steering) > 0 && this.speed > 8 && !input.brake) {
           this.carveTime += dt;
           if (this.carveTime > 0.85) { this.score += 30; this.carveTime = 0; }
         } else this.carveTime = 0;
-        if (!this.airborne && this.comboBase) {
+        if (!this.airborne&&!this.grinding&&!this.lipMove && this.comboBase) {
           this.comboTime -= dt;
           if (this.comboTime <= 0) this.bank();
         }
@@ -441,21 +490,32 @@ export class WaveParkGame extends SurfGame {
     }
     // Rail rides and edge rebounds also keep the underside above the collider.
     // Ordinary terrain intersections are resolved by the sweep before this.
-    this.y = Math.max(this.y,rideHeight(this.x,this.z,this.y).height);
-    this.surface=parkRideSurface(this.x,this.z,this.y);
+    if(!this.pipeRide){this.y=Math.max(this.y,rideHeight(this.x,this.z,this.y).height);this.surface=parkRideSurface(this.x,this.z,this.y);}
     this.distance = -this.z;
     if (this.time <= 0) {
-      if (this.airborne || this.grinding) this.clearCombo(); else this.bank();
+      if (this.airborne || this.grinding ||this.pipeRide||this.lipMove) this.clearCombo(); else this.bank();
       this.grinding = null;
       this.phase = 'finished';
       this.onEvent({ type: 'finish' });
     }
   }
 
-  tryRamp(surface, previous) {
+  tryRamp(surface, previous,input={}) {
     const ramp = surface.ramp;
     if (!ramp || ['bank','access'].includes(ramp.type) || this.rampCooldown > 0 || this.speed < 7 || Math.abs(surface.lateral) > ramp.width / 2 - 1.35) return;
     const forward = -(this.vx * Math.sin(ramp.rotation) + this.vz * Math.cos(ramp.rotation));
+    if(ramp.type==='quarter'&&forward>4&&(input.grind||input.action)) {
+      if(surface.progress<.91)return;
+      this.recordRamp(ramp);
+      if(input.grind) {
+        const coping=PARK_COPINGS.find(item=>item.rampId===ramp.id);
+        const direction=input.left?-1:input.right?1:1;
+        this.catchRail(coping,clamp(surface.lateral,-coping.length/2+.2,coping.length/2-.2),direction*Math.max(8,this.speed*.6));
+        this.heading=coping.rotation+(direction<0?Math.PI:0);
+        this.vx=-Math.sin(this.heading)*this.speed;this.vz=-Math.cos(this.heading)*this.speed;
+      } else this.startLipMove(ramp);
+      return;
+    }
     const sameRamp = previous.ramp?.id === ramp.id;
     const crossingCrest = ramp.type === 'spine' && sameRamp &&
       ((forward > 4 && previous.progress < 0.49 && surface.progress >= 0.49) ||
@@ -475,17 +535,100 @@ export class WaveParkGame extends SurfGame {
     }
   }
 
+  tryPipeRide() {
+    for(const pipe of PARK_PIPES) {
+      const local=parkLocal(pipe,this.x,this.z),inner=pipe.radius-pipe.thickness;
+      const along=-(this.vx*Math.sin(pipe.rotation)+this.vz*Math.cos(pipe.rotation));
+      if(Math.abs(local.v)>pipe.length/2-3||Math.abs(local.u)>inner*.75||this.y>pipe.centerY||Math.abs(along)<Math.max(3,this.speed*.5))continue;
+      if(Math.abs(this.y-pipeSurfaceHeight(pipe,local.u))>.3)continue;
+      const angle=Math.atan2(local.u,pipe.centerY-this.y);
+      this.pipeRide={pipe,angle,cycleStart:angle,local:local.v,dir:Math.sign(along)||1,age:0,releasePending:false};
+      this.airborne=false;this.trick=null;this.vy=0;this.charge=0;
+      this.heading=pipe.rotation+(along<0?Math.PI:0);
+      this.addCombo('PIPE WALL RIDE',200);this.applyPipeRide();
+      this.onEvent({type:'pipeStart',id:pipe.id});return true;
+    }
+    return false;
+  }
+
+  applyPipeRide() {
+    const ride=this.pipeRide,frame=pipeRideFrame(ride.pipe,ride.angle,ride.local,ride.dir);
+    this.x=frame.x;this.y=frame.y;this.z=frame.z;
+    this.rideRoll=frame.roll;this.rideUp=frame.up;
+    this.surface={height:frame.y,dx:0,dz:0,ramp:null,pipe:ride.pipe,pipeSide:'inside',wallRide:true,normal:frame.up};
+  }
+
+  updatePipeRide(dt,input) {
+    const ride=this.pipeRide,pipe=ride.pipe;
+    ride.age+=dt;
+    if(!input.action)ride.releasePending=true;
+    const endLimit=pipe.length/2-2.1;
+    // The entry mouth is behind the surfer. Only the exit ahead needs an
+    // automatic return to the floor; otherwise a fresh attachment releases
+    // immediately and can award another wall ride after its cooldown.
+    if(ride.dir*ride.local>endLimit-1)ride.releasePending=true;
+    const normalized=Math.atan2(Math.sin(ride.angle),Math.cos(ride.angle));
+    if(ride.releasePending&&Math.abs(normalized)<.035) {
+      ride.angle-=normalized;this.applyPipeRide();this.endPipeRide();return;
+    }
+    const targetSpeed=input.brake?3:input.pump?11:8.5;
+    this.speed+=(targetSpeed-this.speed)*(1-Math.exp(-dt*4));
+    const angular=ride.releasePending?-Math.sign(normalized)*2.4:((input.right?1:0)-(input.left?1:0))*ride.dir*(input.pump?2.6:2.25);
+    const change=ride.releasePending?Math.sign(angular)*Math.min(Math.abs(angular*dt),Math.abs(normalized)):angular*dt;
+    ride.angle+=change;
+    ride.local=clamp(ride.local+ride.dir*this.speed*dt,-endLimit,endLimit);
+    const before={x:this.x,y:this.y,z:this.z};
+    this.applyPipeRide();
+    this.vx=(this.x-before.x)/dt;this.vy=(this.y-before.y)/dt;this.vz=(this.z-before.z)/dt;
+    this.comboTime=3.8;
+    if(Math.abs(ride.angle-ride.cycleStart)>=Math.PI*2-1e-8) {
+      ride.cycleStart+=Math.sign(ride.angle-ride.cycleStart)*Math.PI*2;
+      this.pipeLoops++;this.addCombo('FULL PIPE LOOP',850,true);
+      this.onEvent({type:'trick',name:'FULL PIPE LOOP'});
+    }
+  }
+
+  endPipeRide() {
+    const ride=this.pipeRide;if(!ride)return;
+    // Return upright only at the floor, with safe clearance from the shell.
+    ride.angle=Math.round(ride.angle/(Math.PI*2))*Math.PI*2;
+    this.applyPipeRide();this.y=pipeSurfaceHeight(ride.pipe,0);
+    this.heading=ride.pipe.rotation+(ride.dir<0?Math.PI:0);
+    this.vx=-Math.sin(this.heading)*this.speed;this.vz=-Math.cos(this.heading)*this.speed;this.vy=0;
+    this.pipeRide=null;this.pipeCooldown=1.1;this.rideRoll=0;this.rideUp={x:0,y:1,z:0};
+    this.surface=parkRideSurface(this.x,this.z,this.y);
+    this.onEvent({type:'pipeEnd'});
+  }
+
+  startLipMove(ramp) {
+    this.lipMove={ramp,age:0,duration:.76,progress:0,x:this.x,y:this.y,z:this.z,heading:this.heading,speed:this.speed};
+    this.lipGrab=0;this.vx=0;this.vz=0;this.vy=0;this.speed=0;this.charge=0;
+    this.onEvent({type:'lipStart',id:ramp.id});
+  }
+
+  updateLipMove(dt) {
+    const move=this.lipMove;move.age+=dt;move.progress=clamp(move.age/move.duration,0,1);
+    const t=move.progress,smooth=t*t*(3-2*t),arc=Math.sin(t*Math.PI);
+    this.x=move.x-Math.sin(move.ramp.rotation)*arc*.3;this.z=move.z-Math.cos(move.ramp.rotation)*arc*.3;
+    this.y=parkHeight(this.x,this.z)+arc*.7;
+    this.heading=move.heading+Math.PI*smooth;this.lipGrab=arc;
+    this.comboTime=3.8;
+    if(t>=1) {
+      this.lipMove=null;this.lipGrab=0;this.rampCooldown=1.1;
+      this.speed=Math.max(8,move.speed*.7);this.y=parkHeight(this.x,this.z);
+      this.vx=-Math.sin(this.heading)*this.speed;this.vz=-Math.cos(this.heading)*this.speed;
+      this.addCombo('LIP GRAB 180',500,true);this.onEvent({type:'trick',name:'LIP GRAB 180'});
+    }
+  }
+
+  faceIntoRamp(rampId) {
+    const ramp=PARK_RAMPS.find(item=>item.id===rampId);if(!ramp)return;
+    this.heading=ramp.rotation+Math.PI;
+    this.vx=-Math.sin(this.heading)*this.speed;this.vz=-Math.cos(this.heading)*this.speed;
+  }
+
   updateAirTrick(dt) {
-    if (!this.trick) return;
-    this.trick.age += dt;
-    if (this.trick.age < this.trick.duration) return;
-    const trick = this.trick;
-    this.rotation += trick.spin || 0;
-    this.flipRotation += trick.flip || 0;
-    this.boardRotation = (this.boardRotation || 0) + (trick.boardSpin || 0);
-    this.addCombo(trick.name, trick.points, true);
-    this.trick = null;
-    this.onEvent({ type: 'trick', name: trick.name });
+    super.updateAirTrick(dt);
   }
 
   tryRail() {
@@ -495,7 +638,7 @@ export class WaveParkGame extends SurfGame {
       const along = -(this.vx * Math.sin(rail.rotation) + this.vz * Math.cos(rail.rotation));
       const alignment = Math.abs(along) / Math.max(1, Math.hypot(this.vx, this.vz));
       if (Math.abs(u) > 0.85 || Math.abs(v) > rail.length / 2 - 0.15 ||
-          Math.abs(this.y - rail.height) > 0.36 || alignment < 0.65) continue;
+          Math.abs(this.y - railTopHeight(rail,v)) > 0.36 || alignment < 0.65) continue;
       this.catchRail(rail,v,along);
       return true;
     }
@@ -503,14 +646,18 @@ export class WaveParkGame extends SurfGame {
   }
 
   catchRail(rail,local,along) {
-    this.grinding={rail,dir:Math.sign(along)||1,local,age:0,ticks:0};
+    this.grinding={rail,kind:rail.kind||'rail',rampId:rail.rampId,dir:Math.sign(along)||1,local,age:0,ticks:0};
     this.x=rail.x-Math.sin(rail.rotation)*local;this.z=rail.z-Math.cos(rail.rotation)*local;
-    this.airborne=false;this.vy=0;this.y=rail.height;this.grindCount++;
-    this.addCombo('WATER SLIDE',350,true);this.onEvent({type:'grind',id:rail.id});
+    this.airborne=false;this.vy=0;this.y=railTopHeight(rail,local);this.grindCount++;
+    this.addCombo(rail.kind==='coping'?'COPING SLIDE':'WATER SLIDE',350,true);this.onEvent({type:'grind',id:rail.id,kind:rail.kind||'rail'});
   }
 
   updateRail(dt, input) {
     const grind = this.grinding, rail = grind.rail;
+    if(grind.kind==='coping'&&!input.grind&&grind.age>.12) {
+      this.faceIntoRamp(rail.rampId);this.grinding=null;this.railCooldown=1;
+      this.launch(2.6,'COPING DROP-IN',160);return;
+    }
     this.speed += ((input.pump ? 17 : 11) - this.speed) * (1 - Math.exp(-dt * 2));
     grind.local += grind.dir * this.speed * dt;
     grind.age += dt;
@@ -519,13 +666,14 @@ export class WaveParkGame extends SurfGame {
     this.vz = -Math.cos(this.heading) * this.speed;
     this.x = rail.x - Math.sin(rail.rotation) * grind.local;
     this.z = rail.z - Math.cos(rail.rotation) * grind.local;
-    this.y = rail.height;
+    this.y = railTopHeight(rail,grind.local);
     this.comboTime = 3.8;
     if (Math.floor(grind.age / 0.3) > grind.ticks) {
       grind.ticks++;
       this.comboBase += 60;
     }
     if (Math.abs(grind.local) >= rail.length / 2) {
+      if(grind.kind==='coping')this.faceIntoRamp(rail.rampId);
       this.grinding = null;
       this.railCooldown = 1;
       this.launch(3.8, 'RAIL TRANSFER', 150);

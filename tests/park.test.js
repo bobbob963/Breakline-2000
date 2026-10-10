@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WaveParkGame, PARK_RAMPS, PARK_RAILS, PARK_BOUNDS, PARK_SPAWN, PARK_STARTS, PARK_PIPES, PARK_SOLIDS, parkHeight, parkTerrainHeight, parkRideSurface, pipeSurfaceHeight, parkSurface, rampHeight, parkLocal, parkPointBlocked, railSupports } from '../src/park.js';
+import { WaveParkGame, PARK_RAMPS, PARK_RAILS, PARK_COPINGS, PARK_BOUNDS, PARK_SPAWN, PARK_STARTS, PARK_PIPES, PARK_SOLIDS, parkHeight, parkTerrainHeight, parkRideSurface, pipeSurfaceHeight, parkSurface, rampHeight, parkLocal, parkPointBlocked, railSupports, railTopHeight } from '../src/park.js';
 
 function advance(game, seconds, input = {}) {
   for (let i = 0; i < Math.round(seconds * 120); i++) game.update(1 / 120, input);
@@ -130,10 +130,12 @@ test('same inputs at 30 and 120 Hz produce matching park trajectories and scores
   assert.equal(slow.score, fast.score);
 });
 
-test('industrial park has connected terrain, separate halfpipes, pipe routes and ten rails', () => {
+test('industrial park has connected terrain, pipe routes, ten freestanding rails and eight copings', () => {
   assert.ok((PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*(PARK_BOUNDS.maxZ-PARK_BOUNDS.minZ) > 72*104*6);
   assert.equal(PARK_RAMPS.length,18);
-  assert.equal(PARK_RAILS.length,10);
+  assert.equal(PARK_RAILS.filter(rail=>rail.kind!=='coping').length,10);
+  assert.equal(PARK_COPINGS.length,8);
+  assert.equal(PARK_RAILS.length,18);
   assert.equal(PARK_PIPES.length,2);
   assert.equal(PARK_RAMPS.filter(ramp => ramp.zone === 'west-halfpipe').length,2);
   assert.equal(PARK_RAMPS.filter(ramp => ramp.zone === 'east-halfpipe').length,2);
@@ -142,7 +144,7 @@ test('industrial park has connected terrain, separate halfpipes, pipe routes and
   for (const rail of PARK_RAILS) {
     for (let local = -rail.length/2; local <= rail.length/2; local += .25) {
       const x = rail.x-Math.sin(rail.rotation)*local, z = rail.z-Math.cos(rail.rotation)*local;
-      assert.ok(rail.height > parkHeight(x,z)+.1, `${rail.id} is accessible above its supporting surface`);
+      assert.ok(railTopHeight(rail,local) > parkHeight(x,z)+.1, `${rail.id} is accessible above its supporting surface`);
     }
   }
 });
@@ -347,4 +349,208 @@ test('all four drop-in locations start on safe reachable surfaces and reset the 
     game.score=999;
   }
   game.start('__proto__');assert.equal(game.z,PARK_SPAWN.z);assert.equal(game.score,0);
+});
+
+function enterPipeLoop(pipe,direction=1) {
+  const game=new WaveParkGame();game.start();
+  const z=pipe.z+direction*(pipe.length/2-5);
+  Object.assign(game,{x:pipe.x,z,y:pipeSurfaceHeight(pipe,0),heading:direction===1?0:Math.PI,vx:0,vz:-direction*8,speed:8});
+  game.update(1/120,{action:true,brake:true});
+  assert.equal(game.pipeRide?.pipe.id,pipe.id);
+  return game;
+}
+
+function assertPipeBodyClear(game) {
+  for(const distance of [.35,.85,1.35,1.9]) {
+    const {x,y,z}=game.rideUp;
+    assert.equal(parkPointBlocked(game.x+x*distance,game.y+y*distance,game.z+z*distance,.22),false,'rotated rider capsule must stay inside the bore');
+  }
+}
+
+test('either steering direction completes full pipe loops in both tunnels and travel directions',()=>{
+  for(const pipe of PARK_PIPES) for(const direction of [-1,1]) for(const steer of ['left','right']) {
+    const game=enterPipeLoop(pipe,direction);
+    for(let i=0;i<400&&game.pipeLoops<1;i++) {
+      game.update(1/120,{action:true,brake:true,[steer]:true});
+      assert.ok(game.pipeRide);
+      assertPipeBodyClear(game);
+      assert.equal(Math.sign(game.rideRoll),steer==='right'?1:-1,'steering remains relative to the direction the surfer faces');
+      assert.equal(game.surface.wallRide,true);
+      assert.ok(Math.abs(Math.hypot(game.rideUp.x,game.rideUp.y,game.rideUp.z)-1)<1e-9);
+    }
+    assert.equal(game.pipeLoops,1);
+    assert.ok(game.comboNames.includes('FULL PIPE LOOP'));
+    assert.equal(game.bank(),false,'inverted or attached points cannot be banked');
+    for(let i=0;i<200&&game.pipeRide;i++){game.update(1/120,{brake:true});assertPipeBodyClear(game);}
+    assert.equal(game.pipeRide,null);
+    assert.equal(game.rideRoll,0);
+    assert.deepEqual(game.rideUp,{x:0,y:1,z:0});
+    assert.ok(game.bank());
+    assert.ok(game.score>=2100);
+    assert.equal(game.landedTricks,1);
+  }
+});
+
+test('releasing or jumping at the pipe ceiling follows the wall back down before becoming upright',()=>{
+  for(const jump of [false,true]) {
+    const game=enterPipeLoop(PARK_PIPES[0]);
+    advance(game,1.4,{action:true,brake:true,right:true});
+    assert.ok(game.rideUp.y<-.99);
+    if(jump)assert.equal(game.jump(),false);
+    const beforeY=game.y;
+    game.update(1/120,{brake:true,action:jump});
+    assert.ok(game.pipeRide?.releasePending);
+    assert.ok(Math.abs(game.y-beforeY)<.1,'release may not teleport from ceiling to floor');
+    for(let i=0;i<200&&game.pipeRide;i++){game.update(1/120,{brake:true,action:jump});assertPipeBodyClear(game);}
+    assert.equal(game.pipeRide,null);
+    assert.equal(game.airborne,false);
+    assert.ok(Math.abs(game.y-pipeSurfaceHeight(PARK_PIPES[0],0))<.0001);
+    assert.equal(game.wipeouts,0);
+  }
+});
+
+test('pipe end automatically returns an inverted rider to the floor before exiting',()=>{
+  const pipe=PARK_PIPES[1],game=enterPipeLoop(pipe);
+  advance(game,1.3,{action:true,brake:true,right:true});
+  assert.ok(game.rideUp.y<-.9);
+  game.pipeRide.local=pipe.length/2-3.05;
+  game.applyPipeRide();
+  for(let i=0;i<250&&game.pipeRide;i++) {
+    game.update(1/120,{action:true,pump:true,right:true});
+    assertPipeBodyClear(game);
+    assert.ok(Math.abs(parkLocal(pipe,game.x,game.z).v)<=pipe.length/2-2.099);
+  }
+  assert.equal(game.pipeRide,null);
+  assert.equal(game.rideRoll,0);
+  advance(game,.8,{pump:true});
+  assert.ok(game.z<pipe.z-pipe.length/2);
+  assert.equal(game.wipeouts,0);
+});
+
+test('holding E through either mouth attaches once and releases only near the exit ahead',()=>{
+  for(const pipe of PARK_PIPES)for(const direction of [-1,1]) {
+    const events=[],game=new WaveParkGame(event=>events.push(event));
+    game.start();events.length=0;
+    const startZ=pipe.z+direction*(pipe.length/2+6);
+    Object.assign(game,{x:pipe.x,z:startZ,y:parkHeight(pipe.x,startZ),heading:direction===1?0:Math.PI,vx:0,vz:-direction*12,speed:12});
+    let firstAttach=null,firstRelease=null;
+    for(let i=0;i<120*10&&!firstRelease;i++) {
+      game.update(1/120,{action:true,pump:true});
+      if(game.pipeRide&&firstAttach===null)firstAttach=game.elapsed;
+      if(firstAttach!==null&&!game.pipeRide)firstRelease=game.elapsed;
+      if(game.pipeRide) {
+        assert.equal(game.pipeRide.releasePending,false,'the mouth behind the surfer cannot trigger release');
+        assert.equal(events.filter(event=>event.type==='pipeStart').length,1);
+      }
+    }
+    assert.ok(firstAttach!==null&&firstRelease!==null);
+    assert.ok(firstRelease-firstAttach>3,'the controlled ride traverses the tunnel instead of releasing on entry');
+    assert.ok(direction*parkLocal(pipe,game.x,game.z).v>pipe.length/2-3.2);
+    advance(game,.6,{action:true,pump:true});
+    assert.equal(events.filter(event=>event.type==='pipeStart').length,1);
+    assert.equal(events.filter(event=>event.type==='pipeEnd').length,1);
+    assert.deepEqual(game.comboNames,['PIPE WALL RIDE'],'held E cannot farm extra entry points');
+    assert.equal(game.comboBase,200);
+  }
+});
+
+function approachHalfpipe(input) {
+  const game=new WaveParkGame();game.start('filters');
+  for(let i=0;i<400&&!game.grinding&&!game.lipMove;i++) {
+    game.update(1/120,{pump:true,...input});
+    assert.equal(game.airborne,false,'lip actions must be reached directly from the ramp');
+  }
+  return game;
+}
+
+test('holding grind while riding up mounts coping directly and follows its rendered top',()=>{
+  const game=approachHalfpipe({grind:true});
+  assert.equal(game.grinding?.kind,'coping');
+  assert.equal(game.grinding.rampId,'west-pipe-north');
+  assert.equal(game.grindCount,1);
+  for(let i=0;i<75;i++) {
+    game.update(1/120,{grind:true});
+    assert.ok(game.grinding);
+    assert.ok(Math.abs(game.y-railTopHeight(game.grinding.rail,game.grinding.local))<1e-9);
+    assert.equal(game.airborne,false);
+  }
+  assert.equal(game.bank(),false);
+  assert.ok(game.comboNames.includes('COPING SLIDE'));
+  game.update(1/120);
+  assert.equal(game.grinding,null);
+  assert.equal(game.airborne,true);
+  assert.ok(game.vz>0,'releasing grind drops back into the halfpipe');
+  for(let i=0;i<400&&game.airborne;i++)game.update(1/120,{brake:true});
+  assert.equal(game.airborne,false);
+  assert.equal(game.wipeouts,0);
+  assert.ok(game.bank());
+});
+
+test('coping jump and automatic end transfer both aim into the ramp',()=>{
+  for(const jump of [true,false]) {
+    const game=approachHalfpipe({grind:true});
+    if(jump)assert.ok(game.jump());
+    else for(let i=0;i<400&&game.grinding;i++)game.update(1/120,{grind:true,pump:true});
+    assert.equal(game.grinding,null);
+    assert.equal(game.airborne,true);
+    assert.ok(game.vz>0);
+    assert.ok(Math.abs(Math.sin(game.heading))<1e-8);
+  }
+});
+
+test('context action at the lip holds a board grab, turns 180, and rides back down',()=>{
+  const game=approachHalfpipe({action:true});
+  assert.ok(game.lipMove);
+  const initialHeading=game.heading,startZ=game.z;
+  assert.equal(game.jump(),false);
+  assert.equal(game.bank(),false);
+  advance(game,.375,{action:true});
+  assert.ok(game.lipGrab>.99);
+  assert.ok(game.heading>initialHeading+1.4&&game.heading<initialHeading+1.7);
+  assert.ok(game.y>parkHeight(game.x,game.z)+.6);
+  advance(game,.4,{action:true});
+  assert.equal(game.lipMove,null);
+  assert.equal(game.lipGrab,0);
+  assert.ok(Math.abs(game.heading-initialHeading-Math.PI)<1e-8);
+  assert.ok(game.comboNames.includes('LIP GRAB 180'));
+  advance(game,.4,{pump:true});
+  assert.ok(game.z>startZ);
+  assert.equal(game.airborne,false);
+  assert.equal(game.wipeouts,0);
+  assert.ok(game.bank());
+});
+
+test('pause, timer and restart preserve or clear controlled pipe and lip states correctly',()=>{
+  for(const mode of ['pipe','lip']) {
+    const game=mode==='pipe'?enterPipeLoop(PARK_PIPES[0]):approachHalfpipe({action:true});
+    advance(game,.2,{action:true,right:mode==='pipe'});
+    const before=[game.x,game.y,game.z,game.heading,game.rideRoll,game.lipGrab,game.time];
+    game.pause();advance(game,.2,{action:true,right:true});
+    assert.equal(game.jump(),false);game.bail();
+    assert.deepEqual([game.x,game.y,game.z,game.heading,game.rideRoll,game.lipGrab,game.time],before);
+    game.resume();game.elapsed=119.999;game.update(1/120,{action:true});
+    assert.equal(game.phase,'finished');assert.equal(game.comboBase,0);
+    assert.equal(game.score,0);
+    const finished=[game.x,game.y,game.z,game.rideRoll,game.lipGrab];
+    assert.equal(game.jump(),false);game.bail();
+    assert.deepEqual([game.x,game.y,game.z,game.rideRoll,game.lipGrab],finished);
+    game.start();
+    assert.equal(game.pipeRide,null);assert.equal(game.lipMove,null);assert.equal(game.pipeLoops,0);
+    assert.equal(game.rideRoll,0);assert.equal(game.lipGrab,0);
+  }
+});
+
+test('a forced wipeout clears pipe, lip or coping attachment and recovers on the reachable floor',()=>{
+  for(const mode of ['pipe','lip','coping']) {
+    const game=mode==='pipe'?enterPipeLoop(PARK_PIPES[0]):approachHalfpipe(mode==='lip'?{action:true}:{grind:true});
+    advance(game,mode==='pipe'?1.4:.35,{action:true,grind:mode==='coping',brake:true,right:mode==='pipe'});
+    game.bail('TEST WIPEOUT');
+    assert.equal(game.pipeRide,null);assert.equal(game.lipMove,null);
+    assert.equal(game.rideRoll,0);assert.equal(game.lipGrab,0);
+    assert.equal(game.comboBase,0);assert.equal(game.wipeouts,1);
+    advance(game,1.5,{brake:true});
+    assert.equal(game.bailTime,0);assert.equal(game.airborne,false);
+    assert.ok(Math.abs(game.y-parkRideSurface(game.x,game.z,game.y).height)<.0001);
+    assertPipeBodyClear(game);
+  }
 });

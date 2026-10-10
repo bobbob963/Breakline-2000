@@ -193,7 +193,9 @@ function localPoint(object, u, y, v) {
   return [object.x + u * c - v * s, y, object.z - u * s - v * c];
 }
 function pipeShell(g, pipe, outer, inner, flange, bolt) {
-  const radius = pipe.radius, inside = radius - pipe.thickness, segments = 24;
+  // Forty flat faces keep the original faceted appearance while matching the
+  // circular wall-ride contact surface to within 2cm throughout a full loop.
+  const radius = pipe.radius, inside = radius - pipe.thickness, segments = 40;
   const cylinder = (r, material) => {
     const geo = new THREE.CylinderGeometry(r, r, pipe.length, segments, Math.ceil(pipe.length / 8), true);
     geo.rotateX(Math.PI / 2); geo.rotateY(pipe.rotation);
@@ -220,6 +222,41 @@ function pipeShell(g, pipe, outer, inner, flange, bolt) {
   }
   // The repeating plate texture supplies body seams without raised collars that
   // would protrude through the otherwise exact, rideable cylindrical surface.
+}
+function railBody(g, rail, material) {
+  const radius = rail.radius || .18, sides = 8;
+  const sections = rail.kind === 'coping' ? Math.ceil(rail.length / .75) : 1;
+  const positions = [], uvs = [], indices = [];
+  const top = local => PARK.railTopHeight ? PARK.railTopHeight(rail, local) : rail.height;
+  // Each section stays vertical: physics measures radius in the across/Y
+  // plane, not perpendicular to the changing slope of a coping's centreline.
+  // The upper vertex therefore follows railTopHeight exactly at every sample.
+  for (let i = 0; i <= sections; i++) {
+    const local = (i / sections - .5) * rail.length;
+    for (let j = 0; j <= sides; j++) {
+      const angle = j / sides * TAU;
+      positions.push(...localPoint(rail, Math.sin(angle) * radius,
+        top(local) - radius + Math.cos(angle) * radius, local));
+      uvs.push(local / 3, j / sides);
+    }
+  }
+  for (let i = 0; i < sections; i++) for (let j = 0; j < sides; j++) {
+    const a = i * (sides + 1) + j, b = a + 1, c = a + sides + 1, d = c + 1;
+    indices.push(a, b, c, b, d, c);
+  }
+  for (const end of [0, sections]) {
+    const local = (end / sections - .5) * rail.length, center = positions.length / 3;
+    positions.push(...localPoint(rail, 0, top(local) - radius, local)); uvs.push(.5,.5);
+    for (let j = 0; j < sides; j++) {
+      const a = end * (sides + 1) + j;
+      indices.push(center, end === 0 ? a + 1 : a, end === 0 ? a : a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  const body = mesh(g,geo,material); body.userData.rail = rail.id; return body;
 }
 function batchStatic(group, animated) {
   const batches = new Map(); group.updateMatrixWorld(true);
@@ -340,17 +377,19 @@ export function createWaterworks() {
     }
   }
 
-  const innerPipe = retroMaterial('#77654e', rustMap); innerPipe.side = THREE.BackSide;
-  const flange = retroMaterial('#6b6550', rustMap); flange.side = THREE.DoubleSide;
+  // Contact surfaces skip screen-space vertex snapping, just like the ground:
+  // the bore stays steady as the rider circles the walls and ceiling.
+  const outerPipe = new THREE.MeshLambertMaterial({color:0xffffff,map:rustMap,flatShading:true});
+  const innerPipe = new THREE.MeshLambertMaterial({color:'#77654e',map:rustMap,flatShading:true,side:THREE.BackSide});
+  const flange = new THREE.MeshLambertMaterial({color:'#6b6550',map:rustMap,flatShading:true,side:THREE.DoubleSide});
+  const copingMetal = new THREE.MeshLambertMaterial({color:'#c5c8b1',map:concreteMap,flatShading:true});
   for (const pipe of PARK.PARK_PIPES || []) {
-    pipeShell(group, pipe, rust, innerPipe, flange, pale);
+    pipeShell(group, pipe, outerPipe, innerPipe, flange, pale);
     const mouth = localPoint(pipe, 0, pipe.centerY + pipe.radius + 2.35, -pipe.length/2);
     sign(group, pipe.name || 'OUTFALL / THROUGH LINE', ...mouth, 15, 2.1, pipe.rotation);
   }
   for (const rail of PARK.PARK_RAILS) {
-    const radius = rail.radius || .18, y = rail.height - radius;
-    const a = localPoint(rail, 0, y, -rail.length/2), z = localPoint(rail, 0, y, rail.length/2);
-    tube(group, rust, a, z, radius, 8);
+    railBody(group,rail,rail.kind === 'coping' ? copingMetal : rust);
     for (const support of PARK.railSupports(rail)) {
       if (support.top > support.bottom + .001) tube(group, metal,
         [support.x,support.bottom,support.z], [support.x,support.top,support.z], support.radius, 6);

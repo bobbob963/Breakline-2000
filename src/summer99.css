@@ -1,0 +1,47 @@
+/* Original 1990s surf-sticker art, with four readable desktop session cards. */
+.masthead{height:68px;background:#151a24;border-bottom:3px solid #e66039;padding:0 25px}
+.brand{width:180px;height:60px;flex-shrink:0;transform:none}
+.brand img{display:block;object-fit:contain;width:100%;height:100%}
+.title-wrap{width:109%;margin:45px 0 0 -3%;padding:0;transform:rotate(-2deg)}
+.title-wrap h1{font-size:0;transform:none;line-height:1;text-shadow:none}
+.title-wrap h1 img{display:block;width:100%;height:auto;filter:drop-shadow(5px 7px 0 #101519)}
+.title-sub{max-width:none;text-align:center;margin:8px 0 0;font:900 12px var(--mono);letter-spacing:5px;color:#e9dcc1}
+.home-layout{grid-template-columns:minmax(0,1fr) minmax(450px,1fr);gap:8%;padding:20px 5% 14px}
+.home-art{padding-top:8px}
+.home-tagline{margin-top:70px;font-size:clamp(27px,3vw,43px)}
+.home-menu{padding:0}
+.mode-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mode-card{min-height:134px;display:flex;flex-direction:column;position:relative;overflow:hidden;transform:none;box-shadow:3px 3px #070e12}
+.mode-card .mode-picture{position:absolute;inset:0;width:100%;height:100%;opacity:.34;filter:saturate(.7)}
+.mode-card .mode-picture svg{height:100%;width:100%;object-fit:cover}
+.mode-card .mode-copy{padding:12px;position:relative;z-index:1;width:100%;background:linear-gradient(90deg,#101c28e0,#111d2666)}
+.mode-copy strong{font-size:25px;line-height:1;margin:12px 0 7px;white-space:nowrap}
+.mode-number{font-size:8px}.mode-number i{font-size:7px;margin-left:5px}
+.mode-detail{font-size:10px;line-height:1.3;display:block;min-height:26px}
+.mode-status{font-size:8px;margin-top:10px}
+.mode-symbol{display:flex;align-items:center;justify-content:flex-end;font:100px Impact;color:#f3c647;padding-right:14px;background:repeating-linear-gradient(-45deg,#263b3b 0 10px,#1a292c 11px 15px)}
+.mode-symbol i{position:absolute;bottom:7px;right:7px;font:900 12px var(--mono)}
+.mode-storm .mode-symbol{background:linear-gradient(150deg,#545571,#142431);color:#aea7eb;font-size:145px}
+.mode-rush.is-selected{border-color:#f6b638}.mode-storm.is-selected{border-color:#ab9dff}
+.session-description{min-height:65px;padding:12px 0}.session-description p{font-size:11px;line-height:1.45;margin-top:5px}
+.menu-heading{font-size:8px;letter-spacing:.7px;margin-bottom:12px}
+.start-hint{margin:9px 0 12px}
+.surf-sticker{display:none}
+.poster-star{display:none}.poster-grid{opacity:.08}
+.intro{background:linear-gradient(100deg,#172524ef,#182930b0 40%,#101b2190 75%,#121d23ed)}
+.home-tagline{transform:none;color:#d9d7c1;font-style:normal;text-shadow:2px 2px #11191f}
+.home-tagline em{color:#ceb754}
+.poster-caption{font-size:9px;letter-spacing:1.2px;line-height:1.5}
+.surf-sticker strong{font-size:26px}.surf-sticker span{font-size:7px}
+.surf-condition{position:absolute;right:24px;top:130px;text-align:right;width:250px;color:#eee9d1;font:900 10px/1.6 var(--mono);text-shadow:1px 1px #132329}
+.surf-condition b,.surf-condition span{display:block}.surf-condition span{font-size:8px;margin-top:8px}
+.risk-meter{height:6px;background:#162329b3;border:1px solid #c4c6a8;margin-top:4px}.risk-meter i{display:block;height:100%;background:#f5c945;transition:width .1s}
+.surf-condition.danger span{color:#ffe090}.surf-condition.danger .risk-meter i{background:#ea5936}
+.control-strip{gap:18px}.control-strip>div:last-child{display:flex}
+body:not(.park-mode) .control-strip>.factory-controls,body.park-mode .control-strip>.ocean-controls{display:none}
+.pop-status{width:170px;margin-top:12px;color:#e0d6ba;font:900 8px/1.5 var(--mono);letter-spacing:.3px;text-shadow:1px 1px #14242b}
+.pop-status>div{height:5px;width:128px;margin-top:4px;border:1px solid #a0a99a;background:#14242bcc}.pop-status i{display:block;height:100%;width:100%;background:#cdb651}
+.pop-status.cooling{color:#c4b89f}.pop-status.cooling i{background:#b78457}.pop-status.powered{color:#ffe491}.pop-status.powered i{background:#f4d96e}
+.park-mode .wave-map{display:none}.wave-map>div::before{content:'';position:absolute;height:9px;width:15%;left:var(--crest-position,22%);top:-2px;transform:translateX(-50%);border:1px solid #f6d878;background:#f6d87866}.wave-map i{z-index:1}
+@media(max-height:760px){.masthead{height:57px}.brand{width:164px;height:55px}.home-layout{padding-top:16px;padding-bottom:12px}.title-wrap{margin-top:38px}.home-tagline{margin-top:53px;font-size:32px}.mode-card{min-height:115px}.mode-copy strong{font-size:22px;margin-top:9px}.mode-card .mode-copy{padding:9px 10px}.mode-detail{font-size:9px;min-height:23px}.mode-status{margin-top:6px;font-size:7px}.session-description{min-height:58px;padding:9px 0}.primary-button{min-height:43px}.garage-button{padding:8px 10px}.garage-button strong{font-size:15px}.surf-sticker{bottom:24px}.intro-bottom{min-height:30px;padding-top:8px;padding-bottom:8px}}
+@media(max-height:620px){.home-layout{overflow:auto}.home-art,.home-menu{min-height:0}.intro{overflow:auto}.surf-condition{top:126px}.mode-card{min-height:100px}.mode-copy strong{font-size:20px;margin-top:7px}.mode-card .mode-copy{padding:8px 10px}.mode-detail{min-height:21px}.mode-status{margin-top:4px}.home-tagline{margin-top:36px;font-size:30px}.poster-caption{display:none}}

@@ -1,0 +1,6 @@
+/* Survival counts upward; the other sessions retain their countdown. */
+body[data-session="storm"] .timer-block .eyebrow{display:block;margin-bottom:5px;color:#e6d797;font-size:9px;letter-spacing:2px}
+body[data-session="storm"] .timer-block strong{color:#e5ce83;text-shadow:2px 2px #5a4a28,3px 4px #141e26}
+body[data-session="storm"] .surf-condition{min-width:270px}
+.survival-result{line-height:1.9;color:#d0dddc}
+.survival-result b{color:#f1d478;font-size:22px}

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breakline ’99 · Ride Lab</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#141d22;color:#eee6cf;font:14px system-ui,sans-serif}header{padding:14px 18px;background:#243239;border-bottom:3px solid #d1b767}h1{margin:0 0 5px;font-size:20px}p{margin:5px 0;line-height:1.45}a{color:#eac875}main{display:grid;grid-template-columns:minmax(0,1fr) 285px;min-height:calc(100vh - 89px)}#viewport{min-height:580px;position:relative;background:#69736c}canvas{display:block;width:100%;height:100%;image-rendering:pixelated}aside{padding:15px;background:#1c292f}button,select{font:inherit;padding:9px 11px;background:#35484f;color:#fff0ce;border:1px solid #62767a;border-radius:3px;cursor:pointer}button:hover{background:#54686b}button:disabled{opacity:.5;cursor:default}.scenario{display:block;width:100%;text-align:left;margin:6px 0}.controls{display:flex;flex-wrap:wrap;gap:6px;margin:13px 0}#continue{background:#b3974f;color:#121b20;font-weight:700;width:100%}#status{padding:10px;background:#101a20;border-left:3px solid #d1b767;min-height:58px}.note{font-size:12px;color:#becbc9}dl{display:grid;grid-template-columns:1fr 1.2fr;gap:6px;margin:13px 0;font-size:12px}dt{color:#b9c6c5}dd{margin:0;font-family:monospace;overflow-wrap:anywhere}#events{font:11px monospace;max-height:95px;overflow:auto;color:#b5cdca;white-space:pre-wrap}label{display:block;margin:12px 0}#rate{margin-left:7px;padding:3px}.badge{display:inline-block;font-size:11px;letter-spacing:1px;color:#e1c679}#loading{position:absolute;inset:0;display:grid;place-items:center;background:#1b282d;z-index:2}@media(max-width:780px){main{grid-template-columns:1fr}#viewport{height:65vh;min-height:360px}aside{display:block}}
+  </style>
+</head>
+<body>
+  <header><span class="badge">BREAKLINE ’99 / MECHANICS DEMO</span><h1>Ride Lab</h1><p>Replay real controls through the game physics. Each sequence pauses at useful checkpoints. <a href="/">Back to the game</a></p></header>
+  <main><div id="viewport"><div id="loading">Loading the Waterworks…</div></div><aside>
+    <button class="scenario" id="run-pipe">West pipe loop</button>
+    <button class="scenario" id="run-lip">Lip grab turnback</button>
+    <button class="scenario" id="run-coping">Ride straight onto coping</button>
+    <div class="controls"><button id="continue">Continue to next checkpoint</button><button id="pause">Pause</button><button id="frame">+1 frame</button><button id="step">+0.25 seconds</button></div>
+    <label>Playback speed<select id="rate"><option value="1">Normal</option><option value=".5">Half speed</option><option value=".25">Quarter speed</option></select></label>
+    <div id="status" role="status">Choose a sequence.</div>
+    <dl>
+      <dt>Sequence</dt><dd id="stat-sequence">—</dd><dt>Simulation time</dt><dd id="stat-time">0.000 s</dd><dt>State</dt><dd id="stat-state">ready</dd><dt>Controls held</dt><dd id="stat-controls">none</dd><dt>Position</dt><dd id="stat-position">—</dd><dt>Heading</dt><dd id="stat-heading">—</dd><dt>Pipe angle / loops</dt><dd id="stat-pipe">—</dd><dt>Rider up</dt><dd id="stat-up">—</dd><dt>Lip grab</dt><dd id="stat-lip">—</dd><dt>Grind</dt><dd id="stat-grind">—</dd><dt>Head position</dt><dd id="stat-head">—</dd><dt>Score / combo</dt><dd id="stat-score">—</dd><dt>Wipeouts</dt><dd id="stat-wipeouts">0</dd>
+    </dl><p class="note">Starts use the same legal drop-in locations as the game. The demo supplies held controls; it never replaces rider coordinates, collision results, or poses.</p><pre id="events" aria-label="Recent game events"></pre>
+  </aside></main><script type="module" src="/src/ride-lab.js"></script>
+</body>
+</html>

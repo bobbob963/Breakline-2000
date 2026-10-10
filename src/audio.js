@@ -1,11 +1,42 @@
-// "Riptide Radio '99" — original mellow coastal instrumental.
-// 64 bars / 108 BPM. Clean physical-model strings, warm bass and soft brushes.
+// Two original instrumentals: mellow rides and a heavy breakbeat menu theme.
+// Riptide Radio: 64 bars / 108 BPM. Afterhours: 32 bars / 138 BPM.
 // All sounds are generated locally. No recordings or borrowed melodies.
 export const SURF_TRACK = "Riptide Radio '99";
+export const MENU_TRACK = 'Afterhours / Yard Circuit';
 export const MUSIC_BPM = 108;
+export const MENU_BPM = 138;
 const STEP = 60 / MUSIC_BPM / 4;
 const TOTAL_STEPS = 64 * 16;
+const MENU_STEP = 60 / MENU_BPM / 4;
+const MENU_STEPS = 32 * 16;
 const frequency = midi => 440 * 2 ** ((midi - 69) / 12);
+
+// An original E-minor riff cycle: four-bar entrance, full rhythm section,
+// a half-time middle eight, then the final hook. Chug lengths leave actual space.
+const MENU_ROOTS = [40,40,43,38,40,40,36,38,40,43,45,38,36,38,40,40,
+  45,36,40,38,45,36,38,47,40,40,43,38,36,38,40,40];
+const MENU_RIFFS = [
+  [[0,0,2],[3,0,1],[6,0,2],[8,0,2],[11,7,1],[14,0,2]],
+  [[0,0,2],[2,0,1],[5,0,2],[8,0,2],[10,3,2],[14,0,2]],
+  [[0,0,3],[4,0,1],[6,0,1],[9,0,2],[12,7,2],[15,0,1]],
+  [[0,0,2],[3,0,2],[7,0,1],[8,0,3],[12,0,1],[14,2,1]],
+];
+const MENU_HOOK = [
+  [[0,24,3],[5,31,2],[8,29,2],[12,27,3]],
+  [[2,24,3],[7,27,2],[10,22,4]],
+  [[0,24,4],[6,26,2],[10,31,4]],
+  [[2,24,3],[8,29,3],[13,24,2]],
+  [[0,28,4],[6,31,2],[10,24,4]],
+  [[0,29,3],[5,26,2],[9,24,4]],
+  [[2,31,4],[8,27,2],[12,24,3]],
+  [[0,24,6],[10,22,2],[14,24,2]],
+];
+
+function saturationCurve(drive = 3.4) {
+  const curve = new Float32Array(2048), scale = Math.tanh(drive);
+  for (let i = 0; i < curve.length; i++) curve[i] = Math.tanh((i / (curve.length - 1) * 2 - 1) * drive) / scale;
+  return curve;
+}
 
 const CHORDS = {
   G: { root: 43, notes: [55,59,62,66] },  // Gmaj7
@@ -81,10 +112,11 @@ const CHORUS = [
 
 export class ArcadeAudio {
   constructor() {
-    this.enabled = false; this.ctx = null; this.mode = 'surf';
+    this.enabled = false; this.ctx = null; this.mode = 'surf'; this.scene = 'ride';
     this.trackName = SURF_TRACK; this.beat = 0; this.nextBeat = 0;
     this.active = false; this.voices = new Set(); this._token = 0; this._enabling = false;
     this._strings = new Map(); this._persistent = []; this._persistentSources = [];
+    this._sceneBeats = { ride: 0, menu: 0 }; this._voiceScenes = new WeakMap();
   }
 
   _build() {
@@ -96,10 +128,19 @@ export class ArcadeAudio {
     this.limiter = c.createDynamicsCompressor();
     this.limiter.threshold.value = -12; this.limiter.knee.value = 12;
     this.limiter.ratio.value = 5; this.limiter.attack.value = .005; this.limiter.release.value = .25;
-    this.music = c.createGain(); this.music.gain.value = .82;
+    this.music = c.createGain(); this.music.gain.value = this.scene === 'ride' ? .82 : 0;
+    this.menuMusic = c.createGain(); this.menuMusic.gain.value = this.scene === 'menu' ? .88 : 0;
     this.effects = c.createGain(); this.effects.gain.value = .64;
-    this.music.connect(this.limiter); this.effects.connect(this.limiter);
-    this.limiter.connect(this.master); this.master.connect(c.destination);
+    this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.effects.connect(this.limiter);
+    // A normally transparent final safety ceiling also catches the compressor's
+    // attack transient. The master leaves further headroom below digital full scale.
+    const ceiling = c.createWaveShaper(), ceilingCurve = new Float32Array(2048);
+    for (let i = 0; i < ceilingCurve.length; i++) {
+      const x = i / (ceilingCurve.length - 1) * 2 - 1, magnitude = Math.abs(x);
+      ceilingCurve[i] = Math.sign(x) * (magnitude <= .72 ? magnitude : .72 + .24 * Math.tanh((magnitude - .72) / .24));
+    }
+    ceiling.curve = ceilingCurve; ceiling.oversample = '2x';
+    this.limiter.connect(ceiling); ceiling.connect(this.master); this.master.connect(c.destination);
 
     // A clean, gently rolled-off guitar bus: no distortion or hard-edged leads.
     this.guitarAmp = c.createBiquadFilter();
@@ -142,14 +183,61 @@ export class ArcadeAudio {
     const roomSend = c.createGain(); roomSend.gain.value = .28;
     const roomTone = c.createBiquadFilter(); roomTone.type = 'lowpass'; roomTone.frequency.value = 2600;
     this.guitarAmp.connect(roomSend); roomSend.connect(room); room.connect(roomTone); roomTone.connect(this.music);
-    this._persistent = [this.music, this.effects, this.limiter, this.master, this.guitarAmp, this.slap,
+    this._persistent = [this.music, this.menuMusic, this.effects, this.limiter, ceiling, this.master, this.guitarAmp, this.slap,
       this.slapSend, this.slapFeedback, echoTone, chorus, chorusSend, chorusPan, lfo, depth, roomSend, room, roomTone];
+    this._buildMenu(random);
 
     // Cache physical-model string samples once. Playback uses only buffer voices,
     // rather than recalculating a pluck every frame or downloading sample files.
     const notes = new Set(Object.values(CHORDS).flatMap(chord => chord.notes));
     for (const phrase of [...VERSE, ...BRIDGE, ...CHORUS]) for (const note of phrase) notes.add(note[1]);
+    MENU_ROOTS.forEach((root, bar) => {
+      for (const [, offset] of MENU_RIFFS[bar % 4]) for (const interval of [0,7,12]) notes.add(root + offset + interval);
+      if (bar >= 20 && bar < 24) for (const offset of [24,27,31]) notes.add(root + offset);
+      if (bar >= 24) for (const [, offset] of MENU_HOOK[bar - 24]) notes.add(root + offset);
+    });
     for (const midi of notes) this._string(midi);
+  }
+
+  _buildMenu(random) {
+    const c = this.ctx;
+    const room = c.createConvolver(), impulse = c.createBuffer(2, Math.ceil(c.sampleRate * .43), c.sampleRate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = impulse.getChannelData(channel); let smooth = 0;
+      for (let i = 0; i < data.length; i++) {
+        smooth += (random() - smooth) * .31;
+        data[i] = smooth * Math.exp(-i / c.sampleRate * 13) * Math.min(1, i / (c.sampleRate * .008));
+      }
+    }
+    room.buffer = impulse;
+    const roomSend = c.createGain(); roomSend.gain.value = .10;
+    const roomTone = c.createBiquadFilter(); roomTone.type = 'lowpass'; roomTone.frequency.value = 2400;
+    roomSend.connect(room); room.connect(roomTone); roomTone.connect(this.menuMusic);
+    this._persistent.push(room, roomSend, roomTone);
+    const amp = (pan, volume, drive, cutoff) => {
+      const input = c.createGain(), high = c.createBiquadFilter(), distort = c.createWaveShaper();
+      const cabinet = c.createBiquadFilter(), gain = c.createGain(), stereo = c.createStereoPanner();
+      high.type = 'highpass'; high.frequency.value = 115; high.Q.value = .6;
+      distort.curve = saturationCurve(drive); distort.oversample = '2x';
+      cabinet.type = 'lowpass'; cabinet.frequency.value = cutoff; cabinet.Q.value = .55;
+      gain.gain.value = volume; stereo.pan.value = pan;
+      input.connect(high); high.connect(distort); distort.connect(cabinet); cabinet.connect(gain);
+      gain.connect(stereo); stereo.connect(this.menuMusic); stereo.connect(roomSend);
+      this._persistent.push(input,high,distort,cabinet,gain,stereo); return input;
+    };
+    // Separate left/right guitar takes feed finite-gain amp/cabinet chains. The
+    // actual picked strings drive the distortion; there is no sustained saw wall.
+    this.menuGuitars = [amp(-.66,.078,3.5,3450), amp(.66,.078,3.3,3200)];
+    this.menuLead = amp(-.05,.061,2.1,3100);
+    this.menuBass = c.createBiquadFilter(); this.menuBass.type = 'lowpass'; this.menuBass.frequency.value = 850;
+    const bassDrive = c.createWaveShaper(), bassLevel = c.createGain();
+    bassDrive.curve = saturationCurve(1.8); bassDrive.oversample = '2x'; bassLevel.gain.value = .105;
+    this.menuBass.connect(bassDrive); bassDrive.connect(bassLevel); bassLevel.connect(this.menuMusic);
+    this.menuDrums = c.createBiquadFilter(); this.menuDrums.type = 'highshelf'; this.menuDrums.frequency.value = 5400; this.menuDrums.gain.value = -4;
+    const drumGlue = c.createDynamicsCompressor(); drumGlue.threshold.value = -18; drumGlue.knee.value = 9;
+    drumGlue.ratio.value = 2.8; drumGlue.attack.value = .008; drumGlue.release.value = .11;
+    this.menuDrums.connect(drumGlue); drumGlue.connect(this.menuMusic);
+    this._persistent.push(this.menuBass,bassDrive,bassLevel,this.menuDrums,drumGlue);
   }
 
   _string(midi) {
@@ -209,15 +297,17 @@ export class ArcadeAudio {
     this.master.gain.setTargetAtTime(on ? .76 : 0, this.ctx.currentTime, on ? .05 : .007);
   }
 
-  _stopVoices() {
+  _stopVoices(scene = null, delay = .03) {
     if (!this.ctx) return;
     for (const source of this.voices) {
-      try { source.stop(this.ctx.currentTime + .03); } catch { /* already ended */ }
+      if (scene && this._voiceScenes.get(source) !== scene) continue;
+      try { source.stop(this.ctx.currentTime + delay); } catch { /* already ended */ }
     }
   }
 
   _track(source, nodes) {
     this.voices.add(source);
+    this._voiceScenes.set(source,this.scene);
     source.onended = () => {
       source.disconnect(); for (const node of nodes) node.disconnect(); this.voices.delete(source);
     };
@@ -252,13 +342,13 @@ export class ArcadeAudio {
     this._track(source, [filter, gain, stereo]); source.start(at); source.stop(at + length + .18);
   }
 
-  _noiseHit(at, duration, volume, freq, kind = 'bandpass', pan = 0) {
+  _noiseHit(at, duration, volume, freq, kind = 'bandpass', pan = 0, output = this.music, attack = .012) {
     const c = this.ctx, source = c.createBufferSource(), filter = c.createBiquadFilter(), gain = c.createGain(), stereo = c.createStereoPanner();
     source.buffer = this.noise; filter.type = kind; filter.frequency.value = freq; filter.Q.value = .55;
-    gain.gain.setValueAtTime(.0001, at); gain.gain.exponentialRampToValueAtTime(volume, at + .012);
+    gain.gain.setValueAtTime(.0001, at); gain.gain.exponentialRampToValueAtTime(volume, at + attack);
     gain.gain.exponentialRampToValueAtTime(.0001, at + duration);
     stereo.pan.value = pan;
-    source.connect(filter); filter.connect(gain); gain.connect(stereo); stereo.connect(this.music);
+    source.connect(filter); filter.connect(gain); gain.connect(stereo); stereo.connect(output);
     this._track(source, [filter, gain, stereo]);
     source.start(at, (this.beat * .029) % .4); source.stop(at + duration + .025);
   }
@@ -273,6 +363,91 @@ export class ArcadeAudio {
     this.mode = mode;
     if (this.ctx && this.slapSend) this.slapSend.gain.setTargetAtTime(
       mode === 'park' || mode === 'wavepark' ? .21 : .19, this.ctx.currentTime, .3);
+  }
+
+  setScene(scene = 'ride') {
+    const next = scene === 'menu' ? 'menu' : 'ride';
+    if (next === this.scene) return;
+    const previous = this.scene;
+    this._sceneBeats[previous] = this.beat;
+    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : SURF_TRACK;
+    // Start the retained phrase at its bar boundary; do not resume mid-chug.
+    this.beat = Math.floor(this._sceneBeats[next] / 16) * 16;
+    if (!this.ctx) return; // Merely selecting a menu never unlocks browser audio.
+    const now = this.ctx.currentTime;
+    for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0]]) {
+      bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(target,now,.13);
+    }
+    this._stopVoices(previous,.7); this.nextBeat = now + .045;
+  }
+
+  _menuPluck(midi, at, duration, volume, output, detune = 0) {
+    const c = this.ctx, source = c.createBufferSource(), gain = c.createGain(), pick = c.createBiquadFilter();
+    const string = this._string(midi); source.buffer = string.buffer;
+    source.playbackRate.value = string.rate * 2 ** (detune / 1200);
+    const length = Math.max(.07,duration);
+    pick.type = 'lowpass'; pick.Q.value = .5;
+    pick.frequency.setValueAtTime(length < .3 ? 2600 : 4100,at);
+    pick.frequency.exponentialRampToValueAtTime(length < .3 ? 650 : 1850,at + length);
+    gain.gain.setValueAtTime(.0001,at); gain.gain.exponentialRampToValueAtTime(volume,at+.004);
+    gain.gain.exponentialRampToValueAtTime(volume*.58,at+length*.64);
+    gain.gain.exponentialRampToValueAtTime(.0001,at+length+.035);
+    source.connect(pick); pick.connect(gain); gain.connect(output);
+    this._track(source,[pick,gain]); source.start(at); source.stop(at+length+.045);
+  }
+
+  _menuChord(root, at, duration, weight = 1) {
+    for (let take = 0; take < 2; take++) for (const [index,interval] of [0,7,12].entries()) {
+      this._menuPluck(root+interval,at+take*.009+index*.003,duration,
+        [.43,.28,.22][index]*weight,this.menuGuitars[take],take===0?-5:4);
+    }
+  }
+
+  _menuKick(at, weight = 1) {
+    this._note(128,at,.23,'sine',.19*weight,this.menuDrums,44);
+    this._noiseHit(at,.027,.024*weight,2200,'lowpass',0,this.menuDrums,.002);
+  }
+
+  _menuSnare(at, weight = 1) {
+    this._noiseHit(at,.17,.098*weight,1800,'bandpass',-.08,this.menuDrums,.002);
+    this._noiseHit(at,.075,.027*weight,4300,'highpass',.08,this.menuDrums,.002);
+    this._note(195,at,.11,'triangle',.047*weight,this.menuDrums,146);
+  }
+
+  _scheduleMenuStep(step, at) {
+    const bar = Math.floor(step/16)%32, s = step%16, root = MENU_ROOTS[bar];
+    const intro = bar < 4, breakdown = bar >= 16 && bar < 20, build = bar >= 20 && bar < 24;
+    const fill = bar%8===7, finish = bar===31;
+    const kickSteps = breakdown ? [0,10] : bar%2 ? [0,6,10] : [0,7,10];
+    if(kickSteps.includes(s)) this._menuKick(at,s===0?1:.76);
+    if(s===(breakdown?8:4)||(!breakdown&&s===12)) this._menuSnare(at+.004,intro?.78:1);
+    if(!intro&&!breakdown&&(s===3||(bar%2&&s===11))) this._menuSnare(at+.009,.17);
+    if(s%2===0&&!(fill&&s>=12)) this._noiseHit(at,.052,s%4?.013:.019,6800,'highpass',s%4?.26:-.22,this.menuDrums,.002);
+    if(!intro&&!breakdown&&[3,11].includes(s)) this._noiseHit(at+.007,.04,.006,5700,'highpass',.22,this.menuDrums,.002);
+    if(s===14&&!fill&&!intro) this._noiseHit(at,.15,.014,5600,'highpass',.28,this.menuDrums,.003);
+    if(s===0&&[4,8,24].includes(bar)) this._noiseHit(at,.55,.031,4900,'bandpass',.25,this.menuDrums,.004);
+    if(fill&&s>=12) {
+      if(s===12||s===14||s===15)this._menuSnare(at,[.74,.3,.56,.78][s-12]);
+      if(s===13||s===15)this._note(s===13?147:110,at,.16,'sine',.065,this.menuDrums,s===13?116:86);
+    }
+
+    const riff = breakdown ? [[0,0,7],[10,0,4]] : MENU_RIFFS[bar%4];
+    for(const [position,offset,length] of riff) {
+      if(position!==s||(intro&&bar<2&&s>8)||(finish&&s>=12))continue;
+      this._menuChord(root+offset,at,length*MENU_STEP*(breakdown?.95:.79),intro?.72:1);
+      const bass = root-12+(offset===7?7:0);
+      this._note(frequency(bass),at+.006,Math.max(.09,length*MENU_STEP*.88),'triangle',.48,this.menuBass);
+      if(s===0&&!breakdown)this._note(frequency(bass),at,.25,'sine',.047,this.menuMusic);
+    }
+    // A small rising answer builds into the final eight-bar guitar hook.
+    if(build&&[2,8,14].includes(s)) {
+      const offset = s===2?24:s===8?27:31;
+      this._menuPluck(root+offset,at,.25,.23,this.menuLead,2);
+    }
+    if(bar>=24) for(const [position,offset,length] of MENU_HOOK[bar-24]) {
+      if(position!==s)continue;
+      this._menuPluck(root+offset,at+.011,length*MENU_STEP*.95,.43,this.menuLead,2);
+    }
   }
 
   _scheduleStep(step, at) {
@@ -344,9 +519,11 @@ export class ArcadeAudio {
     }
     if (!this.active) return;
     if (this.nextBeat < now - .2) this.nextBeat = now + .04;
+    const menu = this.scene === 'menu', total = menu ? MENU_STEPS : TOTAL_STEPS, interval = menu ? MENU_STEP : STEP;
     while (this.nextBeat < now + .18) {
-      this._scheduleStep(this.beat % TOTAL_STEPS, this.nextBeat);
-      this.beat = (this.beat + 1) % TOTAL_STEPS; this.nextBeat += STEP;
+      if(menu)this._scheduleMenuStep(this.beat % total,this.nextBeat);
+      else this._scheduleStep(this.beat % total,this.nextBeat);
+      this.beat = (this.beat + 1) % total; this.nextBeat += interval;
     }
   }
 
