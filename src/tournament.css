@@ -47,6 +47,8 @@
 .race-hud{width:248px;border-color:#5ebdae}
 .race-hud>strong{color:#a6e0d5}
 .race-hud>span{line-height:1.8}
+body[data-session="tournament"] .surf-condition{top:270px;right:25px;width:248px;padding:8px 13px;background:linear-gradient(90deg,transparent,#101717b8)}
+body[data-session="tournament"] .surf-condition>b{display:none}
 .race-progress{margin-top:11px;padding-top:8px;border-top:1px solid #b9bfa740}
 .race-progress>div{display:flex;align-items:center;gap:8px;margin:6px 0}
 .race-progress span{width:35px;font:7px var(--mono);color:#bec6b8}
