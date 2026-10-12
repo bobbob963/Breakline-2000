@@ -17,32 +17,36 @@ function block(first, last) {
   return source.slice(start, end);
 }
 function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }) {
-  const writes = [], visual = [], previews = [], updates = [];
+  const writes = [], visual = [], previews = [], menuPreviews = [], updates = [];
   const context = {
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
     game: new SurfGame(), write: (key, value) => writes.push([key, JSON.parse(value)]),
     world: { setProfile: profile => visual.push({ ...profile }) },
     preview: { setProfile: profile => previews.push({ ...profile }) },
+    menuSurfer: { setProfile: profile => menuPreviews.push({ ...profile }) },
     updateCustomizationChoices: () => updates.push(true),
   };
   vm.runInNewContext(block('function setProfile(', 'function openWorkshop('), context);
-  return { context, writes, visual, previews, updates };
+  return { context, writes, visual, previews, menuPreviews, updates };
 }
 
-test('the actual board-shop action rejects locked rewards and applies an earned board to save, physics and both renders', () => {
-  const { context, writes, visual, previews, updates } = equipFixture();
+test('the actual board-shop action rejects locked rewards and applies the setup to save, physics, world, workshop and menu', () => {
+  const { context, writes, visual, previews, menuPreviews, updates } = equipFixture();
   const original = { ...context.profile };
   assert.equal(context.setProfile({ rewardBoard: 'lightning' }), false);
-  assert.deepEqual(context.profile, original); assert.equal(writes.length, 0); assert.equal(visual.length, 0);
+  assert.deepEqual(context.profile, original); assert.equal(writes.length, 0); assert.equal(visual.length, 0); assert.equal(menuPreviews.length, 0);
   assert.equal(context.setProfile({ rewardBoard: 'guitar' }), true);
   assert.equal(context.game.rewardBoard, 'guitar'); assert.equal(context.game.rewardBoardDefinition.trickPointsMultiplier, 1.25);
   assert.equal(writes.at(-1)[0], 'breakline99-profile');
   assert.deepEqual(writes.at(-1)[1], { ...original, rewardBoard: 'guitar' });
   assert.deepEqual(visual.at(-1), context.profile); assert.deepEqual(previews.at(-1), context.profile); assert.equal(updates.length, 1);
+  assert.deepEqual(menuPreviews.at(-1), context.profile); assert.equal(menuPreviews.length, 1);
   context.setProfile({ outfit: 'blackout' }); assert.equal(context.profile.rewardBoard, 'guitar', 'changing clothes preserves the prize deck');
+  assert.deepEqual(menuPreviews.at(-1), { ...original, outfit: 'blackout', rewardBoard: 'guitar' });
   context.setProfile({ rewardBoard: null }); assert.equal(context.game.rewardBoardDefinition, null);
   assert.equal(context.profile.boardDesign, 'tribal'); assert.equal(context.profile.boardColor, '#24c5ba');
+  assert.deepEqual(menuPreviews.at(-1), context.profile); assert.equal(menuPreviews.at(-1).rewardBoard, null); assert.equal(menuPreviews.length, 3);
 });
 
 test('boot restoration strips a locked board but restores an earned board and migrates the old championship', () => {

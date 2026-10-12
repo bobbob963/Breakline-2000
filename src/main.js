@@ -7,6 +7,7 @@ import './classic-logo.css';
 import './tournament.css';
 import './wasted.css';
 import './rewards.css';
+import './menu-surfer.css';
 import { createTournamentGame, TOURNAMENT_RIVALS, TOURNAMENT_LADDERS, sanitizeTournamentProgress, tournamentCourseLength, tournamentRivalsForLadder, selectTournamentLadder, nextTournamentLadder } from './tournament.js';
 import { REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from './board-rewards.js';
 import { createWastedSequence } from './wasted.js';
@@ -20,6 +21,7 @@ import { ParkMap } from './park-map.js';
 import { SurfWorld } from './world.js';
 import { ArcadeAudio } from './audio.js';
 import { CHARACTERS, OUTFITS, BOARD_DESIGNS, validateProfile, CustomizationPreview } from './appearance.js';
+import { MenuSurferPreview } from './menu-surfer.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { createLoadingScreen, paintLoadingStage } from './loading-screen.js';
 import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
@@ -57,7 +59,7 @@ const audio=new ArcadeAudio();
 const input={left:false,right:false,pump:false,brake:false,jump:false,action:false,grind:false};
 const special=new SpecialMeter();
 const pressed=new Set();
-let world,game,preview,parkMap,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let world,game,preview,menuSurfer,parkMap,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))||0),newBest=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
@@ -218,6 +220,9 @@ function updateCustomizationChoices(){
   }
   $('character-name').textContent=`${CHARACTERS[profile.character].name} / ${OUTFITS[profile.outfit].name}`;
   $('board-name').textContent=getRewardBoard(profile.rewardBoard)?.name||BOARD_DESIGNS[profile.boardDesign].name;
+  $('home-surfer-name').textContent=CHARACTERS[profile.character].name;
+  $('home-surfer-setup').textContent=`${OUTFITS[profile.outfit].name} / ${$('board-name').textContent}`;
+  $('home-surfer-preview').setAttribute('aria-label',`${CHARACTERS[profile.character].name} wearing ${OUTFITS[profile.outfit].name}, leaning against their ${$('board-name').textContent} surfboard`);
   $('reward-board-options').innerHTML=REWARD_BOARD_ORDER.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress),equipped:profile.rewardBoard===id})).join('');
   $('standard-board').setAttribute('aria-pressed',String(!profile.rewardBoard));
   $('standard-board').classList.toggle('is-selected',!profile.rewardBoard);
@@ -241,7 +246,7 @@ function cycleCharacter(direction){
 function setProfile(patch){
   const next=validateProfile({...profile,...patch});
   if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress))return false;
-  profile=next;write('breakline99-profile',JSON.stringify(profile));game.setRewardBoard(profile.rewardBoard);world.setProfile(profile);preview?.setProfile(profile);updateCustomizationChoices();return true;
+  profile=next;write('breakline99-profile',JSON.stringify(profile));game.setRewardBoard(profile.rewardBoard);world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
 }
 function openWorkshop(mode){
   if(game.phase==='running'){game.pause();clearInput();}
@@ -377,12 +382,13 @@ try{
   loading.set(40,'BUILDING YOUR SESSION','Preparing the coast, wave ramps and Waterworks.');
   await paintLoadingStage();
   world=new SurfWorld($('viewport'),profile);
+  menuSurfer=new MenuSurferPreview($('home-surfer-preview'),profile);
   loading.set(78,'SETTING YOUR LINE','Getting your surfer, board and session ready.');
   await paintLoadingStage();
   parkMap=new ParkMap($('park-map-canvas'));makeGame();updateModeMenu();renderCustomizationChoices();updateSoundLabel();
   loading.set(92,'WARMING UP THE WATER','Drawing the first frame. Almost there.');
   await paintLoadingStage();
-  world.update(0,game);updateHud();
+  world.update(0,game);menuSurfer.update(0);updateHud();
   await paintLoadingStage();
   bootReady=await loading.finish();
   if(!bootReady)throw new Error('Startup stopped before the menu was ready.');
@@ -391,6 +397,7 @@ try{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(game.phase==='running'&&!workshopMode){accumulator+=dt;while(accumulator>=1/120){game.update(1/120,input);accumulator-=1/120;}special.update(dt);}else accumulator=0;
     world.update(wasted.active?0:dt,game);wasted.update(dt);if(workshopMode)preview.update(dt,workshopMode);
+    if(!document.hidden&&!workshopMode&&!modalMode&&!$('intro').classList.contains('hidden'))menuSurfer.update(dt);
     if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});
     audio.update(!document.hidden&&(game.phase==='running'||game.phase==='ready'),game.mode);
     hudTime+=dt;if(hudTime>=.05){updateHud();hudTime=0;}
@@ -398,5 +405,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);wasted.destroy();world.dispose();preview?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}

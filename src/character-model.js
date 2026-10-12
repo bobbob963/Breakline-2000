@@ -289,7 +289,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     p.needsUpdate=true;yokeGeometry.computeVertexNormals();yokeGeometry.computeBoundingSphere();
     legs.forEach((leg,i)=>leg.cloth?.set(leg.points.hip,leg.points.knee,leg.points.ankle,roots[i].map(toRider)));
   }
-  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null}={}){
+  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null,menuLean=null}={}){
     shell?.resetNormals();
     if(mode)activeMode=mode;grab=THREE.MathUtils.clamp(Math.max(grab,lipGrab),0,1);
     tweak=air&&!standing?THREE.MathUtils.clamp(tweak,0,1):0;
@@ -311,6 +311,34 @@ export function createCharacter({id,character,outfit,fabricTexture}){
         // wrist and fingertip heights remain exactly at shoulder height.
         arms[i].set([x,.437,.002],[x+side*.32,.437,-.023],[x+side*.6095,.437,.002]);
       }
+    }else if(standing&&menuLean){
+      // Menu-only weight shift. Reuse limb IK and sewn clothing so an upright
+      // board hold never rotates a detached sleeve or changes the body mesh.
+      body.position.set(.074,.969+breath,.016);body.rotation.set(-.015,-.055,-.20);head.rotation.set(.014,.075,.16);
+      if(menuLean.elbowWorld){
+        rider.updateWorldMatrix(true,true);
+        const shoulderWorld=menuLean.elbowWorld.clone().addScaledVector(V([.76,.45,-.47]).normalize(),-.32);
+        body.position.copy(rider.worldToLocal(shoulderWorld).sub(V([.194*build,.437,.003]).applyQuaternion(body.quaternion)));
+        body.rotation.x+=breath*.3;
+      }
+      body.updateMatrix();
+      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.12,.52,-.07],[-.19,.085,-.005],[-.245,.047,-.194],shoes);
+      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.17,.52,.035],[.17,.084,.075],[.20,.047,-.115],shoes);
+      arms[0].set([-.194*build,.437,.002],[-.30,.17,-.01],[-.175,-.13,-.13]);
+      rider.updateWorldMatrix(true,true);
+      const worldContact=menuLean.contactWorld?.clone?.()||boardTargetWorld?.clone?.();
+      const contact=worldContact?body.worldToLocal(worldContact):V([.34,.19,-.12]);
+      if(menuLean.elbowWorld){
+        const elbow=body.worldToLocal(menuLean.elbowWorld.clone());
+        // The real forearm rests on the board tip. Solve wrist between that
+        // fixed support and the hand on the outer rail, retaining both lengths.
+        const wrist=jointBetween(elbow.toArray(),contact.toArray(),.29,.15,[1,0,-.6]);
+        arms[1].set([.194*build,.437,.003],elbow.toArray(),wrist,1,contact.toArray());
+      }else{
+        const direction=V([.96,.08,-.20]).normalize(),wrist=contact.clone().addScaledVector(direction,-.15);
+        arms[1].set([.194*build,.437,.003],[.21,.04,-.11],wrist.toArray(),1,contact.toArray());
+      }
+      landmarks.boardGrabTarget=body.localToWorld(contact.clone());
     }else if(standing){
       body.position.set(.020,1.001+breath,.012);body.rotation.set(-.028,.075,.036);head.rotation.set(.022,-.11,.012);
       body.updateMatrix();

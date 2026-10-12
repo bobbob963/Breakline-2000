@@ -1,0 +1,26 @@
+/* The selected rider occupies the old poster space; all session controls stay alongside. */
+.home-layout{gap:5%;grid-template-columns:minmax(0,1fr) minmax(450px,1fr)}
+.home-art.home-surfer{display:flex;flex-direction:column;min-height:0;padding:0;align-self:stretch}
+.home-surfer-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-shrink:0;padding:4px 0 12px;border-bottom:1px solid #93a19a40}
+.home-surfer-heading #game-title{margin:0;font:italic 19px/1 Impact,'Arial Black',sans-serif;letter-spacing:.5px;transform:none;text-shadow:none;color:#e0d2a3;white-space:nowrap}
+.home-surfer-heading>span{max-width:170px;color:#a3b2ad;font:7px/1.6 var(--mono);letter-spacing:1.2px;text-align:right}
+.home-surfer-stage{position:relative;isolation:isolate;flex:1;min-height:330px;background:radial-gradient(ellipse at 50% 48%,#71857a24,transparent 68%);overflow:hidden}
+.home-surfer-stage::after{content:'';position:absolute;left:15%;right:15%;bottom:12%;height:1px;z-index:-1;background:linear-gradient(90deg,transparent,#d7c38666,transparent);transform:rotate(-3deg)}
+#home-surfer-preview{position:absolute;inset:0;z-index:1}
+#home-surfer-preview canvas{display:block;width:100%;height:100%}
+.home-surfer-watermark{position:absolute;top:14%;left:7%;font:italic clamp(85px,10vw,152px)/.77 Impact,'Arial Black',sans-serif;letter-spacing:-3px;color:#b8c5b3;opacity:.06;transform:rotate(-7deg);pointer-events:none}
+.home-surfer-caption{position:absolute;bottom:6%;left:0;font:7px var(--mono);letter-spacing:2px;color:#9aa9a2;writing-mode:vertical-rl;transform:rotate(180deg)}
+.home-surfer-footer{display:flex;align-items:end;justify-content:space-between;gap:16px;padding:13px 0 4px;border-top:1px solid #93a19a40;flex-shrink:0}
+.home-surfer-info{min-width:0;display:flex;flex-direction:column;gap:5px;max-width:58%}
+.home-surfer-info small{font:7px var(--mono);letter-spacing:2px;color:#bdb799}
+.home-surfer-info strong{font:italic clamp(30px,3.2vw,46px)/.95 Impact,'Arial Black',sans-serif;letter-spacing:1px;color:#e8dfbb;text-shadow:2px 2px #111a20}
+.home-surfer-info>span{color:#a2b5b1;font:7px/1.6 var(--mono);letter-spacing:.4px}
+.home-select-surfer{min-width:185px;padding:13px 14px;border-color:#bcaf74;background:linear-gradient(110deg,#383d32,#19262b);color:#f0e3b6}
+.home-select-surfer>span{color:#b8b395}
+.home-select-surfer strong{font-size:20px}
+.home-select-surfer:hover{background:#3a4135}
+.home-select-surfer:focus-visible{outline:2px solid #fff1a7;outline-offset:4px}
+.home-menu .garage-menu{grid-template-columns:1fr}
+@media(max-height:760px){.home-surfer-heading{padding-bottom:9px}.home-surfer-stage{min-height:310px}.home-surfer-footer{padding-top:10px}.home-select-surfer{min-width:175px;padding:11px}.home-select-surfer strong{font-size:19px}.home-surfer-info strong{font-size:37px}}
+@media(max-height:620px){.home-art.home-surfer{min-height:460px}.home-surfer-stage{min-height:300px}.home-surfer-heading>span{font-size:6px}.home-surfer-info strong{font-size:31px}}
+@media(max-width:1050px){.home-layout{gap:4%;grid-template-columns:minmax(0,1fr) minmax(380px,1fr)}.home-surfer-footer{align-items:stretch;flex-direction:column;gap:10px}.home-surfer-info{max-width:none}.home-select-surfer{width:100%;min-width:0}.home-surfer-heading>span{max-width:118px;font-size:6px}.home-surfer-heading #game-title{font-size:16px}.home-surfer-stage{min-height:300px}}

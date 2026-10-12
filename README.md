@@ -1,6 +1,8 @@
 # BREAKLINE ’99 — Version 8.0
 
-**Published update — 12 October 2026.** The Hit List now has five ladders and twenty-five physical rival races. Each ladder permanently unlocks an original board with its own completed-trick effects and gameplay perk: points, boost power, boost duration, faster pops or an extra air jump. Existing progress carries over. Includes rival combos, sun rings, the dynamic race soundtrack and clearer ocean-race rendering. Open this repository through the linked StackBlitz project to play the latest source.
+**Published update — 12 October 2026.** The Hit List now has five ladders and twenty-five physical rival races. Each ladder permanently unlocks an original board with its own completed-trick effects and gameplay perk: points, boost power, boost duration, faster pops or an extra air jump. The main menu now features your equipped surfer leaning on their board, with character selection beneath. Existing progress carries over. Includes rival combos, sun rings, the dynamic race soundtrack and clearer ocean-race rendering. Open this repository through the linked StackBlitz project to play the latest source.
+
+The main menu now shows your selected surfer leaning on their upright surfboard in the left panel. **SELECT SURFER** sits beneath the model. Character, outfit, deck paint and earned prize-board changes appear in this preview immediately; the existing session selection and board shop remain on the right. The resting pose is menu-only, with subtle idle motion disabled by reduced-motion preferences.
 
 A separately supplied local body comparison includes ten reference presets and matching camera controls. User-supplied reference images and their review pages remain local; this repository contains the original game artwork only.
 
