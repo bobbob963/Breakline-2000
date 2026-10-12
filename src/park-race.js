@@ -1,6 +1,8 @@
 import { clamp } from './game.js';
 import { WaveParkGame,parkRideSurface,parkHeight,PARK_PIPES } from './park.js';
-import { RACE_COUNTDOWN,RACE_BOOST_MAX_SPEED,RACE_BOOST_MAX_DURATION } from './surf-race.js';
+import { RACE_COUNTDOWN } from './surf-race.js';
+import { RaceRider,drainRaceBoost,raceTrickInput } from './race-rider.js';
+const RaceParkRider=RaceRider(WaveParkGame);
 
 const FALLBACK_RIVAL=Object.freeze({id:'moxie',name:'MOXIE',pace:.36,target:1800});
 const WEST=[[-52,30],[-52,-10],[-48,-34],[-24,-56],[-2,-73],[24,-67],[35,-42],[35,-8],[35,30],[39,61],[22,78],[0,71],[0,55],[0,-9],[-25,-25],[-38,0],[-34,40],[-40,72],[-52,58]];
@@ -76,6 +78,14 @@ export function parkRaceOpponentInput(rider,course,pace=.45) {
     pump:!brake&&(rider.elapsed%5)<5*clamp(pace,0,1)};
 }
 
+export function parkRaceTrickInput(rider,course,pace=.45){
+  const gate=course.checkpoints[rider.nextCheckpoint],gateDistance=gate?Math.hypot(rider.x-gate.x,rider.z-gate.z):0;
+  const aheadSurface=parkRideSurface(rider.x+rider.vx*1.7,rider.z+rider.vz*1.7,rider.y);
+  const levelAhead=!aheadSurface.ramp&&Math.abs(aheadSurface.height-rider.surface.height)<.6;
+  const input=parkRaceOpponentInput(rider,course,pace);
+  return raceTrickInput(rider,input,{safePop:gateDistance>22&&!input.brake&&!input.left&&!input.right&&levelAhead&&!rider.surface.ramp&&!rider._raceGateMissed});
+}
+
 function prepareRacer(rider,course,offset=0) {
   const start=course.start;
   rider.rules={...rider.rules,endless:true};
@@ -105,7 +115,7 @@ function resolveMovement(rider,from,course,emit) {
   emit({type:'raceMiss',index:gate.index,distance:gate.distance});return null;
 }
 
-export class ParkRaceGame extends WaveParkGame {
+export class ParkRaceGame extends RaceParkRider {
   constructor(onEvent=()=>{},options={}) {
     super(()=>{});this.onEvent=onEvent;
     this.roundIndex=Number.isInteger(options.roundIndex)?options.roundIndex:0;this.roundCount=options.roundCount||5;
@@ -122,27 +132,8 @@ export class ParkRaceGame extends WaveParkGame {
   get lead(){return this.raceProgress-this.opponentRaceProgress;}
   get distanceRemaining(){return Math.max(0,this.course.length-this.raceProgress);}
   get nextWaypoint(){return this.course.checkpoints[this.nextCheckpoint]||null;}
-  get forwardSpeedBonus(){return this.boostTime>0?this.boostSpeed:0;}
   get popReady(){return this.countdownRemaining<=0&&super.popReady;}
   doCutback(direction=0){return this.countdownRemaining<=0&&super.doCutback(direction);}
-  clearRaceBoost(){this.boostTime=0;this.boostDuration=0;this.boostSpeed=0;this.boostLevel=null;this.boostLabel='';this._pendingRaceBoost=null;}
-  launch(...args){super.launch(...args);this._boostAwardedForAir=false;}
-  resolveLandingTrick() {
-    const landing=super.resolveLandingTrick();
-    if(landing.landed&&!this._boostAwardedForAir&&this.launchTricks>0&&this.airLaunchSource!=='flat'&&this.bailTime<=0) {
-      this._boostAwardedForAir=true;this._pendingRaceBoost={tricks:this.pendingTricks};
-    }
-    return landing;
-  }
-  awardRaceBoost({tricks}) {
-    const combo=tricks>1,speed=combo?Math.min(RACE_BOOST_MAX_SPEED,9+(tricks-2)*2):6,
-      duration=combo?Math.min(RACE_BOOST_MAX_DURATION,2+(tricks-2)*.5):1.4;
-    this.boostSpeed=speed;this.boostTime=this.boostDuration=duration;
-    this.boostLevel=combo?'combo':'trick';this.boostLabel=combo?'COMBO BOOST':'TRICK BOOST';this._pendingRaceBoost=null;
-    this.onEvent({type:'raceBoost',tricks,combo,speed,duration});
-  }
-  clearCombo(){super.clearCombo();this._pendingRaceBoost=null;}
-  bail(reason){if(this.phase==='running'&&this.bailTime<=0)this.clearRaceBoost();return super.bail(reason);}
   reset() {
     const callback=this.onEvent;this.onEvent=()=>{};
     try{super.reset();}finally{this.onEvent=callback;}
@@ -150,7 +141,7 @@ export class ParkRaceGame extends WaveParkGame {
     this.countdownRemaining=RACE_COUNTDOWN;this.result=null;this.resultReason='';this.rivalScore=0;this._finishing=false;
     this.finishTime=null;this.opponentFinishTime=null;this.time=0;this.clearRaceBoost();this._boostAwardedForAir=true;
     prepareRacer(this,this.course,-.8);
-    this.opponent=new WaveParkGame(()=>{});this.opponent.start();this.opponent.profile=this.rival.profile;
+    this.opponent=new RaceParkRider(event=>this.onEvent({...event,opponent:true}));this.opponent.start();this.opponent.profile=this.rival.profile;
     prepareRacer(this.opponent,this.course,.8);this.updateObjective();
     this.onEvent({type:'reset',tournament:true,race:true,roundIndex:this.roundIndex});
   }
@@ -168,12 +159,10 @@ export class ParkRaceGame extends WaveParkGame {
       if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}return;
     }
     const from={x:this.x,y:this.y,z:this.z},otherFrom={x:this.opponent.x,y:this.opponent.y,z:this.opponent.z},elapsed=this.elapsed;
-    this._pendingRaceBoost=null;super.stepPark(dt,input);
-    if(this.boostTime>0) {
-      this.boostTime=Math.max(0,this.boostTime-dt);
-      if(this.boostTime<1e-9){const pending=this._pendingRaceBoost;this.clearRaceBoost();this._pendingRaceBoost=pending;}
-    }
-    this.opponent.stepPark(dt,parkRaceOpponentInput(this.opponent,this.course,this.rival.pace));
+    this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;super.stepPark(dt,input);
+    drainRaceBoost(this,dt);
+    this.opponent.stepPark(dt,parkRaceTrickInput(this.opponent,this.course,this.rival.pace));
+    drainRaceBoost(this.opponent,dt);
     const crossing=resolveMovement(this,from,this.course,event=>this.onEvent({...event,opponent:false}));
     const otherCrossing=resolveMovement(this.opponent,otherFrom,this.course,event=>this.onEvent({...event,opponent:true}));
     this.raceProgress=parkRaceProgress(this,this.course);this.opponent.raceProgress=parkRaceProgress(this.opponent,this.course);
@@ -184,7 +173,7 @@ export class ParkRaceGame extends WaveParkGame {
       const tie=crossing!==null&&otherCrossing!==null&&Math.abs(crossing-otherCrossing)<1e-9;
       this.finish(crossing!==null&&(otherCrossing===null||crossing<otherCrossing-1e-9)?'win':'loss',tie?'PHOTO FINISH - RIVAL HOLDS RANK':undefined);
     }
-    if(this.phase==='running'&&this._pendingRaceBoost)this.awardRaceBoost(this._pendingRaceBoost);
+    if(this.phase==='running')for(const rider of[this,this.opponent])if(rider._pendingRaceBoost)rider.awardRaceBoost(rider._pendingRaceBoost);
   }
   finish(result='loss',reason) {
     if(this.phase!=='running'||this._finishing)return false;this._finishing=true;this.result=result==='win'?'win':'loss';
@@ -193,6 +182,7 @@ export class ParkRaceGame extends WaveParkGame {
     const times=[this.finishTime,this.opponentFinishTime].filter(Number.isFinite);
     if(times.length)this.elapsed=this.time=this.opponent.elapsed=Math.min(...times);
     this.clearCombo();this.clearRaceBoost();this.trick=null;this.cancelCutback();
+    this.opponent.clearCombo();this.opponent.clearRaceBoost();this.opponent.trick=null;
     this.phase='finished';this.opponent.phase='finished';
     this.onEvent({type:'finish',tournament:true,race:true,reason:this.resultReason,result:this.result,roundIndex:this.roundIndex,
       roundNumber:this.roundNumber,rival:this.rival,target:this.target,score:this.score,complete:this.complete,

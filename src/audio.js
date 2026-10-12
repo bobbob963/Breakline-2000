@@ -1,14 +1,19 @@
-// Two original instrumentals: mellow rides and a heavy breakbeat menu theme.
+// Three original instrumentals: mellow rides, heavy menus and driving races.
 // Riptide Radio: 64 bars / 108 BPM. Afterhours: 32 bars / 138 BPM.
+// Overdrive: 32 bars / 152 BPM, with an extra boost layer and final-lap percussion.
 // All sounds are generated locally. No recordings or borrowed melodies.
 export const SURF_TRACK = "Riptide Radio '99";
 export const MENU_TRACK = 'Afterhours / Yard Circuit';
+export const RACE_TRACK = 'Overdrive / Sun Circuit';
 export const MUSIC_BPM = 108;
 export const MENU_BPM = 138;
+export const RACE_BPM = 152;
 const STEP = 60 / MUSIC_BPM / 4;
 const TOTAL_STEPS = 64 * 16;
 const MENU_STEP = 60 / MENU_BPM / 4;
 const MENU_STEPS = 32 * 16;
+const RACE_STEP = 60 / RACE_BPM / 4;
+const RACE_STEPS = 32 * 16;
 const frequency = midi => 440 * 2 ** ((midi - 69) / 12);
 
 // An original E-minor riff cycle: four-bar entrance, full rhythm section,
@@ -31,6 +36,28 @@ const MENU_HOOK = [
   [[2,31,4],[8,27,2],[12,24,3]],
   [[0,24,6],[10,22,2],[14,24,2]],
 ];
+
+// Original D-minor power-chord/bass patterns. Short picked attacks leave space
+// around the snare, while the syncopated lead answers across the bar line.
+const RACE_ROOTS = [38,38,41,36,38,38,34,36,38,41,34,36,38,41,34,36,
+  34,34,38,36,34,36,38,45,38,41,34,36,38,41,34,36];
+const RACE_RIFFS = [
+  [[0,0,2],[3,0,1],[6,7,2],[8,0,2],[11,0,1],[14,3,2]],
+  [[0,0,2],[2,0,1],[5,0,2],[8,0,3],[12,7,1],[14,0,2]],
+  [[0,0,3],[4,0,1],[6,0,2],[9,7,2],[12,0,1],[15,0,1]],
+  [[0,0,2],[3,0,2],[7,0,1],[8,0,2],[11,2,2],[14,0,2]],
+];
+const RACE_HOOK = [
+  [[0,74,2],[3,72,1],[6,69,2],[10,65,2],[14,69,2]],
+  [[1,72,2],[5,69,2],[8,65,3],[13,69,2]],
+  [[0,70,3],[4,69,2],[8,65,2],[12,62,3]],
+  [[2,67,2],[6,72,2],[10,69,2],[14,72,2]],
+  [[0,74,3],[5,77,2],[8,76,2],[12,74,3]],
+  [[0,72,2],[4,69,2],[7,65,2],[11,69,2],[14,72,2]],
+  [[1,70,3],[6,74,2],[10,77,3]],
+  [[0,76,3],[6,72,2],[10,69,2],[14,72,2]],
+];
+const unit = value => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 
 function saturationCurve(drive = 3.4) {
   const curve = new Float32Array(2048), scale = Math.tanh(drive);
@@ -116,13 +143,14 @@ export class ArcadeAudio {
     this.trackName = SURF_TRACK; this.beat = 0; this.nextBeat = 0;
     this.active = false; this.voices = new Set(); this._token = 0; this._enabling = false;
     this._strings = new Map(); this._persistent = []; this._persistentSources = [];
-    this._sceneBeats = { ride: 0, menu: 0 }; this._voiceScenes = new WeakMap();
+    this._sceneBeats = { ride: 0, menu: 0, race: 0 }; this._voiceScenes = new WeakMap();
+    this.raceProgress = 0; this.raceBoost = 0;
   }
 
-  _build() {
+  _build(context = null) {
     const Audio = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!Audio) throw new Error('Web Audio unavailable');
-    const c = this.ctx = new Audio();
+    if (!context && !Audio) throw new Error('Web Audio unavailable');
+    const c = this.ctx = context || new Audio();
     this._strings.clear();
     this.master = c.createGain(); this.master.gain.value = 0;
     this.limiter = c.createDynamicsCompressor();
@@ -130,8 +158,9 @@ export class ArcadeAudio {
     this.limiter.ratio.value = 5; this.limiter.attack.value = .005; this.limiter.release.value = .25;
     this.music = c.createGain(); this.music.gain.value = this.scene === 'ride' ? .82 : 0;
     this.menuMusic = c.createGain(); this.menuMusic.gain.value = this.scene === 'menu' ? .88 : 0;
+    this.raceMusic = c.createGain(); this.raceMusic.gain.value = this.scene === 'race' ? .84 : 0;
     this.effects = c.createGain(); this.effects.gain.value = .64;
-    this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.effects.connect(this.limiter);
+    this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.raceMusic.connect(this.limiter); this.effects.connect(this.limiter);
     // A normally transparent final safety ceiling also catches the compressor's
     // attack transient. The master leaves further headroom below digital full scale.
     const ceiling = c.createWaveShaper(), ceilingCurve = new Float32Array(2048);
@@ -183,9 +212,10 @@ export class ArcadeAudio {
     const roomSend = c.createGain(); roomSend.gain.value = .28;
     const roomTone = c.createBiquadFilter(); roomTone.type = 'lowpass'; roomTone.frequency.value = 2600;
     this.guitarAmp.connect(roomSend); roomSend.connect(room); room.connect(roomTone); roomTone.connect(this.music);
-    this._persistent = [this.music, this.menuMusic, this.effects, this.limiter, ceiling, this.master, this.guitarAmp, this.slap,
+    this._persistent = [this.music, this.menuMusic, this.raceMusic, this.effects, this.limiter, ceiling, this.master, this.guitarAmp, this.slap,
       this.slapSend, this.slapFeedback, echoTone, chorus, chorusSend, chorusPan, lfo, depth, roomSend, room, roomTone];
     this._buildMenu(random);
+    this._buildRace();
 
     // Cache physical-model string samples once. Playback uses only buffer voices,
     // rather than recalculating a pluck every frame or downloading sample files.
@@ -195,6 +225,9 @@ export class ArcadeAudio {
       for (const [, offset] of MENU_RIFFS[bar % 4]) for (const interval of [0,7,12]) notes.add(root + offset + interval);
       if (bar >= 20 && bar < 24) for (const offset of [24,27,31]) notes.add(root + offset);
       if (bar >= 24) for (const [, offset] of MENU_HOOK[bar - 24]) notes.add(root + offset);
+    });
+    RACE_ROOTS.forEach((root, bar) => {
+      for (const [, offset] of RACE_RIFFS[bar % 4]) for (const interval of [0,7,12]) notes.add(root + offset + interval);
     });
     for (const midi of notes) this._string(midi);
   }
@@ -238,6 +271,46 @@ export class ArcadeAudio {
     drumGlue.ratio.value = 2.8; drumGlue.attack.value = .008; drumGlue.release.value = .11;
     this.menuDrums.connect(drumGlue); drumGlue.connect(this.menuMusic);
     this._persistent.push(this.menuBass,bassDrive,bassLevel,this.menuDrums,drumGlue);
+  }
+
+  _buildRace() {
+    const c = this.ctx;
+    // The race has its own instruments and bus. Opening this filter adds motion
+    // as the finish approaches without simply turning the entire track up.
+    this.raceTone = c.createBiquadFilter(); this.raceTone.type = 'lowpass';
+    this.raceTone.frequency.value = 4300; this.raceTone.Q.value = .4;
+    this.raceTone.connect(this.raceMusic);
+    const amp = (pan, drive) => {
+      const input = c.createGain(), high = c.createBiquadFilter(), shape = c.createWaveShaper();
+      const cabinet = c.createBiquadFilter(), level = c.createGain(), stereo = c.createStereoPanner();
+      high.type = 'highpass'; high.frequency.value = 130; high.Q.value = .5;
+      shape.curve = saturationCurve(drive); shape.oversample = '2x';
+      cabinet.type = 'lowpass'; cabinet.frequency.value = 3650; cabinet.Q.value = .55;
+      level.gain.value = .066; stereo.pan.value = pan;
+      input.connect(high); high.connect(shape); shape.connect(cabinet); cabinet.connect(level);
+      level.connect(stereo); stereo.connect(this.raceTone);
+      this._persistent.push(input, high, shape, cabinet, level, stereo); return input;
+    };
+    this.raceGuitars = [amp(-.7,4.1),amp(.7,3.8)];
+    this.raceBass = c.createBiquadFilter(); this.raceBass.type = 'lowpass'; this.raceBass.frequency.value = 1150;
+    const bassShape = c.createWaveShaper(), bassLevel = c.createGain();
+    bassShape.curve = saturationCurve(2.2); bassShape.oversample = '2x'; bassLevel.gain.value = .083;
+    this.raceBass.connect(bassShape); bassShape.connect(bassLevel); bassLevel.connect(this.raceMusic);
+    this.raceDrums = c.createBiquadFilter(); this.raceDrums.type = 'highshelf';
+    this.raceDrums.frequency.value = 6400; this.raceDrums.gain.value = -5;
+    const glue = c.createDynamicsCompressor(); glue.threshold.value = -19; glue.knee.value = 10;
+    glue.ratio.value = 3; glue.attack.value = .006; glue.release.value = .085;
+    this.raceDrums.connect(glue); glue.connect(this.raceMusic);
+    this.raceLead = c.createBiquadFilter(); this.raceLead.type = 'lowpass'; this.raceLead.frequency.value = 2900;
+    const leadLevel = c.createGain(), leadPan = c.createStereoPanner();
+    leadLevel.gain.value = .42; leadPan.pan.value = -.12;
+    this.raceLead.connect(leadLevel); leadLevel.connect(leadPan); leadPan.connect(this.raceTone);
+    // Tempo-locked dotted-eighth answer, with a dark single repeat.
+    const delay = c.createDelay(.5), delayLevel = c.createGain(), delayPan = c.createStereoPanner();
+    delay.delayTime.value = RACE_STEP * 3; delayLevel.gain.value = .21; delayPan.pan.value = .55;
+    leadLevel.connect(delay); delay.connect(delayLevel); delayLevel.connect(delayPan); delayPan.connect(this.raceTone);
+    this._persistent.push(this.raceTone,this.raceBass,bassShape,bassLevel,this.raceDrums,glue,
+      this.raceLead,leadLevel,leadPan,delay,delayLevel,delayPan);
   }
 
   _string(midi) {
@@ -366,19 +439,33 @@ export class ArcadeAudio {
   }
 
   setScene(scene = 'ride') {
-    const next = scene === 'menu' ? 'menu' : 'ride';
+    const next = scene === 'menu' || scene === 'race' ? scene : 'ride';
     if (next === this.scene) return;
     const previous = this.scene;
     this._sceneBeats[previous] = this.beat;
-    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : SURF_TRACK;
+    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : next === 'race' ? RACE_TRACK : SURF_TRACK;
+    this.setRaceState({progress:0,boost:0});
     // Start the retained phrase at its bar boundary; do not resume mid-chug.
     this.beat = Math.floor(this._sceneBeats[next] / 16) * 16;
     if (!this.ctx) return; // Merely selecting a menu never unlocks browser audio.
     const now = this.ctx.currentTime;
-    for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0]]) {
+    for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0],[this.raceMusic,next==='race'?.84:0]]) {
       bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(target,now,.13);
     }
     this._stopVoices(previous,.7); this.nextBeat = now + .045;
+  }
+
+  setRaceState({progress = 0, boost = 0} = {}) {
+    const previous = this.raceProgress * 2300 + this.raceBoost * 900;
+    this.raceProgress = unit(progress); this.raceBoost = unit(boost);
+    const openness = this.raceProgress * 2300 + this.raceBoost * 900;
+    if (this.ctx && this.raceTone && Math.abs(openness - previous) > .5) {
+      const now = this.ctx.currentTime;
+      // Replace the previous target so per-frame updates cannot accumulate a
+      // race-long automation history. This never changes the master volume.
+      this.raceTone.frequency.cancelScheduledValues(now);
+      this.raceTone.frequency.setTargetAtTime(4300 + openness, now, .15);
+    }
   }
 
   _menuPluck(midi, at, duration, volume, output, detune = 0) {
@@ -450,6 +537,76 @@ export class ArcadeAudio {
     }
   }
 
+  _raceChord(root, at, duration, weight = 1) {
+    for (let take = 0; take < 2; take++) for (const [index,interval] of [0,7,12].entries()) {
+      this._menuPluck(root + interval, at + take*.007 + index*.003, duration,
+        [.46,.30,.19][index]*weight, this.raceGuitars[take], take === 0 ? -6 : 5);
+    }
+  }
+
+  _raceKick(at, weight = 1) {
+    this._note(137,at,.19,'sine',.19*weight,this.raceDrums,45);
+    this._noiseHit(at,.024,.022*weight,2700,'lowpass',0,this.raceDrums,.002);
+  }
+
+  _raceSnare(at, weight = 1) {
+    this._noiseHit(at,.13,.092*weight,2050,'bandpass',-.10,this.raceDrums,.002);
+    this._noiseHit(at+.011,.072,.023*weight,5000,'highpass',.14,this.raceDrums,.002);
+    this._note(210,at,.095,'triangle',.038*weight,this.raceDrums,158);
+  }
+
+  _raceHookNote(midi, at, duration, weight = 1) {
+    const hz = frequency(midi);
+    this._note(hz,at,duration,'sawtooth',.037*weight,this.raceLead);
+    this._note(hz*2**(6/1200),at+.003,duration,'triangle',.055*weight,this.raceLead);
+  }
+
+  _scheduleRaceStep(step, at) {
+    const bar = Math.floor(step/16)%32, s = step%16, root = RACE_ROOTS[bar];
+    const launch = bar < 4, breakdown = bar >= 16 && bar < 20, build = bar >= 20 && bar < 24;
+    const hook = (bar >= 8 && bar < 16) || bar >= 24;
+    const boosted = this.raceBoost > .02, finalStretch = this.raceProgress >= .72;
+    const fill = bar%4===3, kickSteps = breakdown ? [0,10] : bar%2 ? [0,6,8,11] : [0,3,8,10];
+    if(kickSteps.includes(s))this._raceKick(at,s%8===0?1:.77);
+    if(s===(breakdown?8:4)||(!breakdown&&s===12))this._raceSnare(at+.003,launch?.84:1);
+    if(!breakdown&&[3,11].includes(s))this._raceSnare(at+.007,.19);
+    // Tight eighths plus very quiet sixteenth answers give forward motion while
+    // keeping the guitar transients and checkpoint sounds intelligible.
+    if(s%2===0)this._noiseHit(at,.042,s%4?.013:.021,7200,'highpass',s%4?.32:-.25,this.raceDrums,.002);
+    if(!breakdown&&(hook||boosted||finalStretch)&&s%4===3)
+      this._noiseHit(at,.033,.007,6200,'highpass',-.35,this.raceDrums,.002);
+    if(!breakdown&&s===14&&!fill)this._noiseHit(at,.12,.018,6400,'highpass',.35,this.raceDrums,.002);
+    if(s===0&&[0,8,24].includes(bar))this._noiseHit(at,.43,.029,5100,'bandpass',.28,this.raceDrums,.003);
+    if(fill&&s>=13) {
+      if(s!==14)this._raceSnare(at,.34+(s-13)*.12);
+      if(s===14)this._note(132,at,.13,'sine',.063,this.raceDrums,91);
+    }
+    if(build&&bar>=22&&s%2===0)this._raceSnare(at,.16+(s/16)*.16);
+    if(finalStretch&&!breakdown&&s%4===2)this._note(s%8===2?360:280,at,.045,'triangle',.016,this.raceDrums);
+
+    const riff = breakdown ? [[0,0,6],[8,0,4]] : RACE_RIFFS[bar%4];
+    for(const [position,offset,length] of riff) {
+      if(position!==s)continue;
+      this._raceChord(root+offset,at,length*RACE_STEP*(breakdown?.93:.77),launch?.82:1);
+      const bass = frequency(root-12+(offset===7?7:0)), duration = Math.max(.065,length*RACE_STEP*.86);
+      // A short gap before each kick lets the low end breathe; no continual
+      // sub-bass wall or gain jump is needed when the boost layer arrives.
+      this._note(bass,at+.012,duration,'triangle',.51,this.raceBass);
+      this._note(bass*2,at+.015,duration*.84,'sawtooth',.11,this.raceBass);
+      if(s===0)this._note(bass,at,.22,'sine',.031,this.raceMusic);
+    }
+    const phrase = RACE_HOOK[bar%8];
+    for(const [position,midi,length] of phrase) {
+      if(position!==s)continue;
+      if(hook)this._raceHookNote(midi,at+.008,length*RACE_STEP*.88,1);
+      else if(build||(!launch&&!breakdown&&position%2===0))
+        this._raceHookNote(midi-12,at+.008,length*RACE_STEP*.74,.58);
+      // Boosts answer the hook one octave up with short notes on the grid.
+      // They are earned in gameplay; the mix only follows the supplied state.
+      if(boosted)this._raceHookNote(midi+12,at+RACE_STEP*.5,Math.min(.14,length*RACE_STEP*.6),.34);
+    }
+  }
+
   _scheduleStep(step, at) {
     const bar = Math.floor(step / 16) % 64, s = step % 16;
     const chord = CHORDS[PROGRESSION[bar]], park = this.mode === 'park' || this.mode === 'wavepark';
@@ -507,6 +664,8 @@ export class ArcadeAudio {
     if (type === 'bank' || type === 'gate') { this.tone(523.25, .30, 'sine', .040); this.tone(783.99, .36, 'sine', .027); }
     if (type === 'bail') this.tone(196, .30, 'triangle', .030, 98);
     if (type === 'finish') { this.tone(392, .7, 'sine', .040); this.tone(493.88, .6, 'sine', .025); }
+    if (type === 'raceBoost') { this.tone(220,.22,'triangle',.025,660); this.tone(440,.28,'sine',.024,880); }
+    if (type === 'raceGo') { this.tone(392,.19,'triangle',.035); this.tone(784,.32,'sine',.028); }
   }
 
   update(active, mode = this.mode) {
@@ -519,9 +678,12 @@ export class ArcadeAudio {
     }
     if (!this.active) return;
     if (this.nextBeat < now - .2) this.nextBeat = now + .04;
-    const menu = this.scene === 'menu', total = menu ? MENU_STEPS : TOTAL_STEPS, interval = menu ? MENU_STEP : STEP;
+    const menu = this.scene === 'menu', race = this.scene === 'race';
+    const total = menu ? MENU_STEPS : race ? RACE_STEPS : TOTAL_STEPS;
+    const interval = menu ? MENU_STEP : race ? RACE_STEP : STEP;
     while (this.nextBeat < now + .18) {
       if(menu)this._scheduleMenuStep(this.beat % total,this.nextBeat);
+      else if(race)this._scheduleRaceStep(this.beat % total,this.nextBeat);
       else this._scheduleStep(this.beat % total,this.nextBeat);
       this.beat = (this.beat + 1) % total; this.nextBeat += interval;
     }

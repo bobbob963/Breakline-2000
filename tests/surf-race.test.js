@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { SurfGame, waveHeight } from '../src/game.js';
 import { createTournamentGame,TOURNAMENT_RIVALS } from '../src/tournament.js';
 import { ParkRaceGame } from '../src/park-race.js';
-import { SurfRaceGame,createRaceCourse,raceOpponentInput,RACE_COUNTDOWN,surfRaceRingY } from '../src/surf-race.js';
+import { SurfRaceGame,createRaceCourse,raceOpponentInput,surfRaceTrickInput,RACE_COUNTDOWN,surfRaceRingY } from '../src/surf-race.js';
 
 function fixture(roundIndex=1){
   const events=[],game=createTournamentGame(event=>events.push(event),{version:1,completedRounds:roundIndex});
@@ -141,10 +141,10 @@ test('each visible opponent naturally clears every gate and wins against a slowe
   }
 });
 
-test('a clean navigated route can actually beat both AI surfers through normal held controls',()=>{
+test('a clean navigated route with ordinary charge and trick controls beats both AI surfers',()=>{
   for(const round of[1,3]){
     const {game}=fixture(round);
-    naturalFinish(game,rider=>raceOpponentInput(rider,rider.course,1));
+    naturalFinish(game,rider=>surfRaceTrickInput(rider,rider.course,1));
     assert.equal(game.result,'win');assert.equal(game.nextCheckpoint,game.course.checkpoints.length);
     assert.equal(game.raceMisses,0);assert.equal(game.getProgress().completedRounds,round+1);
     const next=createTournamentGame(()=>{},game.getProgress());
@@ -153,7 +153,7 @@ test('a clean navigated route can actually beat both AI surfers through normal h
 });
 
 test('retry resets both surfers and countdown on the same rung while preserving a earned unlock',()=>{
-  const {game}=fixture();naturalFinish(game,rider=>raceOpponentInput(rider,rider.course,1));
+  const {game}=fixture();naturalFinish(game,rider=>surfRaceTrickInput(rider,rider.course,1));
   const progress=game.getProgress();progress.completedRounds=5;
   assert.equal(game.retry(),true);assert.equal(game.roundIndex,1);assert.equal(game.rival.name,'RIVET');
   assert.equal(game.result,null);assert.equal(game.countdownRemaining,RACE_COUNTDOWN);assert.equal(game.phase,'running');

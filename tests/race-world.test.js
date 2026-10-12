@@ -64,6 +64,22 @@ test('hollow sun rings match the required checkpoint aperture and actual finish 
   assert.equal(first.visible, false); assert.equal(finish.visible, true);
 }));
 
+test('rival boost feedback follows earned state and clears on expiry, bail and race finish', () => withWorld(world => {
+  const game=raceState();Object.assign(game.opponent,{speed:24,distance:5});world.update(game,1);
+  const trail=world.group.getObjectByName('race-opponent-boost-0'),name=world.group.getObjectByName('race-opponent-name'),action=world.group.getObjectByName('race-opponent-action');
+  assert.equal(trail.visible,false);assert.equal(action.visible,false);
+  Object.assign(game.opponent,{boostTime:2,boostDuration:2.6,boostLevel:'combo',boostLabel:'COMBO BOOST',boostSpeed:9});
+  world.update(game,2);
+  assert.equal(trail.visible,true);assert.equal(name.userData.text,'RIVET • BOOST');assert.equal(action.userData.text,'COMBO BOOST');
+  assert.ok(trail.position.z> -game.opponent.distance,'The boost trail stays behind the actual rival');
+  Object.assign(game.opponent,{airborne:true,trick:{name:'INDY GRAB',duration:.68,age:.3,grab:1}});world.update(game,2.1);
+  assert.equal(action.userData.text,'INDY GRAB','A real held trick remains visible even during a previous earned burst');
+  assert.equal(trail.visible,true);
+  game.opponent.bailTime=1;world.update(game,2.2);assert.equal(trail.visible,false);assert.equal(action.visible,false);
+  Object.assign(game.opponent,{bailTime:0,boostTime:0,trick:null});world.update(game,3);assert.equal(trail.visible,false);assert.equal(name.userData.text,'RIVET');
+  game.opponent.boostTime=1;game.phase='finished';world.update(game,4);assert.equal(trail.visible,false);assert.equal(action.visible,false);
+}));
+
 test('factory rival uses its own physical position, heading, slope and pipe orientation', () => withWorld(world => {
   const game=new WaveParkGame(),opponent=new WaveParkGame();game.start();opponent.start();
   Object.assign(game,{isRace:true,opponent,rival:{id:'moxie',name:'MOXIE'},nextCheckpoint:0,

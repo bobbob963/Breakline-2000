@@ -47,7 +47,7 @@
 .race-hud{width:248px;border-color:#5ebdae}
 .race-hud>strong{color:#a6e0d5}
 .race-hud>span{line-height:1.8}
-body[data-session="tournament"] .surf-condition{top:270px;right:25px;width:248px;padding:8px 13px;background:linear-gradient(90deg,transparent,#101717b8)}
+body[data-session="tournament"] .surf-condition{top:310px;right:25px;width:248px;padding:8px 13px;background:linear-gradient(90deg,transparent,#101717b8)}
 body[data-session="tournament"] .surf-condition>b{display:none}
 .race-progress{margin-top:11px;padding-top:8px;border-top:1px solid #b9bfa740}
 .race-progress>div{display:flex;align-items:center;gap:8px;margin:6px 0}
@@ -67,3 +67,10 @@ body[data-session="tournament"] .surf-condition>b{display:none}
 .race-boost.active{border-color:#90ead1;color:#b5ffe7;background:linear-gradient(90deg,#144b49e8,transparent)}
 .race-boost.combo-boost{border-color:#f3d664;color:#ffe18d;background:linear-gradient(90deg,#5b4325ed,transparent)}
 .race-boost.combo-boost i{background:#f3d664}
+.rival-action{margin-top:9px;font:bold 8px/1.6 var(--mono);color:#9caaa2}
+.rival-action>span{display:block;min-height:13px}
+.rival-action>i{display:block;height:3px;margin-top:4px;background:#59787330;overflow:hidden}
+.rival-action b{display:block;height:100%;width:0;background:#7ee4ce}
+.rival-action.boosting{color:#afffe7}
+.rival-action.combo-boost{color:#ffe18d}
+.rival-action.combo-boost b{background:#f3d664}

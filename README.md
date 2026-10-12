@@ -1,6 +1,6 @@
 # BREAKLINE ’99 — Version 8.0
 
-**Published update — 12 October 2026.** Includes the rebuilt bodies with restored painted faces, improved Waterworks handling, five custom combo animations, The Hit List with five physical races, compulsory sun rings and landed trick boosts across Surf Session and Waterworks, and the third-wipeout WASTED sequence. Open this repository through the linked StackBlitz project to play the latest source.
+**Published update — 12 October 2026.** Includes the rebuilt bodies with restored painted faces, improved Waterworks handling, five custom combo animations, The Hit List with five physical races, compulsory sun rings, rival aerial combos, easier landed trick boosts, a dynamic 152 BPM race soundtrack, and the third-wipeout WASTED sequence. Open this repository through the linked StackBlitz project to play the latest source.
 
 A separately supplied local body comparison includes ten reference presets and matching camera controls. User-supplied reference images and their review pages remain local; this repository contains the original game artwork only.
 
@@ -8,7 +8,7 @@ Five custom combo animations work in every mode. Complete the first trick, then 
 
 **Modes and presentation:** Storm Rider's third wipeout now freezes the fallen rider in a desaturated, slowly zooming scene beneath a red **WASTED** title. The original in-game sequence lasts 3.4 seconds before results; skip becomes available after 0.8 seconds. Input is isolated until it ends, and reduced-motion preferences disable the zoom. This is an original GTA-inspired presentation, not imported GTA footage or audio. `event-lab.html` runs a real three-wipeout Storm replay for inspection.
 
-**The Hit List** is five head-to-head races: MOXIE on the west Waterworks circuit, RIVET over 960 metres of surf, UNDERTOW on two laps of the east Waterworks circuit, STATIC over 1,280 metres of surf, and KINGTIDE on two laps through both factory pipes. Waterworks routes include the main spine ramp for natural trick airtime. Every opponent is a visible rider using the same movement and collisions as the player, with fixed pacing and no catch-up speed. After the three-second countdown, hold **W** to pump and steer with **A/D**. Pass through every gold sun ring in order and finish first. Flying beside, over or backwards through a ring does not count. A missed ocean ring resets that rider just before it; in Waterworks, turn back and approach the missed ring from the correct side. The factory minimap shows your route, next ring and rival. No race has a time limit. Pausing freezes both riders; retry resets both. Completed ranks save automatically and existing unlocks are retained. **Enter / NEXT RIVAL** advances after a win; **R / RESTART** retries the same rival. A new ladder resets tournament progress only.
+**The Hit List** is five head-to-head races: MOXIE on the west Waterworks circuit, RIVET over 960 metres of surf, UNDERTOW on two laps of the east Waterworks circuit, STATIC over 1,280 metres of surf, and KINGTIDE on two laps through both factory pipes. Waterworks routes include the main spine ramp for natural trick airtime. Every opponent is a visible rider using the same movement, collisions and boost rules as the player, with fixed pacing and no catch-up speed. Rivals charge pops, perform spins and grabs, then earn a boost only after a clean landing. Watch their current trick and boost meter beside their name; a gold trail marks their active burst. After the three-second countdown, hold **W** to pump and steer with **A/D**. Pass through every gold sun ring in order and finish first. Flying beside, over or backwards through a ring does not count. A missed ocean ring resets that rider just before it; in Waterworks, turn back and approach the missed ring from the correct side. The factory minimap shows your route, next ring and rival. No race has a time limit. Pausing freezes both riders; retry resets both. Completed ranks save automatically and existing unlocks are retained. **Enter / NEXT RIVAL** advances after a win; **R / RESTART** retries the same rival. A new ladder resets tournament progress only.
 
 With the development server running, open `/combo-lab.html` to replay all five combinations. Each replay pauses during the custom move and can continue through landing; the ordinary finishing-trick option shows the default animation for comparison. An offline Combo-Replays.html is supplied separately.
 
@@ -30,7 +30,7 @@ Waterworks ramps now carry the rider to the lip before launching. Charged pops p
 
 Hold **Shift + A/D** for a sharp grounded cutback in Waterworks. The rider leans into the turn with a fan of spray; near the top of a quarterpipe, Shift still takes priority for coping. The bottom corner button groups have been removed. **Restart**, **Pixels / Video**, and **Main Menu** are available from Pause.
 
-The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; riding keeps the mellow surf score.
+The rectangular surfwear graphic has tall black lettering over faded red, blue and yellow. It is original artwork inspired by the supplied 1990s print reference. The menu has a separate heavy guitar/breakbeat soundtrack; freestyle keeps the mellow surf score. Hit List races use the original 152 BPM **Overdrive / Sun Circuit** track: driving bass, picked guitar, punchier breakbeats, a synth hook and builds. Boosts add an octave hook and the final stretch opens up the percussion.
 
 The original oval **BREAKLINE ’99 / EXTREME SURFING** badge returns in the surfer/board workshop, pause and results screens, and on the north and south Waterworks walls. The home page keeps its rectangular surfwear graphic.
 
@@ -38,7 +38,7 @@ A full-screen retro loading screen uses the oval badge, blue industrial grain, y
 
 Grabs now have a sustained hold. The hand follows a point on the actual board edge after the board and rider transforms, rather than reaching a fixed approximation for just one instant. The model keeps its limb lengths while crouching and gripping.
 
-Every mode now requires **1.4 seconds of grounded recovery after landing before another manual pop**. In ocean modes, earn trick airtime by reaching the wave lip at speed or completing a **Shift + A/D cutback**. Flat-water hops and cutbacks alone give no points. The HUD shows pop recovery and the brief cutback-launch window.
+The four freestyle/survival modes require **1.4 seconds of grounded recovery after landing before another manual pop**; Hit List races use **1 second** and give ordinary pops enough height for basic tricks. In non-race ocean modes, earn trick airtime by reaching the wave lip at speed or completing a **Shift + A/D cutback**. Flat-water hops and cutbacks alone give no points. The HUD shows pop recovery and the brief cutback-launch window.
 
 ## Play in StackBlitz
 
@@ -46,7 +46,7 @@ Every mode now requires **1.4 seconds of grounded recovery after landing before 
 
 Use StackBlitz to run this source project without installing development tools. A standalone offline Play-Breakline-99.html is available in the separately supplied local download.
 
-**Latest online source:** the GitHub main branch now includes the five-race Hit List with coast and Waterworks rivals, compulsory sun rings and trick boosts. Reopen the StackBlitz import link to load current source. An older saved StackBlitz fork does not update automatically.
+**Latest online source:** the GitHub main branch now includes the five-race Hit List with coast and Waterworks rivals, compulsory sun rings, rival combo boosts, easier player boosts and the energetic race soundtrack. Reopen the StackBlitz import link to load current source. An older saved StackBlitz fork does not update automatically.
 
 **Updating a saved fork:** replace its source with the current contents of this repository, including all src/ and tests/ files and all replay HTML entry points. Preserve package.json, index.html and the lockfile at the project root.
 
@@ -110,7 +110,7 @@ The selected character, outfit, board, mode, sound preference and personal bests
 | A / D or Left / Right | Carve across the wave; steer left / right in the park. |
 | W / Up | Pump for speed. |
 | S / Down | Slow down. |
-| Space | Hold to charge, then release to pop. In Waterworks, crouching also builds speed like W. Every mode has 1.4 seconds of grounded pop recovery after landing. In ocean modes, use the lip or a completed cutback for trick airtime; flat hops are unscored. |
+| Space | Hold to charge, then release to pop. In Waterworks, crouching also builds speed like W. Hit List has 1 second of grounded pop recovery and basic trick airtime from ordinary pops. Other modes retain 1.4 seconds; in non-race ocean modes, use the lip or a completed cutback for trick airtime, as flat hops are unscored. |
 | E + A / D | Hold E inside a factory pipe; steer around the wall for a full loop. Release E to return to its floor. |
 | E at a quarterpipe lip | Hold while approaching to grab the board and turn back into the ramp. |
 | Shift at a quarterpipe lip | Hold while approaching to enter a coping grind without jumping. Release to drop in; Space pops out. |
@@ -135,7 +135,7 @@ The **? Controls** panel pauses an active session. This version focuses on keybo
 ## Build a combo
 
 - In an ocean mode, pump toward the pale crest band on the wave meter until the HUD says **LIP LAUNCH READY**, or complete a **Shift + A/D cutback**. Hold Space, release while that launch is ready, press K, finish the flip, land and press Enter. Flat-water hops cannot start aerial tricks.
-- Every manual pop starts a **1.4-second recovery** that counts down only on the ground. It stays full while airborne. The pop meter shows when you can jump again. Natural ramp launches still carry you into the air and restart recovery.
+- Every manual pop starts a **1.4-second recovery** (**1 second in Hit List races**) that counts down only on the ground. It stays full while airborne. The pop meter shows when you can jump again. Natural ramp launches still carry you into the air and restart recovery.
 - Landings tolerate ordinary steering drift. Use S to settle a rough approach; only a severe sideways slide causes a landing wipeout. An almost-finished trick gets a short automatic recovery window in every mode.
 - Shift + A/D performs a short cutback with a fan of spray. C is an alternative. In ocean modes, finish it to earn a **2.2-second powered-pop window**; charge and release Space during that window for airtime. In Waterworks it turns the board sharply, with no extra pop boost. The cutback itself gives no score or SPECIAL charge. It has its own cooldown and cannot start during a jump or wipeout. A held Shift/turn combination waits until you are back on the water and ready, then fires once.
 - B performs the **Tweaked Grab**, worth 650 base points. It replaces the old spinning barrel-roll move. In Storm Rider, a barrel is now the **wave curling overhead**: line up with its open mouth and ride through for a barrel bonus.
@@ -196,7 +196,7 @@ After installation, the game has no network dependency: models, textures, music 
 | `src/character-head.js` | Restored earlier painted face, head, hair and hats, isolated from body construction. |
 | `src/character-textures.js`, `src/rider-atlas.js` | Original embedded photographic atlas and texture sampling. |
 | `src/character-spec.js` | Independent reference-based ratio measurement and audits. |
-| `src/audio.js` | Original heavy menu track, mellow ride instrumental and effects. |
+| `src/audio.js` | Original heavy menu track, mellow freestyle instrumental, dynamic race soundtrack and effects. |
 | `src/session-modes.js` | Surf, Rush and Storm timing, hazards, currents and landing rules. |
 | `src/rider-pose.js` | Shared trick choreography, sustained grab envelope and the banked Tweaked Grab pose. |
 | `src/brand-art.js`, `src/summer99.css` | Embedded original rectangular logo and four-mode desktop menu. |
@@ -216,6 +216,6 @@ The generated logo is embedded in `src/brand-art.js`; the exact generation promp
 
 Original project source is MIT licensed; see `LICENSE`. Dependencies retain their own licences. This independent project is not affiliated with Tony Hawk, Activision or Neversoft and uses no proprietary characters, logos, levels, recordings or artwork in gameplay. The separate model and body review pages contain user-supplied reference pictures for comparison; those pictures retain their owners' rights.
 
-In all five Hit List races, land a completed aerial trick for an automatic **TRICK BOOST**: +6 m/s for 1.4 seconds. Two tricks in an unbanked combo give **COMBO BOOST**: +9 m/s for 2 seconds; longer combos build up to +13 m/s for 3 seconds. The boost meter appears above your speed. Use a Waterworks ramp, or a surf cutback/powered-pop or wave-lip launch, then complete and land a trick; empty flat hops and banking cannot refresh the boost. Braking suppresses the burst while its timer keeps running, pausing freezes it, and a wipeout or missed checkpoint cancels it. Other modes keep their existing speed rules.
+In all five Hit List races, land a completed aerial trick for an automatic **TRICK BOOST**: +6 m/s for 2 seconds. Two tricks in an unbanked combo give **COMBO BOOST**: +9 m/s for 2.6 seconds; longer combos build up to +13 m/s for 3.6 seconds. Hold **Space** briefly, release, press **J**, and land for a simple boost. Charge longer and follow the completed J spin with **L** for a stronger combo boost. Ramps, wave lips and cutbacks still provide bigger airs. Race pop recovery is 1 second on the ground; empty hops and banking cannot refresh a boost. The boost meter appears above your speed. Both player and rivals earn the same rewards and obey the same cooldowns. Braking suppresses the burst while its timer keeps running, pausing freezes it, and a wipeout or missed checkpoint cancels it. Other modes keep their existing speed rules.
 
-For a development-only race review, open `/race-lab.html`. It can run any of the five rivals through the real controls without reading or changing your saved Hit List progress. The single-trick and combo demos use a cutback, charged pop and trick inputs, then pause on the landing so the boost can be inspected.
+For a development-only race review, open `/race-lab.html`. It can run any of the five rivals through the real controls without reading or changing your saved Hit List progress. The single-trick and combo demos pause on the landing so the boost can be inspected. Watch rival grab and combo-boost replays to inspect the opponent performing real moves and earning its burst, using ordinary game controls.

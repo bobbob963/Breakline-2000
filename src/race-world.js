@@ -25,15 +25,24 @@ function label(text, accent = '#eab351', width = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = 64;
   const context = canvas.getContext('2d');
-  context.fillStyle = '#141e28'; context.fillRect(0, 0, width, 64);
-  context.fillStyle = accent; context.fillRect(0, 0, width, 5); context.fillRect(0, 59, width, 5);
-  context.font = 'italic 900 33px Arial'; context.textAlign = 'center'; context.textBaseline = 'middle';
-  context.fillStyle = '#f2ead8'; context.fillText(text, width / 2, 34, width - 18);
+  function paint(value, colour) {
+    context.fillStyle = '#141e28'; context.fillRect(0, 0, width, 64);
+    context.fillStyle = colour; context.fillRect(0, 0, width, 5); context.fillRect(0, 59, width, 5);
+    context.font = 'italic 900 33px Arial'; context.textAlign = 'center'; context.textBaseline = 'middle';
+    context.fillStyle = '#f2ead8'; context.fillText(value, width / 2, 34, width - 18);
+  }
+  paint(text, accent);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace; texture.magFilter = texture.minFilter = THREE.NearestFilter;
   texture.generateMipmaps = false;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
   sprite.scale.set(3.6, .9, 1);
+  sprite.userData.setText = (value, colour = accent) => {
+    if (sprite.userData.text === value && sprite.userData.accent === colour) return;
+    sprite.userData.text = value; sprite.userData.accent = colour;
+    paint(value, colour); texture.needsUpdate = true;
+  };
+  sprite.userData.text = text; sprite.userData.accent = accent;
   return sprite;
 }
 
@@ -110,24 +119,31 @@ function makeGate(checkpoint, finish = false) {
 
 export function createRaceWorld(playerProfile) {
   const group = new THREE.Group(); group.name = 'hit-list-race'; group.visible = false;
-  let player = playerProfile, race = null, surfer = null, name = null, shadow = null, wake = [], gates = [];
+  let player = playerProfile, race = null, surfer = null, name = null, action = null, shadow = null, wake = [], boostTrail = [], gates = [];
 
   function clear() {
     if (surfer) { group.remove(surfer.rig); disposeSurfer(surfer); }
     disposeGroup(group);
-    surfer = null; name = null; shadow = null; wake = []; gates = []; race = null; group.visible = false;
+    surfer = null; name = null; action = null; shadow = null; wake = []; boostTrail = []; gates = []; race = null; group.visible = false;
   }
 
   function prepare(game) {
     clear(); race = game;
     surfer = createSurfer(rivalProfile(game.rival, player)); surfer.rig.name = 'race-opponent'; group.add(surfer.rig);
     name = label(game.rival?.name || 'RIVAL'); name.name = 'race-opponent-name'; name.scale.set(1.35,.3375,1); group.add(name);
+    action = label('', '#ffc95c'); action.name = 'race-opponent-action'; action.scale.set(1.7,.34,1); group.add(action);
     shadow = addMesh(group, new THREE.CircleGeometry(.72, 12), new THREE.MeshBasicMaterial({ color: 0x153844, transparent: true, opacity: .32, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2;
     const foam = new THREE.MeshBasicMaterial({ color: 0xeaeedc, transparent: true, opacity: .72, depthWrite: false, side: THREE.DoubleSide });
     const geometry = new THREE.PlaneGeometry(.16, .65);
     for (let i = 0; i < 18; i++) {
       const spray = addMesh(group, geometry, foam); spray.rotation.x = -Math.PI / 2; wake.push(spray);
+    }
+    const streakGeometry = new THREE.PlaneGeometry(.095, 1.2);
+    const streakMaterial = new THREE.MeshBasicMaterial({color:0xffcb55, transparent:true, opacity:.78, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending});
+    for (let i = 0; i < 12; i++) {
+      const streak = addMesh(group, streakGeometry, streakMaterial); streak.name = `race-opponent-boost-${i}`;
+      streak.rotation.x = -Math.PI / 2; boostTrail.push(streak);
     }
     gates = game.course.checkpoints.map(makeSunRing);
     if (game.mode !== 'park') gates.push(makeGate({ index: game.course.checkpoints.length, distance: game.course.length, x: .5 }, true));
@@ -148,6 +164,7 @@ export function createRaceWorld(playerProfile) {
     const y = park ? opponent.y : alignRiderToOcean(x,opponent.y,z,time,oceanZ);
     const lean = park ? -(opponent.steering || 0) * .16 : -(opponent.vx || 0) * .024;
     const cutback = opponent.cutback || 0, turn = (opponent.cutbackDirection || 1) * cutback;
+    const boosting = opponent.boostTime > 0 && !bail && game.phase !== 'finished';
     const pose = sampleRiderTrick(opponent, { air });
     const rideUp = opponent.pipeRide ? opponent.rideUp : {x:0,y:1,z:0};
     surfer.rig.position.set(x + rideUp.x * .055, y + rideUp.y * .055, z + rideUp.z * .055); surfer.rig.rotation.order = 'YXZ';
@@ -167,6 +184,11 @@ export function createRaceWorld(playerProfile) {
     shadow.position.set(x, surface + .06, z); shadow.visible = !bail && !opponent.pipeRide;
     shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - surface) * .07) : 1);
     name.position.set(x, y + 2.85, z); name.visible = park ? Math.hypot(game.x - x, game.z - z) < 95 : Math.abs(game.distance - opponent.distance) < 95;
+    name.userData.setText(`${game.rival?.name || 'RIVAL'}${boosting ? ' • BOOST' : ''}`, boosting ? '#ffca50' : '#eab351');
+    const actionText = opponent.trick?.name || (boosting ? opponent.boostLabel || 'TRICK BOOST' : '');
+    action.userData.setText(actionText, boosting ? '#ffca50' : '#9cdbdf');
+    action.position.set(x, y + 2.42, z); action.visible = name.visible && !!actionText && !bail && game.phase !== 'finished';
+    action.material.opacity = boosting ? .84 + Math.sin(time * 17) * .16 : 1;
     for (let i = 0; i < wake.length; i++) {
       const phase = ((time * 2.8 + i / wake.length) % 1), spread = phase * (cutback > .2 ? 2.7 : .72);
       const behind = .8 + phase * 4.5, side = (i % 2 ? 1 : -1) * spread;
@@ -176,6 +198,16 @@ export function createRaceWorld(playerProfile) {
       wake[i].position.set(sx, ground + .08 + Math.sin(phase * Math.PI) * cutback * .65, sz);
       wake[i].rotation.z = -heading;
       wake[i].scale.setScalar((1 - phase) * 1.4 + .2); wake[i].visible = !air && !bail && !opponent.pipeRide && !opponent.grinding && opponent.speed > 2;
+    }
+    for (let i = 0; i < boostTrail.length; i++) {
+      const streak = boostTrail[i], phase = (time * 3.7 + i / boostTrail.length) % 1;
+      const side = (i % 2 ? 1 : -1) * (.34 + phase * .8), behind = .85 + phase * 6;
+      const sx = x + Math.cos(heading) * side + Math.sin(heading) * behind;
+      const sz = z - Math.sin(heading) * side + Math.cos(heading) * behind;
+      const ground = park ? parkHeight(sx,sz) : renderedWaveHeight(sx,sz,time,oceanZ);
+      streak.position.set(sx, air ? y + .1 : ground + .12, sz); streak.rotation.z = -heading;
+      streak.scale.set(1 - phase * .5, .5 + phase * 1.7, 1);
+      streak.visible = boosting && !opponent.pipeRide && opponent.speed > 2;
     }
     for (const gate of gates) {
       const checkpoint = gate.checkpoint, gz = park ? checkpoint.z : -checkpoint.distance;

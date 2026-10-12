@@ -29,7 +29,7 @@ function air(game,tricks=['spin'],hz=120,direction=game.x>0?-1:1) {
   until(game,()=>!game.airborne,{},3,hz);
   assert.equal(game.bailTime,0,'clean landing');
 }
-const boosts=events=>events.filter(event=>event.type==='raceBoost');
+const boosts=events=>events.filter(event=>event.type==='raceBoost'&&!event.opponent);
 const cleanLine=game=>raceOpponentInput(game,game.course,0);
 class UnboostedRace extends SurfRaceGame {get forwardSpeedBonus(){return 0;}}
 
@@ -40,9 +40,9 @@ test('a legal cutback trick awards only on landing and earns real forward distan
   until(game,()=>!game.trick);assert.equal(game.airborne,true);assert.equal(boosts(events).length,0);
   until(game,()=>!game.airborne);air(control);
   assert.equal(game.wipeouts,0);assert.equal(boosts(events).length,1);
-  assert.equal(game.boostLevel,'trick');assert.equal(game.boostSpeed,6);assert.equal(game.boostDuration,1.4);
+  assert.equal(game.boostLevel,'trick');assert.equal(game.boostSpeed,6);assert.equal(game.boostDuration,2);
   assert.equal(events.at(-1).type,'raceBoost');
-  assert.ok(events.findIndex(event=>event.type==='land')<events.findIndex(event=>event.type==='raceBoost'));
+  assert.ok(events.findIndex(event=>event.type==='land')<events.findIndex(event=>event.type==='raceBoost'&&!event.opponent));
   assert.equal(game.distance,control.distance);
   advance(game,2,cleanLine,120);advance(control,2,cleanLine,120);
   assert.ok(game.distance-control.distance>7,'a single landed trick adds several metres');
@@ -60,10 +60,10 @@ test('two genuinely completed tricks land a stronger longer combo boost than one
   assert.ok(combo.game.distance-control.game.distance>12,'combo gain is worth linking tricks');
 });
 
-test('empty and flat hops never refresh boost or reuse an unbanked trick',()=>{
-  const {game,events}=fixture();assert.equal(game.jump(),true);assert.equal(game.airLaunchSource,'flat');
-  assert.equal(game.doTrick('spin'),false);until(game,()=>!game.airborne);assert.equal(boosts(events).length,0);
-  until(game,()=>game.popReady);air(game,['spin']);assert.equal(boosts(events).length,1);
+test('empty hops never refresh boost or reuse an unbanked trick',()=>{
+  const empty=fixture();assert.equal(empty.game.jump(),true);assert.equal(empty.game.airLaunchSource,'race-pop');
+  until(empty.game,()=>!empty.game.airborne);assert.equal(boosts(empty.events).length,0);
+  const {game,events}=fixture();air(game,['spin']);assert.equal(boosts(events).length,1);
   assert.equal(game.pendingTricks,1,'the old trick remains unbanked');
   until(game,()=>game.popReady);assert.equal(game.jump(),true);until(game,()=>!game.airborne);
   assert.equal(boosts(events).length,1);

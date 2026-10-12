@@ -119,9 +119,9 @@ class UnboostedParkRace extends ParkRaceGame {get forwardSpeedBonus(){return 0;}
 test('natural spine tricks reward only a clean landing and produce a stronger combo boost',()=>{
   const single=fixture(),combo=fixture(),control=fixture('moxie',UnboostedParkRace);
   firstSpineLanding(single.game,['spin']);firstSpineLanding(combo.game,['spin','tweak']);firstSpineLanding(control.game,['spin','tweak']);
-  assert.equal(single.game.boostSpeed,6);assert.equal(single.game.boostDuration,1.4);
-  assert.equal(combo.game.boostSpeed,9);assert.equal(combo.game.boostDuration,2);
-  assert.equal(combo.game.boostLevel,'combo');assert.equal(combo.events.filter(event=>event.type==='raceBoost').length,1);
+  assert.equal(single.game.boostSpeed,6);assert.equal(single.game.boostDuration,2);
+  assert.equal(combo.game.boostSpeed,9);assert.equal(combo.game.boostDuration,2.6);
+  assert.equal(combo.game.boostLevel,'combo');assert.equal(combo.events.filter(event=>event.type==='raceBoost'&&!event.opponent).length,1);
   assert.equal(combo.events.at(-1).type,'raceBoost');assert.equal(combo.game.z,control.game.z);
   advance(combo.game,.5,{pump:true});advance(control.game,.5,{pump:true});
   assert.ok(combo.game.speed-control.game.speed>4,'landed combo provides physical thrust');
@@ -129,15 +129,15 @@ test('natural spine tricks reward only a clean landing and produce a stronger co
   for(const key of ['x','z','elapsed','nextCheckpoint'])assert.equal(combo.game.opponent[key],control.game.opponent[key]);
 });
 
-test('empty airs, flat-ground tricks and incomplete tricks do not farm factory boosts',()=>{
+test('flat-ground tricks now earn boosts but empty airs and incomplete tricks do not',()=>{
   const flat=fixture();assert.equal(flat.game.jump(),true);assert.equal(flat.game.airLaunchSource,'flat');
   assert.equal(flat.game.doTrick('spin'),true);until(flat.game,()=>!flat.game.airborne,{});
-  assert.equal(flat.events.filter(event=>event.type==='raceBoost').length,0);
+  assert.equal(flat.events.filter(event=>event.type==='raceBoost'&&!event.opponent).length,1);
   const empty=fixture();until(empty.game,()=>empty.game.airborne);until(empty.game,()=>!empty.game.airborne);
-  assert.equal(empty.events.filter(event=>event.type==='raceBoost').length,0);
+  assert.equal(empty.events.filter(event=>event.type==='raceBoost'&&!event.opponent).length,0);
   const unfinished=fixture();until(unfinished.game,()=>unfinished.game.airborne&&unfinished.game.vy<0&&unfinished.game.y-unfinished.game.surface.height<1);
   assert.equal(unfinished.game.doTrick('special'),true);until(unfinished.game,()=>!unfinished.game.airborne);
-  assert.equal(unfinished.game.wipeouts,1);assert.equal(unfinished.events.filter(event=>event.type==='raceBoost').length,0);
+  assert.equal(unfinished.game.wipeouts,1);assert.equal(unfinished.events.filter(event=>event.type==='raceBoost'&&!event.opponent).length,0);
 });
 
 test('boost pauses, drains while braking, survives a bank and clears on bail, miss, retry and finish',()=>{
@@ -146,7 +146,7 @@ test('boost pauses, drains while braking, survives a bank and clears on bail, mi
   assert.equal(game.bank(),true);assert.equal(game.bank(),false);assert.equal(game.boostTime,before);
   advance(game,.4,{brake:true});assert.ok(game.boostTime<before);assert.ok(game.speed<10);
   game.bail();assert.equal(game.boostTime,0);game.retry();assert.equal(game.boostTime,0);
-  advance(game,3);game.awardRaceBoost({tricks:99});assert.equal(game.boostSpeed,13);assert.equal(game.boostTime,3);
+  advance(game,3);game.awardRaceBoost({tricks:99});assert.equal(game.boostSpeed,13);assert.equal(game.boostTime,3.6);
   const gate=game.course.checkpoints[0];
   game.x=gate.x+8;game.z=gate.z+.05;game.y=parkHeight(game.x,game.z);game.heading=0;game.vx=0;game.vz=-20;
   game.update(1/120,{});assert.equal(game.raceMisses,1);assert.equal(game.nextCheckpoint,0);assert.equal(game.boostTime,0);

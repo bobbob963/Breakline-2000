@@ -6,7 +6,7 @@ import { createKeydownHandler, CONTROL_KEYS } from '../src/keyboard.js';
 import { WaveParkGame } from '../src/park.js';
 import { SurfGame, TRICKS, waveCrest, waveHeight } from '../src/game.js';
 import { createTournamentGame, sanitizeTournamentProgress, TOURNAMENT_RIVALS } from '../src/tournament.js';
-import { raceOpponentInput } from '../src/surf-race.js';
+import { surfRaceTrickInput } from '../src/surf-race.js';
 
 function inputRoute(game) {
   const calls = [], state = { bootReady:true, workshopMode:null, modalMode:null, game, input:{} };
@@ -168,7 +168,7 @@ test('winning either ocean race advances the real Enter action back to the corre
   for(const round of[1,3]){
     const route=tournamentRoute({version:1,completedRounds:round});route.press('Enter');
     const race=route.context.game;
-    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,raceOpponentInput(race,race.course,1));
+    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,surfRaceTrickInput(race,race.course,1));
     assert.equal(race.result,'win');assert.equal(route.context.modalMode,'results');
     route.press('Enter');const next=route.context.game;
     assert.notEqual(next,race);assert.equal(next.mode,'park');assert.equal(next.roundIndex,round+1);
@@ -180,7 +180,7 @@ test('R after a race win and Enter after a race loss both restart that race with
   for(const win of[true,false]){
     const route=tournamentRoute({version:1,completedRounds:1});route.press('Enter');
     const race=route.context.game,opponent=race.opponent;
-    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,win?raceOpponentInput(race,race.course,1):{brake:true});
+    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,win?surfRaceTrickInput(race,race.course,1):{brake:true});
     assert.equal(race.result,win?'win':'loss');route.press(win?'KeyR':'Enter');
     assert.equal(route.context.game,race);assert.equal(race.roundIndex,1);assert.equal(race.countdownRemaining,3);
     assert.notEqual(race.opponent,opponent);assert.equal(race.opponent.distance,0);assert.equal(race.result,null);

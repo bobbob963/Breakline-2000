@@ -12,10 +12,10 @@
   <main>
     <small>BREAKLINE ’99 / SOUND REVIEW</small>
     <h1>Audio Lab</h1>
-    <p>Audition eight bars of <strong>Afterhours / Yard Circuit</strong>, the new original menu theme. This renders the game’s actual guitar, bass, drums, effects and master mix through the browser’s Web Audio engine.</p>
+    <p>Audition <strong>Overdrive / Sun Circuit</strong>, the original 152 BPM race theme, or the heavier menu track. Hear the driving beat, guitar and synth hooks, then compare the boost and final-stretch layers. Each preview renders the game’s actual instruments and master mix.</p>
     <div class="panel">
       <h2>1. Render a section</h2>
-      <div class="controls"><label>Starting section<select id="section"><option value="0">Bars 1–8 / entrance into main riff</option><option value="4">Bars 5–12 / main rhythm section</option><option value="16">Bars 17–24 / half-time and build</option><option value="24">Bars 25–32 / final guitar hook</option></select></label><button id="render">RENDER 8 BARS</button></div>
+      <div class="controls"><label>Track<select id="track"><option value="race">Race / Overdrive — 152 BPM</option><option value="menu">Menu / Afterhours — 138 BPM</option></select></label><label>Starting section<select id="section"><option value="0">Bars 1–8 / opening riff</option><option value="8" selected>Bars 9–16 / full rhythm and hook</option><option value="16">Bars 17–24 / breakdown and build</option><option value="24">Bars 25–32 / final hook</option></select></label><label>Race layers<select id="intensity"><option value="normal">Normal racing</option><option value="boost">Combo boost</option><option value="final">Final stretch + boost</option></select></label><button id="render">RENDER 8 BARS</button></div>
       <p class="status" id="status" role="status" aria-live="polite">Ready. Rendering is silent; playback starts only when you press Play.</p>
     </div>
     <div class="panel result" id="result">

@@ -12,6 +12,7 @@ import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
 import { SurfGame, COMBO_WINDOW, MIN_X, MAX_X, POP_COOLDOWN, waveCrest } from './game.js';
 import { WaveParkGame, PARK_BOUNDS } from './park.js';
+import { RACE_POP_RECOVERY } from './race-rider.js';
 import { SpecialMeter } from './special.js';
 import { COMBO_ANIMATIONS } from './combo-animations.js';
 import { ParkMap } from './park-map.js';
@@ -73,6 +74,9 @@ function saveBest(){if(!game)return;if(selectedMode==='storm'&&game.elapsed>best
 function completedGoals(){return [game.score>=5000,game.bestCombo>=1500,isParkMode()?game.visitedRamps.size>=5:selectedMode==='rush'?game.gates>=12:selectedMode==='storm'?game.barrelsSurvived>=3:game.gates>=6];}
 function goalNames(){return ['Score 5,000','Bank a 1,500 combo',isParkMode()?'Ride 5 different ramps':selectedMode==='rush'?'Finish 12 checkpoints':selectedMode==='storm'?'Ride through 3 barrels':'Catch 6 sun rings'];}
 function onEvent(e){
+  // Rival actions are shown beside their name and on their rider. They must
+  // never award the player special, replace player toasts or reset the camera.
+  if(e.opponent)return;
   world?.onEvent(e,game);if(!(e.type==='finish'&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type);
   if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000);saveBest();}
   if(e.type==='trick')special.gain(.22);
@@ -112,6 +116,7 @@ function updateModeMenu(){
   $('rival-hud').classList.toggle('race-hud',!!game.isRace);
   $('rival-hud').querySelector('small').textContent=game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
   $('race-progress').classList.toggle('hidden',!game.isRace);
+  $('rival-action').classList.toggle('hidden',!game.isRace);
   $('race-boost').classList.toggle('hidden',!game.isRace);
   if(game.isTournament){
     $('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / ${isParkMode()?'WATERWORKS RACE':'SURF RACE'}`;
@@ -129,13 +134,12 @@ async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?
 function startRun(kind='default'){
   wasted.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
-  audio.setScene('ride');
   if(game.isTournament){
     if(kind!=='retry'&&game.complete&&(game.phase==='ready'||game.result==='win')){tournamentProgress=sanitizeTournamentProgress(null);write('breakline99-tournament-v1',JSON.stringify(tournamentProgress));game=createTournamentGame(onEvent,tournamentProgress);game.start();}
     else if(kind!=='retry'&&game.phase==='finished'&&game.result==='win'){game=createTournamentGame(onEvent,game.getProgress());game.start();}
     else game.retry();
   }else game.start(selectedMode==='park'?selectedParkStart:undefined);
-  world.setMode(game.mode);audio.setMode(game.mode);updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
+  world.setMode(game.mode);audio.setMode(game.mode);audio.setScene(game.isRace?'race':'ride');updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function restartRun(){startRun('retry');}
 function goHome(){
@@ -155,7 +159,7 @@ function showHelp(){
   openModal('help','HOW TO RIDE',`<div class="controls-grid">
   <span><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></span><span>${isParkMode()?'Steer around the park.':'Carve across the wave. The high lip is left.'}</span>
   <span><kbd>W</kbd> / <kbd>↑</kbd></span><span>${isParkMode()?'Pump to build speed.':'Pump for more speed.'} <kbd>S</kbd> / <kbd>↓</kbd> slows down.</span>
-  <span><kbd>SPACE</kbd></span><span>${isParkMode()?'Hold to crouch and build speed, then release to pop.':'Hold, then release to pop.'} Recover on the water for 1.4 seconds between pops. ${isParkMode()?'Ride the ramps for bigger airs; wave lips also launch you automatically.':'Flat hops earn no points. Reach the wave lip or finish a cutback, then pop for trick height.'}</span>
+  <span><kbd>SPACE</kbd></span><span>${isParkMode()?'Hold to crouch and build speed, then release to pop.':'Hold, then release to pop.'} Recover on the water for ${game.isRace?'1 second':'1.4 seconds'} between pops. ${game.isRace?'Race pops have enough air for a basic trick. Hold Space briefly, release, press J and land for a boost. Charge longer and follow J with L after the spin finishes for a combo.':isParkMode()?'Ride the ramps for bigger airs; wave lips also launch you automatically.':'Flat hops earn no points. Reach the wave lip or finish a cutback, then pop for trick height.'}</span>
   ${isParkMode()?'<span><kbd>E</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>Hold E inside a tunnel; steer around its walls for a full pipe loop. Release E to return to the floor.</span><span><kbd>E</kbd> / <kbd>SHIFT</kbd></span><span>Hold E as you ride up a quarterpipe to grab the board and turn back. Hold SHIFT instead to grind the coping directly—no jump needed. A/D chooses the grind direction.</span>':''}
   <span><kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></span><span>180 spin / kickflip / Indy grab. One trick at a time, in the air.</span>
   <span><kbd>U</kbd> <kbd>O</kbd></span><span>Shuv-it / heelflip.</span>
@@ -164,7 +168,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
-  ${game.isRace?'<span>SUN RINGS</span><span>Pass through each gold ring in order, then finish before your rival. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. There is no time limit.</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
+  ${game.isRace?'<span>SUN RINGS</span><span>Pass through each gold ring in order, then finish before your rival. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. There is no time limit.</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. Rivals earn boosts with the same rules, so watch their tricks and boost trails. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding and tighter barrels build as you survive.'}</p>
@@ -229,7 +233,7 @@ function openWorkshop(mode){
   updateCustomizationChoices();$('workshop-close').focus({preventScroll:true});
 }
 function closeWorkshop(){if(!workshopMode)return;$('workshop').classList.add('hidden');$('wardrobe').classList.add('hidden');workshopMode=null;$('start').focus({preventScroll:true});}
-function tryTrick(type){if(game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast('RODEO AIR!');}}
+function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast('RODEO AIR!');}}
 function tryPop(){if(!game.jump()&&!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);
@@ -243,7 +247,7 @@ function updateHud(){
     $('race-boost').classList.toggle('active',boosting);
     $('race-boost').classList.toggle('combo-boost',boosting&&game.boostLevel==='combo');
     $('race-boost-label').textContent=boosting?game.boostLabel:'TRICK BOOST';
-    $('race-boost-detail').textContent=boosting?`${input.brake?'BRAKING':`+${Math.round(game.boostSpeed*3.6)} KM/H`} · ${game.boostTime.toFixed(1)}s`:'LAND TRICKS · COMBOS BOOST MORE';
+    $('race-boost-detail').textContent=boosting?`${input.brake?'BRAKING':`+${Math.round(game.boostSpeed*3.6)} KM/H`} · ${game.boostTime.toFixed(1)}s`:'HOLD SPACE · RELEASE · J · LAND';
     $('race-boost-fill').style.width=`${boosting?Math.min(100,game.boostTime/game.boostDuration*100):0}%`;
   }
   $('wave-dot').style.left=`${isParkMode()?(game.x-PARK_BOUNDS.minX)/(PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*96:(game.x-MIN_X)/(MAX_X-MIN_X)*96}%`;
@@ -252,9 +256,12 @@ function updateHud(){
   $('ride-state').textContent=game.bailTime>0?'WIPEOUT':game.pipeRide?'PIPE WALL RIDE':game.lipMove?'LIP GRAB 180':game.grinding?(game.grinding.kind==='coping'?'COPING GRIND':'WATER SLIDE'):game.airborne?'AIRBORNE':game.barrel?.inside?'IN THE BARREL':game.cutback>0?'SNAP CUTBACK':isParkMode()?(surface||'WATERWORKS'):game.launchSource==='lip'?'AT THE WAVE LIP':'ON THE FACE';
   const popCooldown=game.popCooldown||0,powered=!isParkMode()&&game.launchSource!=='flat';
   $('pop-label').textContent=game.bailTime>0?'RECOVERING':game.airborne?'LAND TO RECOVER POP':game.lipMove?'FINISH LIP TURN':game.pipeRide&&!game.popReady?'RETURN TO PIPE FLOOR':popCooldown>0?`POP RECOVERY · ${popCooldown.toFixed(1)}s`:game.cutbackActive?(isParkMode()?'CUTBACK · TURNING':'CUTBACK · SETTING UP AIR'):isParkMode()?'POP READY':game.launchSource==='cutback'?`CUTBACK AIR · ${game.cutbackLaunchTime.toFixed(1)}s`:game.launchSource==='lip'?'LIP LAUNCH READY':'FIND LIP / CUT BACK';
-  $('pop-ready-bar').style.width=`${Math.max(0,1-popCooldown/POP_COOLDOWN)*100}%`;
+  if(game.isRace&&game.countdownRemaining>0)$('pop-label').textContent='WAIT FOR GO · HOLD SPACE TO POP';
+  else if(game.isRace&&game.popReady&&!game.airborne&&!game.pipeRide&&!game.lipMove&&!game.cutbackActive)$('pop-label').textContent='POP READY · LAND A TRICK TO BOOST';
+  $('pop-ready-bar').style.width=`${Math.max(0,1-popCooldown/(game.isRace?RACE_POP_RECOVERY:POP_COOLDOWN))*100}%`;
   $('pop-status').classList.toggle('cooling',popCooldown>0);$('pop-status').classList.toggle('powered',powered&&game.popReady);
   $('charge-label').textContent=isParkMode()?'LOAD THE POP':game.launchSource==='cutback'?'LOAD CUTBACK AIR':game.launchSource==='lip'?'LOAD LIP LAUNCH':'FLAT HOP · FIND THE LIP';
+  if(game.isRace)$('charge-label').textContent='LOAD THE POP · J THEN L FOR COMBO';
   $('charge-wrap').classList.toggle('hidden',game.charge<=.01||game.airborne||game.bailTime>0||popCooldown>0);$('charge-bar').style.width=`${game.charge*100}%`;
   $('combo').classList.toggle('hidden',!game.comboBase);$('combo-base').textContent=fmt(game.comboBase);$('multiplier').textContent=`×${game.multiplier}`;
   $('tricks').textContent=game.comboNames.slice(-4).join(' + ')+(game.trick?` + ${game.trick.name}…`:'');
@@ -274,7 +281,14 @@ function updateHud(){
     $('rival-target').textContent=game.isRace?`${fmt(game.distanceRemaining)}m TO FINISH · CHECKPOINTS ${game.nextCheckpoint}/${game.course.checkpoints.length}`:`FINAL SCORE ${fmt(game.target)} · HEAT ${game.roundNumber}/5`;
     $('rival-gap').textContent=Math.abs(gap)<.5?(game.isRace?'SIDE BY SIDE':'LEVEL SCORES'):gap>0?`LEADING BY ${fmt(gap)}${game.isRace?'m':''}`:`${fmt(-gap)}${game.isRace?'m':''} BEHIND`;
     $('rival-hud').classList.toggle('ahead',gap>0);
-    if(game.isRace){$('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.raceProgress/game.course.length*100))}%`;$('race-rival-progress').style.width=`${Math.max(0,Math.min(100,game.opponentRaceProgress/game.course.length*100))}%`;}
+    if(game.isRace){
+      $('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.raceProgress/game.course.length*100))}%`;$('race-rival-progress').style.width=`${Math.max(0,Math.min(100,game.opponentRaceProgress/game.course.length*100))}%`;
+      const rival=game.opponent,rivalBoost=rival.boostTime>0;
+      $('rival-action-label').textContent=rival.bailTime>0?'WIPEOUT':rival.trick?`${rival.trick.comboAnimationName||rival.trick.name}…`:rivalBoost?`${rival.boostLabel} · +${Math.round(rival.boostSpeed*3.6)} KM/H`:rival.airborne?'IN THE AIR':rival.charge>.1?'LOADING A TRICK':'ON THE LINE';
+      $('rival-action').classList.toggle('boosting',rivalBoost);
+      $('rival-action').classList.toggle('combo-boost',rivalBoost&&rival.boostLevel==='combo');
+      $('rival-boost-fill').style.width=`${rivalBoost?Math.min(100,rival.boostTime/rival.boostDuration*100):0}%`;
+    }
   }
   if(isParkMode())parkMap?.update(game);
   if(!isParkMode()||game.isRace) {
@@ -341,6 +355,7 @@ try{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(game.phase==='running'&&!workshopMode){accumulator+=dt;while(accumulator>=1/120){game.update(1/120,input);accumulator-=1/120;}special.update(dt);}else accumulator=0;
     world.update(wasted.active?0:dt,game);wasted.update(dt);if(workshopMode)preview.update(dt,workshopMode);
+    if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});
     audio.update(!document.hidden&&(game.phase==='running'||game.phase==='ready'),game.mode);
     hudTime+=dt;if(hudTime>=.05){updateHud();hudTime=0;}
     if(toastTime>0&&game.phase==='running'){toastTime-=dt;if(toastTime<=0)$('toast').classList.remove('visible');}

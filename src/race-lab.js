@@ -1,6 +1,7 @@
 import { SurfGame, courseItem } from './game.js';
 import { WaveParkGame } from './park.js';
 import { parkRaceOpponentInput } from './park-race.js';
+import { raceOpponentInput } from './surf-race.js';
 import { createTournamentGame, TOURNAMENT_RIVALS } from './tournament.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
@@ -65,21 +66,38 @@ export function raceLabControls(game) {
   return {pump:true,left:error<-.32,right:error>.32};
 }
 
+// A review uses the ordinary steering policy to keep the player near the
+// rival. It observes the rival's real simulation; it never supplies a pose,
+// changes positions or awards a boost to either competitor.
+export function rivalReviewControls(game) {
+  return game.mode === 'park'
+    ? parkRaceOpponentInput(game,game.course,game.rival.pace)
+    : raceOpponentInput(game,game.course,game.rival.pace);
+}
+
+export function rivalReviewReady(game,kind) {
+  const rival=game.opponent;
+  if(!rival || game.countdownRemaining>0 || rival.bailTime>0)return false;
+  return kind==='boost'
+    ? rival.boostTime>0 && rival.boostLevel==='combo' && rival.boostDuration-rival.boostTime>=.55
+    : !!rival.trick?.grab && rival.trick.age/rival.trick.duration>=.4;
+}
+
 async function boot() {
   const $=id=>document.getElementById(id),pressed=new Set();
-  let world,game,scenario=null,input={},actualInput={},events=[],accumulator=0,boostDemo=null;
+  let world,game,scenario=null,input={},actualInput={},events=[],accumulator=0,boostDemo=null,rivalDemo=null;
   const clearInput=()=>{pressed.clear();input={};};
   function syncInput(){input={};for(const code of pressed)input[CONTROL_KEYS[code]]=true;}
   function onEvent(event) {
     if(!game)return;
-    world?.onEvent(event,game);
-    if(!['reset','wall'].includes(event.type))events.unshift(`${game.elapsed.toFixed(2)} · ${event.type}${event.reason?' · '+event.reason:''}${event.name?' · '+event.name:''}`);
+    if(!event.opponent)world?.onEvent(event,game);
+    if(!['reset','wall'].includes(event.type))events.unshift(`${game.elapsed.toFixed(2)} · ${event.opponent?'RIVAL':'PLAYER'} ${event.type}${event.reason?' · '+event.reason:''}${event.name?' · '+event.name:''}${event.type==='raceBoost'?' · '+event.tricks+' tricks · +'+event.speed+' m/s':''}`);
     events=events.slice(0,11);
     if(event.type==='finish')$('status').textContent=`${game.result?.toUpperCase()||'FINISHED'} · ${game.resultReason}`;
   }
   function start(kind=scenario) {
     if(!kind)return;
-    clearInput();accumulator=0;events=[];scenario=kind;boostDemo=null;
+    clearInput();accumulator=0;events=[];scenario=kind;boostDemo=null;rivalDemo=null;
     if(RIVAL_IDS.includes(kind))game=createTournamentGame(()=>{},{version:1,completedRounds:RIVAL_IDS.indexOf(kind)});
     else game=kind==='park'?new WaveParkGame():new SurfGame();
     game.onEvent=onEvent;game.start();
@@ -88,12 +106,17 @@ async function boot() {
   }
   function pause() {
     clearInput();
-    if(game?.phase==='running')game.pause();else if(game?.phase==='paused'){boostDemo=null;game.resume();}
+    if(game?.phase==='running')game.pause();else if(game?.phase==='paused'){boostDemo=null;rivalDemo=null;game.resume();}
   }
   function startBoostDemo(kind) {
     start(scenario==='static'?'static':'rivet');
     boostDemo=createRaceBoostDemo(kind);
     $('status').textContent=`${kind==='combo'?'Spin → Tweaked Grab combo':'Tweaked Grab'}: waiting for GO, then a cutback and charged pop. Playback pauses after the clean landing; resume to feel the boost.`;
+  }
+  function startRivalDemo(kind) {
+    start(RIVAL_IDS.includes(scenario)?scenario:'rivet');
+    rivalDemo=kind;
+    $('status').textContent=`Following ${game.rival.name}'s real route. Playback pauses ${kind==='boost'?'when a completed combo earns a speed boost':'during a held grab'}.`;
   }
   function counters() {
     if(!game)return;
@@ -115,10 +138,14 @@ async function boot() {
     $('stat-pop').textContent=`${game.popCooldown.toFixed(2)} s / ${game.launchSource}`;
     $('stat-boost').textContent=race&&game.boostTime>0?`${game.boostLabel} · +${game.boostSpeed.toFixed(1)} m/s · ${game.boostTime.toFixed(2)} s`:'None';
     $('stat-combo').textContent=`${game.pendingTricks} tricks · ${game.comboBase*game.multiplier} points`;
+    $('stat-rival-trick').textContent=rival?.trick?.name || (rival?.airborne?'In the air':'Riding');
+    $('stat-rival-boost').textContent=rival?.boostTime>0?`${rival.boostLabel} · +${rival.boostSpeed.toFixed(1)} m/s · ${rival.boostTime.toFixed(2)} s`:'None';
+    $('stat-rival-combo').textContent=rival?`${rival.pendingTricks} tricks · ${rival.comboBase*rival.multiplier} points`:'—';
     $('stat-result').textContent=game.resultReason||'—';
     $('events').textContent=events.join('\n');$('pause').textContent=game.phase==='running'?'Pause':'Resume';
     $('hud-boost').textContent=race&&game.boostTime>0?`${game.boostLabel} +${game.boostSpeed.toFixed(0)} m/s`:'LAND TRICKS TO BOOST';
     $('hud-boost').hidden=!race;
+    $('hud-rival-action').textContent=rival?.trick?.name || (rival?.boostTime>0?`${rival.boostLabel} +${rival.boostSpeed.toFixed(0)} m/s`:'');
     $('frame').disabled=game.phase==='finished';
     $('track').hidden=!race;
     if(race) {
@@ -127,11 +154,15 @@ async function boot() {
     }
   }
   function tick() {
-    actualInput=boostDemo?raceBoostDemoControls(game,boostDemo):$('autopilot').checked?raceLabControls(game):input;
+    actualInput=boostDemo?raceBoostDemoControls(game,boostDemo):rivalDemo?rivalReviewControls(game):$('autopilot').checked?raceLabControls(game):input;
     game.update(STEP,actualInput);
     if(boostDemo&&(boostDemo.landed||boostDemo.failed)) {
       game.pause();clearInput();
       $('status').textContent=boostDemo.landed?`${boostDemo.kind==='combo'?'Two-trick combo':'Single trick'} landed cleanly. Paused with the earned boost: press Resume to continue.`:'The demonstration wiped out. Restart the demo to retry the same legal input sequence.';
+    }
+    if(rivalDemo&&rivalReviewReady(game,rivalDemo)) {
+      game.pause();clearInput();
+      $('status').textContent=rivalDemo==='boost'?`${game.rival.name} landed a real combo and earned +${game.opponent.boostSpeed} m/s. The gold trail shows the active boost. Press Resume to continue.`:`${game.rival.name} is holding ${game.opponent.trick.name}. The hand and board follow the same grab animation as the player. Press Resume to continue.`;
     }
   }
   try {
@@ -140,6 +171,7 @@ async function boot() {
     game=new SurfGame();$('loading').remove();
     for(const kind of [...RIVAL_IDS,'surf','park'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
     for(const kind of ['single','combo'])$('boost-'+kind).addEventListener('click',()=>{startBoostDemo(kind);$('boost-'+kind).blur();});
+    for(const kind of ['trick','boost'])$('rival-'+kind).addEventListener('click',()=>{startRivalDemo(kind);$('rival-'+kind).blur();});
     $('restart').addEventListener('click',()=>start());
     $('pause').addEventListener('click',pause);
     $('frame').addEventListener('click',()=>{if(!scenario||game.phase==='finished')return;game.resume();tick();game.pause();counters();});

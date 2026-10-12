@@ -1,4 +1,4 @@
-import { ArcadeAudio, MENU_BPM, MENU_TRACK } from './audio.js';
+import { ArcadeAudio, MENU_BPM, MENU_TRACK, RACE_BPM, RACE_TRACK } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const SAMPLE_RATE = 48000, BARS = 8, START = .04, TAIL = 1.1;
@@ -6,20 +6,11 @@ let audioURL=null,wavBlob=null,filename='Afterhours-Yard-Circuit.wav',rendering=
 const db = value => value>0 ? 20*Math.log10(value) : -Infinity;
 const showDB = value => Number.isFinite(value) ? `${value.toFixed(1)} dBFS` : '−∞ dBFS';
 
-function buildProductionGraph(context) {
-  const synth=new ArcadeAudio();synth.setScene('menu');
-  // The production builder currently constructs its own AudioContext. This
-  // isolated review page supplies an actual OfflineAudioContext synchronously,
-  // then immediately restores the browser constructor. No audio nodes are
-  // mocked and the game module/composition are left unchanged.
-  const hadOwn=Object.prototype.hasOwnProperty.call(globalThis,'AudioContext');
-  const original=globalThis.AudioContext;
-  try{
-    globalThis.AudioContext=function OfflineContextForReview(){return context;};
-    synth._build();
-  }finally{
-    if(hadOwn)globalThis.AudioContext=original;else delete globalThis.AudioContext;
-  }
+function buildProductionGraph(context,scene) {
+  const synth=new ArcadeAudio();synth.setScene(scene);
+  // Use the production signal graph with a real offline browser context.
+  // No mocked nodes, global constructor replacements or normalisation.
+  synth._build(context);
   return synth;
 }
 
@@ -83,7 +74,8 @@ function drawWaveform(buffer) {
 }
 
 async function renderSection() {
-  if(rendering)return;rendering=true;$('render').disabled=true;$('section').disabled=true;
+  if(rendering)return;rendering=true;
+  for(const id of ['render','track','section','intensity'])$(id).disabled=true;
   $('player').pause();$('status').className='status';$('status').textContent='Rendering the production synth through Web Audio…';
   let synth;
   try{
@@ -91,30 +83,35 @@ async function renderSection() {
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     const Offline=globalThis.OfflineAudioContext||globalThis.webkitOfflineAudioContext;
     if(!Offline)throw new Error('This browser does not support OfflineAudioContext. Open the lab in Edge or Chrome.');
-    const bar=Number($('section').value),musicalDuration=BARS*4*60/MENU_BPM;
+    const scene=$('track').value,race=scene==='race',bpm=race?RACE_BPM:MENU_BPM;
+    const title=race?RACE_TRACK:MENU_TRACK,bar=Number($('section').value),musicalDuration=BARS*4*60/bpm;
     const context=new Offline(2,Math.ceil((START+musicalDuration+TAIL)*SAMPLE_RATE),SAMPLE_RATE);
-    const began=performance.now();synth=buildProductionGraph(context);
+    const began=performance.now();synth=buildProductionGraph(context,scene);
     synth.enabled=true;synth.active=true;synth._fade(true);
+    const intensity=$('intensity').value;
+    synth.setRaceState({progress:intensity==='final'?.9:.3,boost:intensity==='boost'||intensity==='final'?1:0});
     for(let step=0;step<BARS*16;step++){
       const scoreStep=(bar*16+step)%(32*16);synth.beat=scoreStep;
-      synth._scheduleMenuStep(scoreStep,START+step*60/MENU_BPM/4);
+      if(race)synth._scheduleRaceStep(scoreStep,START+step*60/bpm/4);
+      else synth._scheduleMenuStep(scoreStep,START+step*60/bpm/4);
     }
     const buffer=await context.startRendering(),metrics=analyse(buffer,musicalDuration);
     if(metrics.invalid)throw new Error(`The synth produced ${metrics.invalid} non-finite samples.`);
     if(metrics.peak===0)throw new Error('The rendered mix is silent.');
     const nextBlob=wav(buffer),nextURL=URL.createObjectURL(nextBlob);
     if(audioURL)URL.revokeObjectURL(audioURL);audioURL=nextURL;wavBlob=nextBlob;
-    filename=`Afterhours-Yard-Circuit-bars-${bar+1}-${bar+BARS}.wav`;
+    filename=`${race?'Overdrive-Sun-Circuit':'Afterhours-Yard-Circuit'}-bars-${bar+1}-${bar+BARS}${race?`-${intensity}`:''}.wav`;
     $('player').src=audioURL;$('result').classList.add('visible');
-    $('render-label').textContent=`${MENU_TRACK} · bars ${bar+1}–${bar+BARS} · ${MENU_BPM} BPM · ${musicalDuration.toFixed(2)} s of music + natural tail`;
+    $('render-label').textContent=`${title} · bars ${bar+1}–${bar+BARS} · ${bpm} BPM${race?` · ${intensity} mix`:''} · ${musicalDuration.toFixed(2)} s of music + natural tail`;
     $('stats').innerHTML=[['Sample peak',showDB(db(metrics.peak)),metrics.peak.toFixed(4)],['Musical RMS',showDB(db(metrics.rms)),'Unnormalised mix'],['Crest factor',`${(db(metrics.peak)-db(metrics.rms)).toFixed(1)} dB`,'Peak minus RMS'],['Full-scale samples',metrics.fullScale.toLocaleString(),'Threshold: |sample| ≥ 0.999']].map(([label,value,note])=>`<div class="stat">${label}<strong>${value}</strong><small>${note}</small></div>`).join('');
     $('verdict').textContent=metrics.fullScale===0?`No samples reached digital full scale. Measured peak headroom: ${(-db(metrics.peak)).toFixed(1)} dB. Guitar saturation is intentional; listen for mix balance and unwanted noise.`:'Full-scale samples were detected. Listen carefully for unintended clipping before accepting this mix.';
     $('channels').innerHTML=`<table><thead><tr><th>Channel</th><th>Peak</th><th>RMS</th><th>Full-scale samples</th></tr></thead><tbody>${metrics.channels.map((c,i)=>`<tr><td>${i?'Right':'Left'}</td><td>${showDB(db(c.peak))}</td><td>${showDB(db(c.rms))}</td><td>${c.nearFullScale}</td></tr>`).join('')}</tbody></table>`;
     drawWaveform(buffer);$('status').textContent=`Render complete in ${((performance.now()-began)/1000).toFixed(2)} s. Press Play rendered audio to listen, or export the measured WAV.`;
   }catch(error){$('status').className='status error';$('status').textContent=`Render failed: ${error.message||error}`;console.error(error);}
-  finally{releaseGraph(synth);rendering=false;$('render').disabled=false;$('section').disabled=false;}
+  finally{releaseGraph(synth);rendering=false;for(const id of ['render','track','section'])$(id).disabled=false;$('intensity').disabled=$('track').value!=='race';}
 }
 
+$('track').addEventListener('change',()=>{$('intensity').disabled=$('track').value!=='race';});
 $('render').addEventListener('click',renderSection);
 $('play').addEventListener('click',async()=>{try{$('player').currentTime=0;await $('player').play();}catch(error){$('status').textContent=`Playback could not start: ${error.message||error}`;}});
 $('export').addEventListener('click',()=>{if(!wavBlob||!audioURL)return;const link=document.createElement('a');link.href=audioURL;link.download=filename;link.click();});
