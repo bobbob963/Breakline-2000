@@ -452,7 +452,7 @@ export class WaveParkGame extends SurfGame {
   stepPark(dt, input) {
     this.elapsed += dt;
     this.recoverPop(dt);
-    this.time = Math.max(0, RUN_SECONDS - this.elapsed);
+    this.time = this.rules.endless?this.elapsed:Math.max(0, RUN_SECONDS - this.elapsed);
     this.railCooldown = Math.max(0, this.railCooldown - dt);
     this.rampCooldown = Math.max(0, this.rampCooldown - dt);
     this.pipeCooldown=Math.max(0,this.pipeCooldown-dt);
@@ -479,10 +479,10 @@ export class WaveParkGame extends SurfGame {
       const groundTurn=1.65+.55*(1-clamp((this.speed-3.5)/11.5,0,1));
       if(this.cutbackActive)this.updateCutback(dt);
       else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : groundTurn) * dt;
-      const targetSpeed = active ? (input.brake ? 3.5 : pushing ? 23.5 : 15)*(this.cutbackActive?.72:1) : 3;
+      const targetSpeed = active ? (input.brake ? 3.5 : (pushing ? 23.5 : 15)+this.forwardSpeedBonus)*(this.cutbackActive?.72:1) : 3;
       // Crouching pumps the board toward the same limit as W. Let earned
       // momentum coast through a flight/landing instead of braking toward cruise.
-      const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15;
+      const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15+this.forwardSpeedBonus;
       const acceleration=input.brake?3.6:coasting?(this.airborne?.10:.35):1.5;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * acceleration));
       const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:14));
@@ -569,7 +569,7 @@ export class WaveParkGame extends SurfGame {
     // Ordinary terrain intersections are resolved by the sweep before this.
     if(!this.pipeRide){this.y=Math.max(this.y,rideHeight(this.x,this.z,this.y).height);this.surface=parkRideSurface(this.x,this.z,this.y);}
     this.distance = -this.z;
-    if (this.time <= 0) {
+    if (!this.rules.endless&&this.time <= 0) {
       if (this.airborne || this.grinding ||this.pipeRide||this.lipMove||this.cutbackActive) this.clearCombo(); else this.bank();
       this.cancelCutback();
       this.grinding = null;

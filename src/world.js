@@ -70,7 +70,7 @@ export class SurfWorld {
     this.surfStage = new THREE.Group();
     for (const child of [...this.scene.children]) if (!shared.has(child)) this.surfStage.add(child);
     this.scene.add(this.surfStage);
-    this.raceWorld=createRaceWorld(profile);this.surfStage.add(this.raceWorld.group);
+    this.raceWorld=createRaceWorld(profile);this.scene.add(this.raceWorld.group);
     this.createPark();
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
     this.createParticles();this.createRain();
@@ -97,7 +97,7 @@ export class SurfWorld {
   }
   setMode(mode) {
     this.mode = mode === 'park' ? 'park' : 'surf';
-    if(this.mode==='park')this.raceWorld.reset();
+    this.raceWorld.reset();
     this.surfStage.visible = this.mode === 'surf'; this.parkStage.visible = this.mode === 'park';
     this.scene.fog.color.set(this.mode==='park'?0x62686b:0x91a7b0);
     this.scene.fog.near=this.mode==='park'?115:85;
@@ -284,7 +284,7 @@ export class SurfWorld {
     const x = attract ? (isPark?0:-1.4 + Math.sin(t * .6) * 1.1) : game.x;
     const z = isPark?(attract?22:game.z):-d;
     const oceanZ=Math.floor(-d/30)*30-90;
-    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : game.isRace ? alignRiderToOcean(x,game.y,z,t,oceanZ) : game.y;
+    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : game.isRace&&!isPark ? alignRiderToOcean(x,game.y,z,t,oceanZ) : game.y;
     const heading=isPark?game.heading||0:0;
     const storm=!isPark&&game.rulesId==='storm',intensity=storm?stormDifficulty(t):0;
     this.stormBarrels.update(d,t,intensity,storm);

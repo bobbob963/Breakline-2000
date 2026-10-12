@@ -7,6 +7,11 @@ export const RACE_BOOST_MAX_DURATION=3;
 const RACE_RESET_DISTANCE=14;
 const FALLBACK_RIVAL=Object.freeze({id:'rivet',name:'RIVET',courseLength:960,pace:.6,target:3500});
 
+// The visible ring and the swept board/rider crossing share this moving centre.
+export function surfRaceRingY(checkpoint,time) {
+  return waveHeight(checkpoint.x,-checkpoint.distance,time)+2.8;
+}
+
 export function createRaceCourse(length=960) {
   length=Number.isFinite(length)?clamp(length,600,2000):960;
   const lanes=[-4,5,-5,3,0,-4,4],checkpoints=[];
@@ -61,7 +66,11 @@ function resolveRaceMovement(rider,previous,course,emit) {
   if(checkpoint&&previous.distance<=checkpoint.distance&&rider.distance>=checkpoint.distance) {
     const fraction=clamp((checkpoint.distance-previous.distance)/(rider.distance-previous.distance||1),0,1);
     const crossingX=previous.x+(rider.x-previous.x)*fraction;
-    if(Math.abs(crossingX-checkpoint.x)<=checkpoint.radius&&rider.bailTime<=0) {
+    const crossingY=previous.y+(rider.y-previous.y)*fraction+1;
+    const crossingTime=previous.elapsed+(rider.elapsed-previous.elapsed)*fraction;
+    const ringY=surfRaceRingY(checkpoint,crossingTime);
+    const inside=Math.hypot(crossingX-checkpoint.x,crossingY-ringY)<=checkpoint.radius;
+    if(inside&&rider.bailTime<=0) {
       rider.nextCheckpoint++;
       emit({type:'raceGate',index:checkpoint.index,total:course.checkpoints.length});
     } else {
@@ -97,6 +106,8 @@ export class SurfRaceGame extends SurfGame {
   get roundNumber(){return (this.roundIndex??1)+1;}
   get complete(){return this._tournamentProgress?.completedRounds===this.roundCount;}
   getProgress(){return {...this._tournamentProgress};}
+  get raceProgress(){return this.distance;}
+  get opponentRaceProgress(){return this.opponent?.distance??0;}
   get racePosition(){return this.result?(this.result==='win'?1:2):this.distance>=(this.opponent?.distance??0)?1:2;}
   get lead(){return this.distance-(this.opponent?.distance??0);}
   get distanceRemaining(){return Math.max(0,this.course.length-this.distance);}
@@ -169,8 +180,8 @@ export class SurfRaceGame extends SurfGame {
       if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}
       return;
     }
-    const previous={distance:this.distance,x:this.x};
-    const rivalPrevious={distance:this.opponent.distance,x:this.opponent.x};
+    const previous={distance:this.distance,x:this.x,y:this.y,elapsed:this.elapsed};
+    const rivalPrevious={distance:this.opponent.distance,x:this.opponent.x,y:this.opponent.y,elapsed:this.opponent.elapsed};
     const previousElapsed=this.elapsed;
     this._pendingRaceBoost=null;
     suppressScoreRings(this);suppressScoreRings(this.opponent);

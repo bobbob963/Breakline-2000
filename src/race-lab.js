@@ -1,12 +1,15 @@
 import { SurfGame, courseItem } from './game.js';
 import { WaveParkGame } from './park.js';
-import { createTournamentGame } from './tournament.js';
+import { parkRaceOpponentInput } from './park-race.js';
+import { createTournamentGame, TOURNAMENT_RIVALS } from './tournament.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { CONTROL_KEYS, createKeydownHandler } from './keyboard.js';
 
 const STEP=1/120;
+const RIVAL_IDS=TOURNAMENT_RIVALS.map(rival=>rival.id);
+const raceDistance=rider=>rider.raceProgress??rider.distance;
 
 // Deterministic review playback through the same public controls as a player.
 // Every run waits for GO, cuts back, charges a real pop and lands its tricks.
@@ -41,7 +44,7 @@ export function raceBoostDemoControls(game,demo,dt=STEP) {
 // A review-only route follower: it can press ordinary controls but cannot
 // grant checkpoint credit, set positions or alter either racer's physics.
 export function raceLabControls(game) {
-  if(game.mode==='park')return {pump:true};
+  if(game.mode==='park')return game.isRace?parkRaceOpponentInput(game,game.course,1):{pump:true};
   const checkpoint=game.course?.checkpoints[game.nextCheckpoint];
   let target=checkpoint?.x??0;
   const targets=[];
@@ -77,10 +80,10 @@ async function boot() {
   function start(kind=scenario) {
     if(!kind)return;
     clearInput();accumulator=0;events=[];scenario=kind;boostDemo=null;
-    if(kind==='rivet'||kind==='static')game=createTournamentGame(()=>{},{version:1,completedRounds:kind==='rivet'?1:3});
+    if(RIVAL_IDS.includes(kind))game=createTournamentGame(()=>{},{version:1,completedRounds:RIVAL_IDS.indexOf(kind)});
     else game=kind==='park'?new WaveParkGame():new SurfGame();
     game.onEvent=onEvent;game.start();
-    $('status').textContent=game.isRace?`Race ${game.rival.name} through the surf course. Follow the checkpoints and reach the finish first.`:`${kind==='park'?'Waterworks':'Surf Session'}: checking that ocean rivals and race markers are cleared.`;
+    $('status').textContent=game.isRace?`Race ${game.rival.name} through ${game.mode==='park'?'Waterworks':'Surf Session'}. Pass through every sun ring in order and reach the finish first.`:`${kind==='park'?'Waterworks':'Surf Session'}: checking that rivals and race markers are cleared.`;
     counters();
   }
   function pause() {
@@ -96,15 +99,16 @@ async function boot() {
     if(!game)return;
     const rival=game.opponent,race=game.isRace;
     $('hud-position').textContent=game.phase==='finished'?(game.result||'FINISHED').toUpperCase():race&&game.countdownRemaining>0?`${Math.ceil(game.countdownRemaining)}…`:race?`${game.racePosition}/2`:'PRACTICE';
-    $('hud-checkpoint').textContent=race&&game.countdownRemaining>0?'HOLD W · GET READY':race?`CHECKPOINT ${game.nextCheckpoint}/${game.course.checkpoints.length} · ${Math.max(0,game.distanceRemaining).toFixed(0)} m TO FINISH`:game.objectiveText;
+    $('hud-checkpoint').textContent=race&&game.countdownRemaining>0?'HOLD W · GET READY':race?`SUN RINGS ${game.nextCheckpoint}/${game.course.checkpoints.length} · ${Math.max(0,game.distanceRemaining).toFixed(0)} m TO FINISH`:game.objectiveText;
     $('hud-rival').textContent=race?game.rival.name:game.mode==='park'?'WATERWORKS':'SURF SESSION';
     $('hud-gap').textContent=race?`${Math.abs(game.lead).toFixed(1)} m ${game.lead>=0?'AHEAD':'BEHIND'}`:'Normal controls';
     $('stat-session').textContent=scenario;
     $('stat-phase').textContent=game.phase;
     $('stat-time').textContent=`${game.elapsed.toFixed(2)} s`;
     $('stat-speed').textContent=`${game.speed.toFixed(2)} / ${rival?rival.speed.toFixed(2):'—'} m/s`;
-    $('stat-distance').textContent=`${game.distance.toFixed(1)} / ${rival?rival.distance.toFixed(1):'—'} m`;
+    $('stat-distance').textContent=`${raceDistance(game).toFixed(1)} / ${rival?raceDistance(rival).toFixed(1):'—'} m`;
     $('stat-checkpoints').textContent=race?`${game.nextCheckpoint} / ${rival.nextCheckpoint} of ${game.course.checkpoints.length}`:'—';
+    $('stat-misses').textContent=race?`${game.raceMisses} / ${rival.raceMisses}`:'—';
     $('stat-remaining').textContent=race?game.distanceRemaining.toFixed(1)+' m':'—';
     $('stat-wipeouts').textContent=`${game.wipeouts} / ${rival?rival.wipeouts:'—'}`;
     $('stat-input').textContent=Object.entries(actualInput).filter(([,value])=>value).map(([key])=>key).join(' + ')||'none';
@@ -118,8 +122,8 @@ async function boot() {
     $('frame').disabled=game.phase==='finished';
     $('track').hidden=!race;
     if(race) {
-      $('player-marker').style.left=Math.min(100,game.distance/game.course.length*100)+'%';
-      $('rival-marker').style.left=Math.min(100,rival.distance/game.course.length*100)+'%';
+      $('player-marker').style.left=Math.min(100,raceDistance(game)/game.course.length*100)+'%';
+      $('rival-marker').style.left=Math.min(100,raceDistance(rival)/game.course.length*100)+'%';
     }
   }
   function tick() {
@@ -134,7 +138,7 @@ async function boot() {
     await loadCharacterTextures();
     world=new SurfWorld($('viewport'),validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));
     game=new SurfGame();$('loading').remove();
-    for(const kind of ['rivet','static','surf','park'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
+    for(const kind of [...RIVAL_IDS,'surf','park'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
     for(const kind of ['single','combo'])$('boost-'+kind).addEventListener('click',()=>{startBoostDemo(kind);$('boost-'+kind).blur();});
     $('restart').addEventListener('click',()=>start());
     $('pause').addEventListener('click',pause);

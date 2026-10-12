@@ -6,7 +6,7 @@ import './survival.css';
 import './classic-logo.css';
 import './tournament.css';
 import './wasted.css';
-import { createTournamentGame, TOURNAMENT_RIVALS, sanitizeTournamentProgress } from './tournament.js';
+import { createTournamentGame, TOURNAMENT_RIVALS, sanitizeTournamentProgress, tournamentCourseLength } from './tournament.js';
 import { createWastedSequence } from './wasted.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
@@ -40,7 +40,7 @@ $('loading-tip').textContent={
   surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
   park:'Hold SHIFT while turning for a sharp cutback. At a ramp lip, SHIFT catches the coping. E rides pipe walls.',
   rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
-  tournament:'Race RIVET and STATIC on the swell. Beat the other three rivals in Waterworks score battles.',
+  tournament:'Five head-to-head races. Pass every gold sun ring in order. Land tricks to boost.',
   storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
 }[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
@@ -59,7 +59,7 @@ let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
 const modeInfo={
-  tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five rivals. Three score battles. Two head-to-head surf races. Take every rank to own the circuit.'},
+  tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five rivals. Three Waterworks circuits. Two surf races. Pass the sun rings, land tricks to boost and finish first.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
   surf:{name:'SURF SESSION',level:'SUNSET POINT',description:'Two minutes on the swell. Carve, launch off the lip and link tricks with more forgiving landings.'},
@@ -79,8 +79,8 @@ function onEvent(e){
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
   if(e.type==='bail'){special.bail();toast(e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
-  if(e.type==='raceGate'&&!e.opponent)toast(`CHECKPOINT ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
-  if(e.type==='raceMiss'&&!e.opponent)toast('MISSED CHECKPOINT · LINE UP BETWEEN THE FLAGS',true);
+  if(e.type==='raceGate'&&!e.opponent)toast(`SUN RING ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
+  if(e.type==='raceMiss'&&!e.opponent)toast(isParkMode()?'MISSED SUN RING · TURN BACK AND PASS THROUGH':'MISSED SUN RING · LINE UP WITH THE OPENING',true);
   if(e.type==='raceGo')toast('GO! · W TO PUMP');
   if(e.type==='raceBoost')toast(`${e.combo?'COMBO':'TRICK'} BOOST! · +${Math.round(e.speed*3.6)} KM/H`);
   if(e.type==='cutback')toast(isParkMode()?'SHARP CUTBACK':'CUTBACK SET · POP FOR AIR!');
@@ -104,7 +104,7 @@ function updateModeMenu(){
   document.body.dataset.session=selectedMode;
   $('session-badge').textContent={surf:'2 MIN. / SCORE ATTACK',park:'2 MIN. / FREESTYLE',rush:'12 CHECKPOINTS / +8 SEC',storm:'ENDLESS / 3 LIVES'}[selectedMode];
   $('timer-label').textContent=game.isRace?'RACE TIME':selectedMode==='storm'?'SURVIVED':'TIME';
-  $('surf-condition').classList.toggle('hidden',isParkMode());
+  $('surf-condition').classList.toggle('hidden',isParkMode()&&!game.isRace);
   $('rival-hud').classList.toggle('hidden',!game.isTournament);
   document.querySelector('.goals').classList.toggle('hidden',game.isTournament);
   $('ladder-button').classList.toggle('hidden',!game.isTournament);
@@ -114,9 +114,9 @@ function updateModeMenu(){
   $('race-progress').classList.toggle('hidden',!game.isRace);
   $('race-boost').classList.toggle('hidden',!game.isRace);
   if(game.isTournament){
-    $('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / ${game.isRace?'SURF RACE':'90 SEC SCORE BATTLE'}`;
-    $('level-name').textContent=game.isRace?'SUNSET POINT / RIVAL RACE':'WATERWORKS / SCORE BATTLE';
-    $('mode-description').textContent=game.complete?'The circuit is yours. Start a new ladder or inspect the rivals you defeated.':game.isRace?`Race ${game.rival.name} to the ${fmt(game.course.length)}m finish. Pass every checkpoint. Land tricks for speed boosts; link combos for a bigger burst.`:`${game.rival.name} · ${game.rival.subtitle}. Bank more than ${fmt(game.target)} points in 90 seconds to take their rank.`;
+    $('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / ${isParkMode()?'WATERWORKS RACE':'SURF RACE'}`;
+    $('level-name').textContent=isParkMode()?`WATERWORKS / ${game.course.name}`:'SUNSET POINT / RIVAL RACE';
+    $('mode-description').textContent=game.complete?'The circuit is yours. Start a new ladder or inspect the rivals you defeated.':`Race ${game.rival.name} to the ${fmt(game.course.length)}m finish. Pass through every sun ring in order. Land tricks for speed boosts; link combos for a bigger burst.`;
   }
 
 }
@@ -164,7 +164,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
-  ${game.isRace?'<span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
+  ${game.isRace?'<span>SUN RINGS</span><span>Pass through each gold ring in order, then finish before your rival. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. There is no time limit.</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding and tighter barrels build as you survive.'}</p>
@@ -178,15 +178,13 @@ function showResults(){
   <div class="result-goals">${goalNames().map((name,i)=>`${complete[i]?'◆':'◇'} ${name}`).join('<br>')}</div>${selectedMode==='storm'?`<p class="survival-result">SURVIVED <b>${clockText(game.elapsed)}</b> · SWELL ${game.stormStage||1}<br>BEST SURVIVAL: ${clockText(bestSurvival)} · BARRELS: ${game.barrelsSurvived||0}</p>`:''}<p>PERSONAL BEST SCORE: ${fmt(best)}</p>`,'RIDE AGAIN',modeInfo[selectedMode].name);
 }
 
-function ladderRows(){return `<ol class="rival-ladder">${TOURNAMENT_RIVALS.map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.event==='race'?'SURF SESSION · HEAD-TO-HEAD':'WATERWORKS · SCORE BATTLE'}</span></div><div class="rival-target"><strong>${r.event==='race'?`${fmt(r.courseLength)}m`:fmt(r.target)}</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
-function showLadder(){openModal('ladder','THE HIT LIST',`<p class="rival-intro">Take on RIVET and STATIC in live Surf Session races. Beat MOXIE, UNDERTOW and KINGTIDE in 90-second Waterworks score battles.</p>${ladderRows()}<p class="rival-footnote">Races: pass every flagged checkpoint and finish first. Score battles: bank more points than the rival. Your ranks save automatically.</p>`,game.complete?'NEW LADDER':`CHALLENGE ${game.rival.name}`,'COAST + FACTORY / RIVAL CIRCUIT');}
+function ladderRows(){return `<ol class="rival-ladder">${TOURNAMENT_RIVALS.map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.venue==='park'?'WATERWORKS CIRCUIT':'SURF SESSION'} · RACE</span></div><div class="rival-target"><strong>${fmt(tournamentCourseLength(r))}m</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
+function showLadder(){openModal('ladder','THE HIT LIST',`<p class="rival-intro">Five head-to-head races. Chase MOXIE, UNDERTOW and KINGTIDE around Waterworks; race RIVET and STATIC on the swell.</p>${ladderRows()}<p class="rival-footnote">Pass through every sun ring in order, land tricks for speed boosts and cross the finish first. Your ranks save automatically.</p>`,game.complete?'NEW LADDER':`CHALLENGE ${game.rival.name}`,'COAST + FACTORY / RIVAL CIRCUIT');}
 function showTournamentResults(){
-  clearInput();const win=game.result==='win';
-  if(game.isRace){
-    const finished=game.finishTime!=null,opponentFinished=game.opponentFinishTime!=null;
-    openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name} · SURF RACE</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${finished?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m TO FINISH`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${opponentFinished?clockText(game.opponentFinishTime):`${fmt(Math.max(0,game.course.length-game.opponent.distance))}m TO FINISH`}</small></section></div><p>${win?`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`:'PUMP WITH W, KEEP A CLEAN LINE AND PASS EVERY CHECKPOINT.'}</p></div><div class="results-stats"><span>COURSE<b>${fmt(game.course.length)}m</b></span><span>CHECKPOINTS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Head-to-head Surf Session race · First across the finish wins.</p>`,win?'NEXT RIVAL':'RETRY RIVAL','THE HIT LIST / SURF RACE');return;
-  }
-  openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name}</span><div><section><small>YOUR BANKED SCORE</small><strong>${fmt(game.score)}</strong></section><b>VS</b><section><small>${game.rival.name}</small><strong>${fmt(game.target)}</strong></section></div><p>${win?(game.complete?'ALL FIVE RIVALS DEFEATED. THE CIRCUIT IS YOURS.':`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):game.score===game.target?'TIED SCORE. THE RIVAL KEEPS THEIR RANK.':'BANK A BIGGER SCORE TO TAKE THIS RANK.'}</p></div><div class="results-stats"><span>BEST COMBO<b>${fmt(game.bestCombo)}</b></span><span>TRICKS BANKED<b>${game.landedTricks}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Recorded rival score · 90-second heat · Unlanded combos do not count.</p>`,win?(game.complete?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL','THE HIT LIST / SHOWDOWN');
+  clearInput();const win=game.result==='win',venue=isParkMode()?'WATERWORKS RACE':'SURF RACE';
+  const finished=game.finishTime!=null,opponentFinished=game.opponentFinishTime!=null;
+  const message=win?(game.complete?'ALL FIVE RIVALS DEFEATED. THE CIRCUIT IS YOURS.':`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):'FOLLOW THE SUN RINGS. LAND TRICKS TO BOOST. FINISH FIRST.';
+  openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name} · ${venue}</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${finished?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m TO FINISH`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${opponentFinished?clockText(game.opponentFinishTime):`${fmt(Math.max(0,game.course.length-game.opponentRaceProgress))}m TO FINISH`}</small></section></div><p>${message}</p></div><div class="results-stats"><span>COURSE<b>${fmt(game.course.length)}m</b></span><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Every ring is required · First across the finish wins.</p>`,win?(game.complete?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL',`THE HIT LIST / ${venue}`);
 }
 
 function renderCustomizationChoices(){
@@ -276,14 +274,19 @@ function updateHud(){
     $('rival-target').textContent=game.isRace?`${fmt(game.distanceRemaining)}m TO FINISH · CHECKPOINTS ${game.nextCheckpoint}/${game.course.checkpoints.length}`:`FINAL SCORE ${fmt(game.target)} · HEAT ${game.roundNumber}/5`;
     $('rival-gap').textContent=Math.abs(gap)<.5?(game.isRace?'SIDE BY SIDE':'LEVEL SCORES'):gap>0?`LEADING BY ${fmt(gap)}${game.isRace?'m':''}`:`${fmt(-gap)}${game.isRace?'m':''} BEHIND`;
     $('rival-hud').classList.toggle('ahead',gap>0);
-    if(game.isRace){$('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.distance/game.course.length*100))}%`;$('race-rival-progress').style.width=`${Math.max(0,Math.min(100,game.opponent.distance/game.course.length*100))}%`;}
+    if(game.isRace){$('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.raceProgress/game.course.length*100))}%`;$('race-rival-progress').style.width=`${Math.max(0,Math.min(100,game.opponentRaceProgress/game.course.length*100))}%`;}
   }
   if(isParkMode())parkMap?.update(game);
-  else {
+  if(!isParkMode()||game.isRace) {
     $('surf-objective').textContent=game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
     const tube=game.barrel,barrelHint=tube?.inside?'BARREL RIDE · HOLD THE OPEN LINE':tube&&tube.startDistance-game.distance<70?(game.x>tube.x+1.5?'BARREL AHEAD · CARVE LEFT':game.x<tube.x-1.5?'BARREL AHEAD · CARVE RIGHT':'BARREL AHEAD · HOLD YOUR LINE'):'';
     const nextGate=game.isRace?game.course.checkpoints[game.nextCheckpoint]:null;
-    const raceHint=nextGate?`GATE ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
+    let raceHint=nextGate?`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
+    if(nextGate&&isParkMode()){
+      const dx=nextGate.x-game.x,dz=nextGate.z-game.z,angle=Math.atan2(-dx,-dz)-game.heading;
+      const turn=Math.atan2(Math.sin(angle),Math.cos(angle));
+      raceHint=`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.hypot(dx,dz))}m · ${Math.abs(turn)>2?'TURN BACK':turn>.2?'LEFT ◀':turn<-.2?'RIGHT ▶':'STRAIGHT AHEAD'}`;
+    }
     $('surf-warning').textContent=game.bailTime>0?'RECOVERING…':game.landingWarning||barrelHint||((game.danger||0)>.6?(Math.abs(game.x)>13?'WAVE EDGE · STEER BACK IN':'REEF AHEAD · CHANGE YOUR LINE'):raceHint||'SHIFT + A / D · CUTBACK');
     $('risk-fill').style.width=`${(game.danger||0)*100}%`;
     $('surf-condition').classList.toggle('danger',(game.danger||0)>.65);

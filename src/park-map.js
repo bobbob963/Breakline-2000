@@ -32,6 +32,36 @@ export class ParkMap {
   point(x,z){return{x:4+(x-PARK_BOUNDS.minX)/this.width*120,z:4+(z-PARK_BOUNDS.minZ)/this.length*176};}
   update(game){
     const c=this.ctx,p=this.point(game.x,game.z);c.clearRect(0,0,128,184);c.drawImage(this.plan,0,0);
+    if(game.isRace&&game.course){
+      const allCheckpoints=game.course.checkpoints,laps=game.course.laps||1;
+      const perLap=Math.ceil(allCheckpoints.length/laps);
+      const lap=Math.min(laps-1,Math.floor(game.nextCheckpoint/perLap));
+      const checkpoints=allCheckpoints.slice(lap*perLap,(lap+1)*perLap),start=game.course.start||game;
+      c.save();c.lineWidth=1.3;c.strokeStyle='#e4be6875';c.setLineDash([2,2]);
+      const first=this.point(start.x,start.z);c.beginPath();c.moveTo(first.x,first.z);
+      for(const checkpoint of checkpoints){const ring=this.point(checkpoint.x,checkpoint.z);c.lineTo(ring.x,ring.z);}
+      c.stroke();c.setLineDash([]);
+      // Draw each physical marker once for this lap. The next ring goes last,
+      // so repeated coordinates on a later lap cannot cover the gold target.
+      const markers=new Map(checkpoints.map(checkpoint=>[`${checkpoint.x},${checkpoint.z}`,checkpoint]));
+      for(const checkpoint of markers.values()){
+        const ring=this.point(checkpoint.x,checkpoint.z),collected=checkpoint.index<game.nextCheckpoint;
+        c.strokeStyle=collected?'#4f7771':'#baa877';c.lineWidth=1;
+        c.beginPath();c.arc(ring.x,ring.z,2.7,0,Math.PI*2);c.stroke();
+      }
+      const next=allCheckpoints[game.nextCheckpoint];
+      if(next){
+        const ring=this.point(next.x,next.z);c.strokeStyle='#ffe14c';c.lineWidth=2;
+        c.beginPath();c.arc(ring.x,ring.z,4,0,Math.PI*2);c.stroke();
+        c.font='bold 8px monospace';c.fillStyle='#ffe14c';c.fillText(String(next.index+1),ring.x+5,ring.z+3);
+      }
+      if(game.opponent){
+        const rival=this.point(game.opponent.x,game.opponent.z);c.translate(rival.x,rival.z);c.rotate(-game.opponent.heading);
+        c.fillStyle='#f48951';c.strokeStyle='#302019';c.lineWidth=1;
+        c.beginPath();c.moveTo(0,-5);c.lineTo(3.5,3);c.lineTo(-3.5,3);c.closePath();c.fill();c.stroke();
+      }
+      c.restore();
+    }
     c.save();c.translate(p.x,p.z);c.rotate(-game.heading);c.fillStyle='#ffe750';c.strokeStyle='#181811';c.lineWidth=1.3;
     c.beginPath();c.moveTo(0,-6);c.lineTo(4.5,4);c.lineTo(0,2);c.lineTo(-4.5,4);c.closePath();c.fill();c.stroke();c.restore();
   }

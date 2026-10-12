@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createSurfer, disposeSurfer, validateProfile } from './appearance.js';
 import { sampleRiderTrick } from './rider-pose.js';
 import { renderedWaveHeight, alignRiderToOcean } from './ocean-surface.js';
+import { parkHeight, parkSurface } from './park.js';
+import { surfRaceRingY } from './surf-race.js';
 
 // Rivals use the same body, painted clothing, deck and hand/foot IK as the
 // player. Their transform always comes from the race simulation, never from
@@ -53,6 +55,31 @@ function disposeGroup(group) {
   group.clear();
 }
 
+function makeSunRing(checkpoint) {
+  const group = new THREE.Group(), radius = checkpoint.radius, thickness = .18;
+  group.name = `race-sun-ring-${checkpoint.index}`;
+  group.userData = { checkpointIndex: checkpoint.index, innerRadius: radius };
+  const material = new THREE.MeshBasicMaterial({color:0xffd457});
+  const ring = addMesh(group, new THREE.TorusGeometry(radius + thickness, thickness, 6, 32), material);
+  ring.name = 'race-ring-aperture';
+  const glowMaterial = new THREE.MeshBasicMaterial({color:0xffb32c, transparent:true, opacity:.18, depthWrite:false});
+  const glow = addMesh(group, new THREE.TorusGeometry(radius + thickness * 2.1, thickness * 1.05, 4, 32), glowMaterial);
+  const rays = new THREE.Group(); rays.name = 'race-ring-sun-rays'; group.add(rays);
+  for (let i = 0; i < 12; i++) {
+    const angle = i * Math.PI / 6, root = radius + thickness * 2.9, tip = root + (i % 2 ? .50 : .82);
+    const points = [
+      Math.cos(angle - .045) * root, Math.sin(angle - .045) * root, 0,
+      Math.cos(angle) * tip, Math.sin(angle) * tip, 0,
+      Math.cos(angle + .045) * root, Math.sin(angle + .045) * root, 0,
+    ];
+    const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    const ray = addMesh(rays, geometry, material); ray.material.side = THREE.DoubleSide;
+  }
+  const text = label(checkpoint.finish ? 'FINISH' : `${String(checkpoint.index + 1).padStart(2, '0')}  SUN RING`, '#ffc95c');
+  text.position.y = radius + 1.6; text.scale.set(4.6, 1.15, 1); group.add(text);
+  return {group, ring, rays, glow, text, material, checkpoint, finish:!!checkpoint.finish, radius, sunRing:true};
+}
+
 function makeGate(checkpoint, finish = false) {
   const group = new THREE.Group(), radius = finish ? 16.5 : checkpoint.radius;
   const material = new THREE.MeshLambertMaterial({ color: finish ? 0xf5e7bd : 0xec9c37, flatShading: true });
@@ -82,7 +109,7 @@ function makeGate(checkpoint, finish = false) {
 }
 
 export function createRaceWorld(playerProfile) {
-  const group = new THREE.Group(); group.name = 'surf-race'; group.visible = false;
+  const group = new THREE.Group(); group.name = 'hit-list-race'; group.visible = false;
   let player = playerProfile, race = null, surfer = null, name = null, shadow = null, wake = [], gates = [];
 
   function clear() {
@@ -94,7 +121,7 @@ export function createRaceWorld(playerProfile) {
   function prepare(game) {
     clear(); race = game;
     surfer = createSurfer(rivalProfile(game.rival, player)); surfer.rig.name = 'race-opponent'; group.add(surfer.rig);
-    name = label(game.rival?.name || 'RIVAL'); name.name = 'race-opponent-name'; name.scale.set(1.9,.475,1); group.add(name);
+    name = label(game.rival?.name || 'RIVAL'); name.name = 'race-opponent-name'; name.scale.set(1.35,.3375,1); group.add(name);
     shadow = addMesh(group, new THREE.CircleGeometry(.72, 12), new THREE.MeshBasicMaterial({ color: 0x153844, transparent: true, opacity: .32, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2;
     const foam = new THREE.MeshBasicMaterial({ color: 0xeaeedc, transparent: true, opacity: .72, depthWrite: false, side: THREE.DoubleSide });
@@ -102,49 +129,72 @@ export function createRaceWorld(playerProfile) {
     for (let i = 0; i < 18; i++) {
       const spray = addMesh(group, geometry, foam); spray.rotation.x = -Math.PI / 2; wake.push(spray);
     }
-    gates = [...game.course.checkpoints.map(checkpoint => makeGate(checkpoint)), makeGate({ index: game.course.checkpoints.length, distance: game.course.length, x: .5 }, true)];
+    gates = game.course.checkpoints.map(makeSunRing);
+    if (game.mode !== 'park') gates.push(makeGate({ index: game.course.checkpoints.length, distance: game.course.length, x: .5 }, true));
     for (const gate of gates) group.add(gate.group);
   }
 
   function update(game, time, oceanZ = Math.floor(-game.distance / 30) * 30 - 90) {
-    if (!game.isRace || game.mode !== 'surf' || game.phase === 'ready' || !game.opponent || !game.course) {
+    if (!game.isRace || game.phase === 'ready' || !game.opponent || !game.course) {
       if (race) clear();
       return;
     }
     if (race !== game) prepare(game);
     group.visible = true;
-    const opponent = game.opponent, air = !!opponent.airborne, bail = opponent.bailTime > 0;
-    const x = opponent.x, z = -opponent.distance;
-    const surface = renderedWaveHeight(x, z, time, oceanZ);
-    const y = alignRiderToOcean(x,opponent.y,z,time,oceanZ);
-    const lean = -(opponent.vx || 0) * .024, cutback = opponent.cutback || 0, turn = (opponent.cutbackDirection || 1) * cutback;
+    const park = game.mode === 'park', opponent = game.opponent, air = !!opponent.airborne, bail = opponent.bailTime > 0;
+    const x = opponent.x, z = park ? opponent.z : -opponent.distance, heading = park ? opponent.heading || 0 : 0;
+    const terrain = park ? opponent.surface || parkSurface(x,z) : null;
+    const surface = park ? terrain.height : renderedWaveHeight(x, z, time, oceanZ);
+    const y = park ? opponent.y : alignRiderToOcean(x,opponent.y,z,time,oceanZ);
+    const lean = park ? -(opponent.steering || 0) * .16 : -(opponent.vx || 0) * .024;
+    const cutback = opponent.cutback || 0, turn = (opponent.cutbackDirection || 1) * cutback;
     const pose = sampleRiderTrick(opponent, { air });
-    surfer.rig.position.set(x, y + .055, z); surfer.rig.rotation.order = 'YXZ';
-    surfer.rig.rotation.set(bail ? -.45 : (air ? -.09 : .045 + Math.sin(time * 3.3) * .035) - cutback * .1, -turn * 1.05, bail ? -1.8 : lean - turn * .48);
-    surfer.yaw.rotation.y = pose.spin - (opponent.vx || 0) * .035;
+    const rideUp = opponent.pipeRide ? opponent.rideUp : {x:0,y:1,z:0};
+    surfer.rig.position.set(x + rideUp.x * .055, y + rideUp.y * .055, z + rideUp.z * .055); surfer.rig.rotation.order = 'YXZ';
+    const slope = terrain ? Math.atan(terrain.dx * -Math.sin(heading) + terrain.dz * -Math.cos(heading)) : 0;
+    const crossSlope = terrain ? Math.atan(terrain.dx * Math.cos(heading) - terrain.dz * Math.sin(heading)) : 0;
+    const clampSlope = value => Math.max(-1.1, Math.min(1.1, value));
+    let pitch = opponent.pipeRide ? 0 : bail ? -.45 : air ? -.09 : opponent.grinding ? 0 : park ? clampSlope(slope) : .045 + Math.sin(time * 3.3) * .035;
+    let roll = opponent.pipeRide ? opponent.rideRoll : bail ? -1.8 : park && !air && !opponent.grinding ? clampSlope(crossSlope) + lean * .3 : lean;
+    if (opponent.lipMove) { pitch *= 1 - pose.lipGrab; roll *= 1 - pose.lipGrab; }
+    surfer.rig.rotation.set(pitch - cutback * .1, heading - (park ? 0 : turn * 1.05), roll - turn * (park ? .32 : .48));
+    surfer.yaw.rotation.y = pose.spin - (park ? opponent.grinding ? Math.PI / 2 : 0 : (opponent.vx || 0) * .035);
     surfer.boardPivot.rotation.order = 'YXZ';
     surfer.boardPivot.rotation.set(pose.boardPitch, pose.boardSpin, pose.flip + pose.boardBank);
     surfer.boardPivot.position.set(pose.boardSide, (air ? .12 : 0) + pose.boardLift, pose.boardBack);
-    surfer.pose({ charge: opponent.charge || 0, grab: pose.grab, air, time, lean, mode: 'surf', lipGrab: pose.lipGrab, tweak: pose.tweak, comboPose: pose.comboPose, cutback, cutbackDirection: opponent.cutbackDirection || 1 });
+    surfer.pose({ charge: opponent.charge || 0, grab: pose.grab, air, time, lean, mode: game.mode, lipGrab: pose.lipGrab, tweak: pose.tweak, comboPose: pose.comboPose, cutback, cutbackDirection: opponent.cutbackDirection || 1 });
     surfer.rider.visible = !bail || Math.floor(time * 12) % 2 === 0;
-    shadow.position.set(x, surface + .06, z); shadow.visible = !bail;
+    shadow.position.set(x, surface + .06, z); shadow.visible = !bail && !opponent.pipeRide;
     shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - surface) * .07) : 1);
-    name.position.set(x, y + 2.85, z); name.visible = Math.abs(game.distance - opponent.distance) < 95;
+    name.position.set(x, y + 2.85, z); name.visible = park ? Math.hypot(game.x - x, game.z - z) < 95 : Math.abs(game.distance - opponent.distance) < 95;
     for (let i = 0; i < wake.length; i++) {
       const phase = ((time * 2.8 + i / wake.length) % 1), spread = phase * (cutback > .2 ? 2.7 : .72);
-      const sx = x + (i % 2 ? 1 : -1) * spread, sz = z + .8 + phase * 4.5;
-      wake[i].position.set(sx, renderedWaveHeight(sx, sz, time, oceanZ) + .08 + Math.sin(phase * Math.PI) * cutback * .65, sz);
-      wake[i].scale.setScalar((1 - phase) * 1.4 + .2); wake[i].visible = !air && !bail && opponent.speed > 2;
+      const behind = .8 + phase * 4.5, side = (i % 2 ? 1 : -1) * spread;
+      const sx = x + Math.cos(heading) * side + Math.sin(heading) * behind;
+      const sz = z - Math.sin(heading) * side + Math.cos(heading) * behind;
+      const ground = park ? parkHeight(sx,sz) : renderedWaveHeight(sx, sz, time, oceanZ);
+      wake[i].position.set(sx, ground + .08 + Math.sin(phase * Math.PI) * cutback * .65, sz);
+      wake[i].rotation.z = -heading;
+      wake[i].scale.setScalar((1 - phase) * 1.4 + .2); wake[i].visible = !air && !bail && !opponent.pipeRide && !opponent.grinding && opponent.speed > 2;
     }
     for (const gate of gates) {
-      const checkpoint = gate.checkpoint, ground = renderedWaveHeight(checkpoint.x, -checkpoint.distance, time, oceanZ);
+      const checkpoint = gate.checkpoint, gz = park ? checkpoint.z : -checkpoint.distance;
+      const ground = park ? parkHeight(checkpoint.x,gz) : renderedWaveHeight(checkpoint.x, gz, time, oceanZ);
       const ahead = checkpoint.distance - game.distance;
-      gate.group.visible = ahead > -35 && ahead < 245;
-      gate.group.position.set(checkpoint.x, ground, -checkpoint.distance);
-      for (const pylon of gate.pylons) pylon.position.y = renderedWaveHeight(checkpoint.x + pylon.position.x, -checkpoint.distance, time, oceanZ) - ground;
       const next = checkpoint.index === game.nextCheckpoint;
-      gate.material.color.set(gate.finish ? 0xf5e7bd : next ? 0xf3ad37 : checkpoint.index < game.nextCheckpoint ? 0x536f70 : 0xb9b99a);
-      gate.text.material.opacity = gate.finish || next ? 1 : .60;
+      gate.group.visible = gate.sunRing
+        ? checkpoint.index >= game.nextCheckpoint && (next || (park ? checkpoint.index < game.nextCheckpoint + 3 : ahead < 245))
+        : ahead > -35 && ahead < 245;
+      gate.group.position.set(checkpoint.x, gate.sunRing ? park ? checkpoint.y : surfRaceRingY(checkpoint,time) : ground, gz);
+      gate.group.rotation.y = park ? checkpoint.rotation || 0 : 0;
+      for (const pylon of gate.pylons || []) pylon.position.y = renderedWaveHeight(checkpoint.x + pylon.position.x, gz, time, oceanZ) - ground;
+      gate.material.color.set(next ? 0xffd457 : gate.sunRing ? 0x87968c : 0xf5e7bd);
+      gate.text.material.opacity = next || !gate.sunRing ? 1 : .48;
+      if (gate.sunRing) {
+        gate.rays.rotation.z = time * .12;
+        gate.glow.visible = next;
+        gate.glow.material.opacity = .15 + Math.sin(time * 4) * .055;
+      }
     }
   }
   return { group, update, reset: clear, setProfile(profile) { player = profile; clear(); }, dispose: clear };

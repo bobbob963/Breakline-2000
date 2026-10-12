@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SurfGame, waveHeight } from '../src/game.js';
-import { TournamentGame,createTournamentGame,TOURNAMENT_RIVALS } from '../src/tournament.js';
-import { SurfRaceGame,createRaceCourse,raceOpponentInput,RACE_COUNTDOWN } from '../src/surf-race.js';
+import { createTournamentGame,TOURNAMENT_RIVALS } from '../src/tournament.js';
+import { ParkRaceGame } from '../src/park-race.js';
+import { SurfRaceGame,createRaceCourse,raceOpponentInput,RACE_COUNTDOWN,surfRaceRingY } from '../src/surf-race.js';
 
 function fixture(roundIndex=1){
   const events=[],game=createTournamentGame(event=>events.push(event),{version:1,completedRounds:roundIndex});
@@ -21,8 +22,8 @@ function nearFinish(game,rider,metres){
   rider.x=0;rider.vx=0;rider.bailTime=0;rider.y=waveHeight(0,-rider.distance,rider.elapsed);
 }
 
-test('the saved Hit List alternates real Surf Session races with the three existing score battles',()=>{
-  assert.deepEqual(TOURNAMENT_RIVALS.map(rival=>rival.event),['score','race','score','race','score']);
+test('all five saved Hit List ranks are physical races across the coast and factory',()=>{
+  assert.deepEqual(TOURNAMENT_RIVALS.map(rival=>rival.event),['race','race','race','race','race']);
   for(let index=0;index<5;index++){
     const game=createTournamentGame(()=>{},{version:1,completedRounds:index});
     assert.equal(game.roundIndex,index);assert.equal(game.isTournament,true);
@@ -31,7 +32,7 @@ test('the saved Hit List alternates real Surf Session races with the three exist
       assert.equal(game.mode,'surf');assert.equal(game.isRace,true);
       assert.equal(game.course.length,index===1?960:1280);
       assert.equal(game.opponent.profile,TOURNAMENT_RIVALS[index].profile);
-    }else{assert.ok(game instanceof TournamentGame);assert.equal(game.mode,'park');}
+    }else{assert.ok(game instanceof ParkRaceGame);assert.equal(game.mode,'park');assert.equal(game.isRace,true);assert.ok(game.opponent);}
   }
   assert.equal(createTournamentGame(()=>{},{version:1,completedRounds:99}).roundIndex,0);
   assert.equal(createTournamentGame(()=>{},{version:1,completedRounds:5}).complete,true);
@@ -73,6 +74,22 @@ test('race gates use a swept crossing and a miss returns only that rider before 
   assert.equal(events.filter(event=>event.type==='raceMiss'&&!event.opponent).length,1);
   game.distance=second.distance-.1;game.x=second.x;game.speed=20;game.y=waveHeight(game.x,-game.distance,game.elapsed);
   game.update(1/120,{});assert.equal(game.nextCheckpoint,2);assert.equal(game.raceMisses,1);
+});
+
+test('sun rings reject crossing above or beside the circular opening',()=>{
+  for(const miss of ['above','side']){
+    const {game,events}=fixture();skipCountdown(game);const gate=game.course.checkpoints[0];
+    game.distance=gate.distance-.01;game.x=miss==='side'?gate.x+gate.radius+.3:gate.x;
+    game.y=surfRaceRingY(gate,game.elapsed)+(miss==='above'?gate.radius+2:0);
+    game.vy=0;game.airborne=true;game.airtime=.3;game.update(1/120,{pump:true});
+    assert.equal(game.nextCheckpoint,0);assert.equal(game.raceMisses,1);
+    assert.equal(events.filter(event=>event.type==='raceGate'&&!event.opponent).length,0);
+  }
+  const {game}=fixture();skipCountdown(game);const gate=game.course.checkpoints[0];
+  game.distance=gate.distance-.01;game.x=gate.x;game.y=surfRaceRingY(gate,game.elapsed)-1;
+  game.vy=0;game.airborne=true;game.airtime=.3;game.update(1/120,{pump:true});
+  assert.equal(game.nextCheckpoint,1,'a centred air passes through the ring');
+  game.distance=gate.distance-.01;game.update(1/120,{pump:true});assert.equal(game.nextCheckpoint,1,'old rings cannot count twice');
 });
 
 test('the line cannot be won while a required checkpoint remains uncleared',()=>{
@@ -131,7 +148,7 @@ test('a clean navigated route can actually beat both AI surfers through normal h
     assert.equal(game.result,'win');assert.equal(game.nextCheckpoint,game.course.checkpoints.length);
     assert.equal(game.raceMisses,0);assert.equal(game.getProgress().completedRounds,round+1);
     const next=createTournamentGame(()=>{},game.getProgress());
-    assert.ok(next instanceof TournamentGame);assert.equal(next.roundIndex,round+1);assert.equal(next.mode,'park');
+    assert.ok(next instanceof ParkRaceGame);assert.equal(next.roundIndex,round+1);assert.equal(next.mode,'park');
   }
 });
 

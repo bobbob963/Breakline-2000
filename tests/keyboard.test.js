@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { createKeydownHandler, CONTROL_KEYS } from '../src/keyboard.js';
 import { WaveParkGame } from '../src/park.js';
 import { SurfGame, TRICKS, waveCrest, waveHeight } from '../src/game.js';
-import { createTournamentGame, sanitizeTournamentProgress } from '../src/tournament.js';
+import { createTournamentGame, sanitizeTournamentProgress, TOURNAMENT_RIVALS } from '../src/tournament.js';
 import { raceOpponentInput } from '../src/surf-race.js';
 
 function inputRoute(game) {
@@ -113,8 +113,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
 }
 function finishTournament(route,difference=1) {
   const game=route.context.game;
-  game.addCombo('KEYBOARD SCORE FIXTURE',game.target+difference);
-  assert.equal(game.bank(),true);assert.equal(game.finish(),true);
+  assert.equal(game.finish(difference>0?'win':'loss',difference===0?'PHOTO FINISH - RIVAL HOLDS RANK':undefined),true);
   assert.equal(route.context.modalMode,'results');
 }
 
@@ -123,7 +122,7 @@ test('Enter from the ladder starts its selected rival through the real applicati
   assert.equal(route.context.game.phase,'ready');route.press('Enter');
   assert.deepEqual(route.calls,['startRun']);assert.equal(route.context.modalMode,null);
   assert.equal(route.context.game.phase,'running');assert.equal(route.context.game.roundIndex,2);
-  assert.equal(route.context.game.rival.name,'UNDERTOW');assert.equal(route.context.game.time,90);
+  assert.equal(route.context.game.rival.name,'UNDERTOW');assert.equal(route.context.game.time,0);assert.equal(route.context.game.countdownRemaining,3);
 });
 
 test('R retries the winning heat while Enter results advances to the next rival',()=>{
@@ -135,7 +134,7 @@ test('R retries the winning heat while Enter results advances to the next rival'
     if(code==='KeyR')assert.equal(next,game);else assert.notEqual(next,game);
     assert.equal(next.phase,'running');assert.equal(next.score,0);
     assert.equal(next.roundIndex,code==='KeyR'?0:1);assert.equal(next.mode,code==='KeyR'?'park':'surf');
-    assert.equal(next.time,code==='KeyR'?90:0);assert.equal(next.result,null);
+    assert.equal(next.time,0);assert.equal(next.countdownRemaining,3);assert.equal(next.result,null);
     assert.equal(next.getProgress().completedRounds,1);
   }
 });
@@ -173,7 +172,7 @@ test('winning either ocean race advances the real Enter action back to the corre
     assert.equal(race.result,'win');assert.equal(route.context.modalMode,'results');
     route.press('Enter');const next=route.context.game;
     assert.notEqual(next,race);assert.equal(next.mode,'park');assert.equal(next.roundIndex,round+1);
-    assert.equal(next.time,90);assert.equal(next.phase,'running');assert.equal(next.result,null);
+    assert.equal(next.time,0);assert.equal(next.countdownRemaining,3);assert.equal(next.phase,'running');assert.equal(next.result,null);
   }
 });
 
@@ -185,5 +184,21 @@ test('R after a race win and Enter after a race loss both restart that race with
     assert.equal(race.result,win?'win':'loss');route.press(win?'KeyR':'Enter');
     assert.equal(route.context.game,race);assert.equal(race.roundIndex,1);assert.equal(race.countdownRemaining,3);
     assert.notEqual(race.opponent,opponent);assert.equal(race.opponent.distance,0);assert.equal(race.result,null);
+  }
+});
+
+test('production race results handle every venue and the final championship without an undefined next rival',()=>{
+  const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
+  const first=source.indexOf('function showTournamentResults()'),last=source.indexOf('function renderCustomizationChoices()',first);
+  for(let round=0;round<5;round++)for(const win of[false,true]){
+    const game=createTournamentGame(()=>{},{version:1,completedRounds:round});game.start();game.finish(win?'win':'loss');
+    let modal;
+    const context={game,TOURNAMENT_RIVALS,tournamentProgress:game.getProgress(),clearInput(){},isParkMode:()=>game.mode==='park',
+      fmt:n=>Math.round(n).toString(),clockText:n=>n.toFixed(1),openModal:(...args)=>{modal=args;}};
+    vm.runInNewContext(source.slice(first,last),context);context.showTournamentResults();
+    assert.equal(modal[0],'results');assert.equal(modal[3],win?(round===4?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL');
+    assert.match(modal[2],game.mode==='park'?/WATERWORKS RACE/:/SURF RACE/);
+    assert.doesNotMatch(modal[2],/undefined|NaN|BANKED SCORE/);
+    if(round===4&&win)assert.match(modal[2],/ALL FIVE RIVALS DEFEATED/);
   }
 });
