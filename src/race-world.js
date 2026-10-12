@@ -119,6 +119,7 @@ function makeGate(checkpoint, finish = false) {
 
 export function createRaceWorld(playerProfile) {
   const group = new THREE.Group(); group.name = 'hit-list-race'; group.visible = false;
+  const labelHead = new THREE.Vector3();
   let player = playerProfile, race = null, surfer = null, name = null, action = null, shadow = null, wake = [], boostTrail = [], gates = [];
 
   function clear() {
@@ -183,11 +184,15 @@ export function createRaceWorld(playerProfile) {
     surfer.rider.visible = !bail || Math.floor(time * 12) % 2 === 0;
     shadow.position.set(x, surface + .06, z); shadow.visible = !bail && !opponent.pipeRide;
     shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - surface) * .07) : 1);
-    name.position.set(x, y + 2.85, z); name.visible = park ? Math.hypot(game.x - x, game.z - z) < 95 : Math.abs(game.distance - opponent.distance) < 95;
+    // Tucked aerial poses lower the head. Keep their labels over the actual
+    // rider so the closer ocean camera does not crop them off the screen.
+    const aerialLabels = !park && air;
+    if(aerialLabels)surfer.head.getWorldPosition(labelHead);
+    name.position.set(x, aerialLabels ? labelHead.y + .75 : y + 2.85, z); name.visible = park ? Math.hypot(game.x - x, game.z - z) < 95 : Math.abs(game.distance - opponent.distance) < 95;
     name.userData.setText(`${game.rival?.name || 'RIVAL'}${boosting ? ' • BOOST' : ''}`, boosting ? '#ffca50' : '#eab351');
     const actionText = opponent.trick?.name || (boosting ? opponent.boostLabel || 'TRICK BOOST' : '');
     action.userData.setText(actionText, boosting ? '#ffca50' : '#9cdbdf');
-    action.position.set(x, y + 2.42, z); action.visible = name.visible && !!actionText && !bail && game.phase !== 'finished';
+    action.position.set(x, aerialLabels ? labelHead.y + .32 : y + 2.42, z); action.visible = name.visible && !!actionText && !bail && game.phase !== 'finished';
     action.material.opacity = boosting ? .84 + Math.sin(time * 17) * .16 : 1;
     for (let i = 0; i < wake.length; i++) {
       const phase = ((time * 2.8 + i / wake.length) % 1), spread = phase * (cutback > .2 ? 2.7 : .72);

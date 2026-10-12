@@ -51,6 +51,7 @@ function palm() {
 export class SurfWorld {
   constructor(container, profile = DEFAULT_PROFILE) {
     this.container = container; this.time = 0; this.retro = true; this.mode = 'surf'; this.profile = profile;
+    this.oceanRaceView = false;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0xe7c48d);
     this.scene.fog = new THREE.Fog(0x91a7b0, 85, 265);
     this.camera = new THREE.PerspectiveCamera(50, 1, .18, 750);
@@ -84,7 +85,10 @@ export class SurfWorld {
   resize() {
     const { width, height } = this.container.getBoundingClientRect();
     if (!width || !height) return;
-    const scale = this.retro ? Math.min(1, 640 / width) : Math.min(1.5, window.devicePixelRatio || 1);
+    // Wider race framing needs more source pixels to retain the same rider
+    // detail as the closer freestyle camera. Keep the original texture style.
+    const retroWidth = this.oceanRaceView ? 960 : 640;
+    const scale = this.retro ? Math.min(1, retroWidth / width) : Math.min(1.5, window.devicePixelRatio || 1);
     this.renderer.setSize(Math.round(width * scale), Math.round(height * scale), false);
     this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
   }
@@ -278,6 +282,8 @@ export class SurfWorld {
   update(dt, game) {
     const attract = game.phase === 'ready';
     const isPark=game.mode==='park';
+    const oceanRaceView=!!game.isRace&&!isPark&&!attract;
+    if(this.oceanRaceView!==oceanRaceView){this.oceanRaceView=oceanRaceView;this.resize();}
     if(this.mode!==(isPark?'park':'surf'))this.setMode(game.mode);
     if (game.phase !== 'paused' && game.phase !== 'finished') this.time += dt;
     const t = attract ? this.time : game.elapsed, d = attract ? this.time * 9 : game.distance;
@@ -378,8 +384,8 @@ export class SurfWorld {
         const rival=game.opponent,gap=rival?Math.abs(rival.distance-d):Infinity;
         const together=gap<22?1-gap/22:0;
         const midpoint=rival?clamp((rival.x-x)*.4,-3,3)*together:0;
-        target.set(x+.7+midpoint,y+3.7,z+7.4);
-        look.set(x+midpoint,y+1.05,z-3.2);
+        target.set(x+.7+midpoint,y+3.3,z+6.5);
+        look.set(x+midpoint,y+1.05,z-2.6);
       }
       if(!attract&&grab>0){target.x+=grab*1.8;target.y-=grab*.65;target.z-=grab*.9;look.set(x,y+.55,z);}
       if(storm&&!attract&&game.barrel?.inside){
@@ -393,7 +399,7 @@ export class SurfWorld {
     if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
     else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
-    const fieldOfView=parkFrame?parkFrame.fov:game.isRace&&!attract?58:50;
+    const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50;
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.renderer.render(this.scene, this.camera);
