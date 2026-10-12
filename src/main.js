@@ -155,12 +155,13 @@ function goHome(){
 }
 function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
   $('modal').dataset.mode=mode;
+  $('race-ladders').classList.toggle('hidden',!game.isTournament||!['pause','results'].includes(mode));
   const active=game.phase==='running';if(active){game.pause();clearInput();}if(!modalMode)resumeAfterModal=active;
   modalMode=mode;$('modal-title').textContent=title;$('modal-kicker').textContent=kicker;$('modal-content').innerHTML=content;$('modal-action').textContent=action;
   $('modal').classList.remove('hidden');$('modal-action').focus({preventScroll:true});
 }
 function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;$('stage').focus({preventScroll:true});}
-function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
+function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
 function showHelp(){
   if(modalMode==='help'){closeModal();return;}
   openModal('help','HOW TO RIDE',`<div class="controls-grid">
@@ -197,8 +198,16 @@ function rewardCard(id,{unlocked=false,equipped=false,result=false}={}){
 }
 function ladderRows(){return `<ol class="rival-ladder">${tournamentRivalsForLadder(tournamentProgress).map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.venue==='park'?'WATERWORKS CIRCUIT':'SURF SESSION'} · RACE</span></div><div class="rival-target"><strong>${fmt(tournamentCourseLength(r))}m</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
 function showLadder(){
+  if(!game.isTournament)return;
   const ladder=game.ladder,reward=getRewardBoard(ladder.rewardId);
-  openModal('ladder',ladder.name,`<p class="rival-intro">Five ladders. Five exclusive boards. Each ladder has five head-to-head races across the coast and Waterworks.</p><div class="ladder-tabs" role="group" aria-label="Rival ladders">${TOURNAMENT_LADDERS.map((entry,i)=>`<button data-ladder="${i}" ${i>tournamentProgress.completedLadders||i===game.ladderIndex?'disabled':''} class="${i===game.ladderIndex?'selected':''}"><b>${String(i+1).padStart(2,'0')} ${entry.name}</b><span>${i<tournamentProgress.completedLadders?'CLEARED · REPLAY':i===game.ladderIndex?`${tournamentProgress.completedRounds}/5 RIVALS`:i===tournamentProgress.completedLadders?'ENTER LADDER':'LOCKED'}</span></button>`).join('')}</div><p class="ladder-prize">PRIZE: <b>${reward.name}</b> · ${reward.buffLabel}</p>${ladderRows()}<p class="rival-footnote">Pass every sun ring and finish first. Switching ladders starts at race 1. Your prize boards stay unlocked. ${tournamentProgress.completedLadders}/5 prize boards earned.</p>`,game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`,`THE HIT LIST / LADDER ${game.ladderIndex+1} OF 5`);
+  openModal('ladder',ladder.name,`<p class="rival-intro">Five ladders. Five exclusive boards. Each ladder has five head-to-head races across the coast and Waterworks.</p><div class="ladder-tabs" role="group" aria-label="Rival ladders">${TOURNAMENT_LADDERS.map((entry,i)=>`<button data-ladder="${i}" ${i>tournamentProgress.completedLadders||i===game.ladderIndex?'disabled':''} class="${i===game.ladderIndex?'selected':''}"><b>${String(i+1).padStart(2,'0')} ${entry.name}</b><span>${i<tournamentProgress.completedLadders?'CLEARED · REPLAY':i===game.ladderIndex?`${tournamentProgress.completedRounds}/5 RIVALS`:i===tournamentProgress.completedLadders?'ENTER LADDER':'LOCKED'}</span></button>`).join('')}</div><p class="ladder-prize">PRIZE: <b>${reward.name}</b> · ${reward.buffLabel}</p><div class="ladder-reset-row"><button type="button" data-reset-ladder>RESET THIS LADDER</button><p>Start this ladder again from race 1.<br>Your prize boards and unlocked ladders stay available.</p></div>${ladderRows()}<p class="rival-footnote">Pass every sun ring and finish first. Switching ladders starts at race 1. Your prize boards stay unlocked. ${tournamentProgress.completedLadders}/5 prize boards earned.</p>`,game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`,`THE HIT LIST / LADDER ${game.ladderIndex+1} OF 5`);
+}
+function resetCurrentLadder(){
+  if(!game.isTournament)return;
+  const next=selectTournamentLadder(tournamentProgress,game.ladderIndex);
+  if(!next)return;
+  tournamentProgress=next;write('breakline99-tournament-v2',JSON.stringify(next));
+  goHome();showLadder();
 }
 function showTournamentResults(){
   clearInput();const win=game.result==='win',venue=isParkMode()?'WATERWORKS RACE':'SURF RACE';
@@ -353,13 +362,15 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput
 document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
+$('race-ladders').addEventListener('click',showLadder);
 $('standard-board').addEventListener('click',()=>setProfile({rewardBoard:null}));
 $('modal-content').addEventListener('click',event=>{
   const button=event.target.closest('button');if(!button||button.disabled)return;
+  if(button.dataset.resetLadder!==undefined){resetCurrentLadder();return;}
   if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard}))showTournamentResults();
   if(button.dataset.ladder!==undefined){
     const next=selectTournamentLadder(tournamentProgress,Number(button.dataset.ladder));
-    if(next){tournamentProgress=next;write('breakline99-tournament-v2',JSON.stringify(next));makeGame();updateModeMenu();showLadder();}
+    if(next){tournamentProgress=next;write('breakline99-tournament-v2',JSON.stringify(next));goHome();showLadder();}
   }
 });
 $('modal-home').addEventListener('click',goHome);

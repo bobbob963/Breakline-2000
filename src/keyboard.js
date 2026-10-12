@@ -7,6 +7,9 @@ export function createKeydownHandler(getState, actions) {
   return e => {
     const { bootReady, workshopMode, modalMode, game, input } = getState();
     if (!bootReady) return;
+    // Let the focused menu button receive its native Enter click. Otherwise
+    // Enter on RESET THIS LADDER would start a race before the button fires.
+    if (e.code === 'Enter' && !workshopMode && e.target?.closest?.('button')) return;
     if (CONTROL_KEYS[e.code] || TRICK_KEYS[e.code] || ['Enter','Escape','KeyP','KeyR','KeyM','KeyC'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'KeyM') { actions.toggleSound(); return; }

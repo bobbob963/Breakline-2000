@@ -18,7 +18,7 @@
 .standard-board{width:100%;padding:11px;margin:5px 0;border:1px solid #758583;background:#18232b;color:#c7d2ca;font:bold 10px var(--mono);cursor:pointer}
 .standard-board.is-selected{border-color:#f0d477;color:#f0d477;background:#363830}
 #reward-collection-count{display:block;color:#92bdae;font:8px/1.8 var(--mono);margin-top:4px}
-#modal[data-mode="ladder"] .modal-card{max-width:760px}
+#modal[data-mode="ladder"] .modal-card{width:min(760px,100%);max-width:760px}
 .ladder-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:16px 0}
 .ladder-tabs button{padding:10px 5px;border:1px solid #667a7c;background:#19252c;color:#d0d8ca;cursor:pointer;text-align:left}
 .ladder-tabs b{display:block;font:italic 13px/1.25 Impact,'Arial Black',sans-serif;letter-spacing:.3px}
@@ -27,6 +27,12 @@
 .ladder-tabs button.selected{border-color:#ebce6a;color:#ebce6a;opacity:1;background:#373931}
 .ladder-prize{font:10px/1.7 var(--mono);padding:10px;border-left:3px solid #efbc67;background:#242d32;color:#d9d8c5}
 .ladder-prize b{color:#f2cb71}
+.ladder-reset-row{display:flex;align-items:center;gap:14px;margin:12px 0;padding:12px 0;border-block:1px solid #7b8c8344}
+.ladder-reset-row button{flex-shrink:0;padding:10px 14px;border:1px solid #c9946a;background:#342c29;color:#ecc19c;font:bold 9px var(--mono);cursor:pointer}
+.ladder-reset-row button:hover{background:#4b3730;border-color:#f4c391}
+.ladder-reset-row button:focus-visible{outline:2px solid #fff6bd;outline-offset:3px}
+.ladder-reset-row p{margin:0!important;font:8px/1.6 var(--mono)!important;color:#b6c2ba}
+#race-ladders{width:100%;margin-top:12px;color:#e4cf85;border-color:#9b945f}
 #modal[data-mode="results"] .reward-card{margin:15px 0}
 #modal[data-mode="results"] .reward-icon{font-size:44px}
 .reward-ride-status{position:absolute;bottom:40px;left:25px;max-width:240px;color:#e9d296;font:bold 7px/1.8 var(--mono);letter-spacing:.4px;padding:5px 8px;background:#16242dcc;border-left:2px solid #e9d296;text-shadow:1px 1px #0b1620;pointer-events:none}
