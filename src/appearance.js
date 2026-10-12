@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCharacter } from './character-model.js';
+import { getRewardBoard } from './board-rewards.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export const CHARACTERS = {
@@ -27,11 +28,11 @@ export const BOARD_DESIGNS = {
   tribal: { name: 'BLACK TIDE' }, hibiscus: { name: 'HIBISCUS' }, skull: { name: 'SKULL REEF' },
   sunburst: { name: 'SOLAR FLARE' }, pinstripe: { name: 'PINSTRIPE' },
 };
-export const DEFAULT_PROFILE = { character: 'kai', outfit: 'riptide', boardColor: '#f5d329', boardDesign: 'bolt' };
+export const DEFAULT_PROFILE = { character: 'kai', outfit: 'riptide', boardColor: '#f5d329', boardDesign: 'bolt', rewardBoard: null };
 const colors = ['#f5d329', '#e95b39', '#24c5ba', '#8755bb', '#f5ede0'];
 export function validateProfile(value = {}) {
   if (!value || typeof value !== 'object') value = {};
-  return { character: Object.hasOwn(CHARACTERS, value.character) ? value.character : 'kai', outfit: Object.hasOwn(OUTFITS, value.outfit) ? value.outfit : 'riptide', boardColor: colors.includes(value.boardColor) ? value.boardColor : colors[0], boardDesign: Object.hasOwn(BOARD_DESIGNS, value.boardDesign) ? value.boardDesign : 'bolt' };
+  return { character: Object.hasOwn(CHARACTERS, value.character) ? value.character : 'kai', outfit: Object.hasOwn(OUTFITS, value.outfit) ? value.outfit : 'riptide', boardColor: colors.includes(value.boardColor) ? value.boardColor : colors[0], boardDesign: Object.hasOwn(BOARD_DESIGNS, value.boardDesign) ? value.boardDesign : 'bolt', rewardBoard: getRewardBoard(value.rewardBoard)?.id ?? null };
 }
 export function pixelTexture(base, detail = '#ffffff', size = 64, repeat = 1) {
   const c = document.createElement('canvas'); c.width = c.height = size;
@@ -162,6 +163,7 @@ function fabricTexture(outfit, shorts = false) {
   return canvasTexture(c);
 }
 function boardTexture(profile) {
+  if (getRewardBoard(profile.rewardBoard)) return rewardBoardTexture(profile.rewardBoard);
   const c = document.createElement('canvas'); c.width = 64; c.height = 256;
   const ctx = c.getContext('2d'); ctx.fillStyle = profile.boardColor; ctx.fillRect(0, 0, 64, 256);
   ctx.fillStyle = '#182637';
@@ -206,6 +208,50 @@ function boardTexture(profile) {
   for (let i = 0; i < 340; i++) { ctx.fillStyle = i % 2 ? '#fff' : '#071322'; ctx.fillRect((i * 37) % 64, (i * 71) % 256, 1, i % 7 === 0 ? 4 : 1); }
   return canvasTexture(c);
 }
+// Five original screen-printed decks. Art stays crisp and angular at the same
+// texture density as the standard board; reward gear never changes rider shape.
+export function rewardBoardTexture(id) {
+  const reward=getRewardBoard(id);
+  if(!reward)return null;
+  const c=document.createElement('canvas');c.width=64;c.height=256;
+  const ctx=c.getContext('2d'),{primary,secondary,accent}=reward.colors;
+  ctx.fillStyle=primary;ctx.fillRect(0,0,64,256);
+  ctx.fillStyle=secondary;ctx.fillRect(5,0,2,256);ctx.fillRect(57,0,2,256);
+  const polygon=(points,color)=>{ctx.fillStyle=color;ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill();};
+  if(id==='guitar') {
+    // Offset electric-guitar silhouette, cream pickguard, frets and strings.
+    polygon([[29,11],[42,11],[39,30],[35,35],[35,107],[48,120],[56,111],[56,149],[48,170],[21,174],[9,156],[11,126],[22,111],[27,116],[28,35]],secondary);
+    polygon([[30,109],[40,125],[43,151],[32,164],[18,154],[17,135],[25,123]],accent);
+    ctx.fillStyle='#172329';ctx.fillRect(27,39,8,80);ctx.fillRect(25,133,17,5);ctx.fillRect(27,148,13,5);
+    ctx.strokeStyle='#eedfc1';ctx.lineWidth=.6;
+    for(let x=28;x<=34;x+=2){ctx.beginPath();ctx.moveTo(x,24);ctx.lineTo(x,157);ctx.stroke();}
+    for(let y=43;y<109;y+=8)ctx.fillRect(27,y,9,1);
+    ctx.fillStyle=accent;for(const [x,y]of [[13,61],[46,85],[14,186],[46,191]]){ctx.fillRect(x,y-12,2,14);ctx.beginPath();ctx.ellipse(x-2,y,4,3,-.4,0,Math.PI*2);ctx.fill();ctx.fillRect(x,y-13,6,3);}
+  } else if(id==='lightning') {
+    polygon([[45,8],[16,95],[29,92],[12,193],[53,79],[36,86],[56,8]],secondary);
+    polygon([[38,31],[26,88],[38,81],[23,148],[47,81],[31,89]],accent);
+    polygon([[8,48],[19,66],[12,99],[24,80],[18,57]],accent);
+    polygon([[52,132],[43,155],[49,181],[38,165],[43,145]],accent);
+    ctx.strokeStyle=secondary;ctx.lineWidth=2;for(const y of [199,204]){ctx.beginPath();ctx.moveTo(14,y);ctx.lineTo(49,y-5);ctx.stroke();}
+  } else if(id==='vortex') {
+    for(let i=0;i<6;i++){ctx.save();ctx.translate(32,114);ctx.scale(.6,1.4);ctx.rotate(i*Math.PI/3);polygon([[0,-9],[18,-17],[29,-7],[22,14],[11,24],[18,4],[10,-4]],i%2?secondary:accent);ctx.restore();}
+    ctx.fillStyle='#122f38';ctx.beginPath();ctx.ellipse(32,114,8,16,0,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<4;i++){ctx.strokeStyle=secondary;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(14,15+i*12);ctx.quadraticCurveTo(28,34+i*12,49,15+i*12);ctx.stroke();}
+    polygon([[12,167],[30,176],[51,162],[40,188],[22,199]],accent);
+  } else if(id==='solar') {
+    ctx.save();ctx.translate(32,108);ctx.scale(1,2.9);sun(ctx,0,0,37,secondary,12);ctx.restore();
+    sun(ctx,32,108,26,accent,12);ctx.fillStyle='#f9e7ae';ctx.beginPath();ctx.arc(32,108,12,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=secondary;for(let i=0;i<5;i++)ctx.fillRect(13+i*2,181+i*5,38-i*4,2);
+  } else {
+    for(const side of [-1,1]){ctx.save();ctx.translate(32,108);ctx.scale(side,1);polygon([[0,38],[4,-59],[24,-89],[25,-55],[14,-35],[24,-47],[19,-22],[10,-8],[20,-19],[14,8]],secondary);ctx.restore();}
+    polygon([[29,43],[35,29],[34,137],[29,162]],accent);
+    for(let i=0;i<4;i++){ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(10,173+i*7);ctx.bezierCurveTo(27,167+i*7,38,190+i*4,53,173+i*7);ctx.stroke();}
+  }
+  ctx.fillStyle='#14232b';ctx.fillRect(10,214,44,22);ctx.strokeStyle=accent;ctx.lineWidth=1;ctx.strokeRect(10,214,44,22);
+  ctx.fillStyle='#f5e9d2';ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText('B / 99',32,223);ctx.font='bold 5px monospace';ctx.fillText(reward.name,32,231);
+  ctx.globalAlpha=.075;for(let i=0;i<160;i++){ctx.fillStyle=i%2?'#ffffff':'#070d18';ctx.fillRect((i*29)%64,(i*71)%256,1,3);}ctx.globalAlpha=1;
+  const texture=canvasTexture(c);texture.name='reward-deck-'+id;return texture;
+}
 function part(parent, geometry, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x,y,z); parent.add(mesh); return mesh;
 }
@@ -231,6 +277,7 @@ function createBoard(parent,profile){
   const deckMaterial=humanMaterial(0xffffff,boardTexture(profile));deckMaterial.side=THREE.DoubleSide;
   const deck=polygonMesh(parent,vertices,faces,deckMaterial,uv);
   deck.name='surfboard-deck';
+  deck.userData.rewardBoard=profile.rewardBoard;
   // Interpolate the real straight right rail between its two authored deck
   // vertices, so contact follows the generated board, including its pivots.
   const railFront=new THREE.Vector3(...vertices[4]),railBack=new THREE.Vector3(...vertices[5]);
@@ -239,7 +286,7 @@ function createBoard(parent,profile){
   for(const[x,z]of outline){const rocker=Math.max(0,-z-.72)*.12;shellVertices.push([x,.14+rocker,z],[x*.91,.079+rocker,z]);}
   for(let i=0;i<outline.length;i++){const n=(i+1)%outline.length;shellFaces.push([i*2,n*2,n*2+1,i*2+1]);}
   shellVertices.push([0,.077,0]);for(let i=0;i<outline.length;i++)shellFaces.push([shellVertices.length-1,i*2+1,((i+1)%outline.length)*2+1]);
-  polygonMesh(parent,shellVertices,shellFaces,humanMaterial(profile.boardColor));
+  polygonMesh(parent,shellVertices,shellFaces,humanMaterial(getRewardBoard(profile.rewardBoard)?.colors.secondary??profile.boardColor));
   const finMaterial=humanMaterial('#1a2730');finMaterial.side=THREE.DoubleSide;
   for(const[x,z,scale]of [[0,.7,1],[-.14,.48,.72],[.14,.48,.72]])polygonMesh(parent,[[x,.082,z-.12],[x,.082,z+.18],[x,-.11*scale,z+.15],[x,-.07*scale,z-.015]],[[0,1,2,3]],finMaterial);
   return deck;
@@ -316,7 +363,7 @@ export class CustomizationPreview{
     s.boardPivot.position.set(mode==='board'?0:-.34,mode==='board'?1.062:.89,mode==='board'?0:.10);
     // Fixed full-height framing keeps the whole adult figure, hat and board in view.
     const narrow=Math.max(1,.88/Math.max(.3,this.camera.aspect));
-    this.camera.position.set(.32*narrow,1.15,-3.13*narrow);this.camera.lookAt(mode==='board'?0:-.04,.95,0);
+    this.camera.position.set(.32*narrow,mode==='board'?1.26:1.15,(mode==='board'?-4.1:-3.13)*narrow);this.camera.lookAt(mode==='board'?0:-.04,mode==='board'?1.062:.95,0);
     this.shadow.visible=mode==='character';this.renderer.render(this.scene,this.camera);
   }
   dispose(){this.resizeObserver.disconnect();disposeSurfer(this.surfer);this.shadow.geometry.dispose();this.shadow.material.map.dispose();this.shadow.material.dispose();this.renderer.dispose();this.renderer.domElement.remove();}

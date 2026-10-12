@@ -1,4 +1,5 @@
 import { SurfGame, courseItem, waveHeight, clamp } from './game.js';
+import { TOURNAMENT_LADDERS,sanitizeTournamentProgress,tournamentLadder,recordTournamentWin } from './tournament-progress.js';
 
 export const RACE_COUNTDOWN=3;
 export const RACE_GATE_RADIUS=5.7;
@@ -84,7 +85,7 @@ function resolveRaceMovement(rider,previous,course,emit) {
       rider.distance=checkpoint.distance-RACE_RESET_DISTANCE;
       rider.speed=8;rider.vx=0;rider.vy=0;rider.airborne=false;rider.trick=null;
       rider.charge=0;rider.cutbackActive=false;rider.cutback=0;
-      rider.cutbackLaunchTime=0;rider.popRecovery=1.4;
+      rider.cutbackLaunchTime=0;rider.popRecovery=1.4*(rider.rewardBoardDefinition?.popRecoveryMultiplier||1);rider.airJumpsUsed=0;
       rider.rotation=0;rider.flipRotation=0;rider.boardRotation=0;rider.rollRotation=0;
       rider.y=waveHeight(rider.x,-rider.distance,rider.elapsed);
       rider.clearCombo();rider.raceMisses++;
@@ -105,13 +106,16 @@ export class SurfRaceGame extends RaceSurfer {
     this.roundIndex=Number.isInteger(options.roundIndex)?options.roundIndex:1;
     this.roundCount=options.roundCount||5;
     this._rival=options.rival||FALLBACK_RIVAL;
-    this._tournamentProgress={version:1,completedRounds:options.progress?.completedRounds||0};
+    this._tournamentProgress=sanitizeTournamentProgress(options.progress);
     this.reset();
   }
   get rival(){return this._rival||FALLBACK_RIVAL;}
   get target(){return this.rival.target;}
   get roundNumber(){return (this.roundIndex??1)+1;}
   get complete(){return this._tournamentProgress?.completedRounds===this.roundCount;}
+  get ladder(){return tournamentLadder(this._tournamentProgress);}
+  get ladderIndex(){return this._tournamentProgress?.ladderIndex||0;}
+  get allLaddersComplete(){return this._tournamentProgress?.completedLadders===TOURNAMENT_LADDERS.length;}
   getProgress(){return {...this._tournamentProgress};}
   get raceProgress(){return this.distance;}
   get opponentRaceProgress(){return this.opponent?.distance??0;}
@@ -127,6 +131,7 @@ export class SurfRaceGame extends RaceSurfer {
     this.course=createRaceCourse(this.rival.courseLength);
     this.countdownRemaining=RACE_COUNTDOWN;
     this.result=null;this.resultReason='';this.rivalScore=0;this._finishing=false;
+    this.unlockedBoardId=null;
     this.finishTime=null;this.opponentFinishTime=null;this.time=0;
     this.clearRaceBoost();this._boostAwardedForAir=true;
     prepareRacer(this,-2.4);
@@ -178,7 +183,11 @@ export class SurfRaceGame extends RaceSurfer {
     if(this.phase!=='running'||this._finishing)return false;
     this._finishing=true;
     this.result=result==='win'?'win':'loss';
-    if(this.result==='win')this._tournamentProgress.completedRounds=Math.max(this._tournamentProgress.completedRounds,this.roundIndex+1);
+    if(this.result==='win') {
+      const before=this._tournamentProgress.completedLadders;
+      this._tournamentProgress=recordTournamentWin(this._tournamentProgress,this.roundIndex);
+      this.unlockedBoardId=this._tournamentProgress.completedLadders>before?this.ladder.rewardId:null;
+    }
     this.resultReason=reason||(this.result==='win'?'FIRST ACROSS THE LINE':`${this.rival.name} FINISHED FIRST`);
     const crossingTimes=[this.finishTime,this.opponentFinishTime].filter(Number.isFinite);
     if(crossingTimes.length)this.elapsed=this.time=this.opponent.elapsed=Math.min(...crossingTimes);
@@ -188,7 +197,8 @@ export class SurfRaceGame extends RaceSurfer {
     this.onEvent({type:'finish',tournament:true,race:true,reason:this.resultReason,result:this.result,
       roundIndex:this.roundIndex,roundNumber:this.roundNumber,rival:this.rival,target:this.target,
       score:this.score,complete:this.complete,progress:this.getProgress(),finishTime:this.finishTime,
-      opponentFinishTime:this.opponentFinishTime});
+      opponentFinishTime:this.opponentFinishTime,ladderIndex:this.ladderIndex,ladder:this.ladder,
+      allLaddersComplete:this.allLaddersComplete,unlockedBoardId:this.unlockedBoardId});
     return true;
   }
 }

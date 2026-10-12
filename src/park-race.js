@@ -1,4 +1,5 @@
 import { clamp } from './game.js';
+import { TOURNAMENT_LADDERS,sanitizeTournamentProgress,tournamentLadder,recordTournamentWin } from './tournament-progress.js';
 import { WaveParkGame,parkRideSurface,parkHeight,PARK_PIPES } from './park.js';
 import { RACE_COUNTDOWN } from './surf-race.js';
 import { RaceRider,drainRaceBoost,raceTrickInput } from './race-rider.js';
@@ -120,12 +121,15 @@ export class ParkRaceGame extends RaceParkRider {
     super(()=>{});this.onEvent=onEvent;
     this.roundIndex=Number.isInteger(options.roundIndex)?options.roundIndex:0;this.roundCount=options.roundCount||5;
     this._rival=options.rival||FALLBACK_RIVAL;
-    this._tournamentProgress={version:1,completedRounds:options.progress?.completedRounds||0};this.reset();
+    this._tournamentProgress=sanitizeTournamentProgress(options.progress);this.reset();
   }
   get rival(){return this._rival||FALLBACK_RIVAL;}
   get target(){return this.rival.target;}
   get roundNumber(){return (this.roundIndex??0)+1;}
   get complete(){return this._tournamentProgress?.completedRounds===this.roundCount;}
+  get ladder(){return tournamentLadder(this._tournamentProgress);}
+  get ladderIndex(){return this._tournamentProgress?.ladderIndex||0;}
+  get allLaddersComplete(){return this._tournamentProgress?.completedLadders===TOURNAMENT_LADDERS.length;}
   getProgress(){return {...this._tournamentProgress};}
   get opponentRaceProgress(){return this.opponent?.raceProgress||0;}
   get racePosition(){return this.result?(this.result==='win'?1:2):this.raceProgress>=this.opponentRaceProgress?1:2;}
@@ -139,6 +143,7 @@ export class ParkRaceGame extends RaceParkRider {
     try{super.reset();}finally{this.onEvent=callback;}
     this.isTournament=true;this.isRace=true;this.course=createParkRaceCourse(this.rival.id);
     this.countdownRemaining=RACE_COUNTDOWN;this.result=null;this.resultReason='';this.rivalScore=0;this._finishing=false;
+    this.unlockedBoardId=null;
     this.finishTime=null;this.opponentFinishTime=null;this.time=0;this.clearRaceBoost();this._boostAwardedForAir=true;
     prepareRacer(this,this.course,-.8);
     this.opponent=new RaceParkRider(event=>this.onEvent({...event,opponent:true}));this.opponent.start();this.opponent.profile=this.rival.profile;
@@ -177,7 +182,11 @@ export class ParkRaceGame extends RaceParkRider {
   }
   finish(result='loss',reason) {
     if(this.phase!=='running'||this._finishing)return false;this._finishing=true;this.result=result==='win'?'win':'loss';
-    if(this.result==='win')this._tournamentProgress.completedRounds=Math.max(this._tournamentProgress.completedRounds,this.roundIndex+1);
+    if(this.result==='win') {
+      const before=this._tournamentProgress.completedLadders;
+      this._tournamentProgress=recordTournamentWin(this._tournamentProgress,this.roundIndex);
+      this.unlockedBoardId=this._tournamentProgress.completedLadders>before?this.ladder.rewardId:null;
+    }
     this.resultReason=reason||(this.result==='win'?'FIRST THROUGH THE FINAL SUN RING':`${this.rival.name} FINISHED FIRST`);
     const times=[this.finishTime,this.opponentFinishTime].filter(Number.isFinite);
     if(times.length)this.elapsed=this.time=this.opponent.elapsed=Math.min(...times);
@@ -186,6 +195,7 @@ export class ParkRaceGame extends RaceParkRider {
     this.phase='finished';this.opponent.phase='finished';
     this.onEvent({type:'finish',tournament:true,race:true,reason:this.resultReason,result:this.result,roundIndex:this.roundIndex,
       roundNumber:this.roundNumber,rival:this.rival,target:this.target,score:this.score,complete:this.complete,
-      progress:this.getProgress(),finishTime:this.finishTime,opponentFinishTime:this.opponentFinishTime});return true;
+      progress:this.getProgress(),finishTime:this.finishTime,opponentFinishTime:this.opponentFinishTime,
+      ladderIndex:this.ladderIndex,ladder:this.ladder,allLaddersComplete:this.allLaddersComplete,unlockedBoardId:this.unlockedBoardId});return true;
   }
 }

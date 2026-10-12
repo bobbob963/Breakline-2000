@@ -5,6 +5,7 @@ import { stormDifficulty } from './storm-waves.js';
 import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
 import { createRaceWorld } from './race-world.js';
+import { createBoardEffects } from './board-effects.js';
 import { OCEAN_MESH, renderedWaveHeight, alignRiderToOcean } from './ocean-surface.js';
 import { waveHeight, courseItem, clamp } from './game.js';
 import { createSurfer, disposeSurfer, retroMaterial, pixelTexture, DEFAULT_PROFILE } from './appearance.js';
@@ -74,6 +75,7 @@ export class SurfWorld {
     this.raceWorld=createRaceWorld(profile);this.scene.add(this.raceWorld.group);
     this.createPark();
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
+    this.boardEffects=createBoardEffects();this.boardEffects.setProfile(profile);this.scene.add(this.boardEffects.group);
     this.createParticles();this.createRain();
     this.shadow = mesh(new THREE.CircleGeometry(.75, 12), new THREE.MeshBasicMaterial({ color: 0x154f58, transparent: true, opacity: .28, depthWrite: false }), this.scene);
     this.shadow.rotation.x = -Math.PI / 2;
@@ -95,12 +97,14 @@ export class SurfWorld {
   toggleQuality() { this.retro = !this.retro; this.resize(); return this.retro; }
   setProfile(profile) {
     this.profile = profile;
+    this.boardEffects.setProfile(profile);
     this.raceWorld.setProfile(profile);
     this.scene.remove(this.surfer.rig); disposeSurfer(this.surfer);
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
   }
   setMode(mode) {
     this.mode = mode === 'park' ? 'park' : 'surf';
+    this.boardEffects.reset();
     this.raceWorld.reset();
     this.surfStage.visible = this.mode === 'surf'; this.parkStage.visible = this.mode === 'park';
     this.scene.fog.color.set(this.mode==='park'?0x62686b:0x91a7b0);
@@ -266,6 +270,9 @@ export class SurfWorld {
     }
   }
   onEvent(event, game) {
+    if(event.opponent)return;
+    if(event.type==='trick'||event.type==='airJump')this.boardEffects.trigger(event);
+    if(['reset','start','bail','finish'].includes(event.type))this.boardEffects.reset();
     if (event.type === 'start') {
       this.raceWorld.reset();
       this.setMode(game.mode);
@@ -402,11 +409,13 @@ export class SurfWorld {
     const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50;
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
+    this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract});
     this.renderer.render(this.scene, this.camera);
   }
   dispose() {
     this.resizeObserver.disconnect();
     this.raceWorld.dispose();
+    this.boardEffects.dispose();
     this.scene.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
     this.renderer.dispose(); this.renderer.domElement.remove();
   }

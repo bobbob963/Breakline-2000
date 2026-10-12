@@ -184,7 +184,7 @@ test('other modes and non-death Storm finishes open results directly through pro
     assert.equal(game.phase,'finished',mode);assert.equal(sequence.active,false,mode);
     assert.equal(calls.results,1,mode);assert.equal(calls.audio.filter(type=>type==='finish').length,1,mode);
     sequence.update(10);assert.equal(calls.results,1,mode);
-    if(mode==='tournament')assert.deepEqual(calls.progress,[['breakline99-tournament-v1',{version:1,completedRounds:0}]]);
+    if(mode==='tournament')assert.deepEqual(calls.progress,[['breakline99-tournament-v2',{version:2,ladderIndex:0,completedRounds:0,completedLadders:0}]]);
     sequence.destroy();
   }
 });

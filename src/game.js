@@ -1,6 +1,7 @@
 // Rendering-independent arcade simulation. Units are metres and seconds.
 import { surfRules } from './session-modes.js';
 import { findComboAnimation } from './combo-animations.js';
+import { getRewardBoard } from './board-rewards.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,barrelCrossSection,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 export { SURF_RULES } from './session-modes.js';
 export { waveHeight,waveCrest } from './storm-waves.js';
@@ -46,7 +47,7 @@ export class SurfGame {
       lives:this.rules.startingLives,resultReason:'',danger:0,current:0,landingWarning:'',landingControl:0,
       cutback:0,cutbackAge:0,cutbackProgress:0,cutbackDirection:0,cutbackActive:false,cutbackCooldown:0,
       cutbackChord:0,cutbackChordArmed:true,
-      popRecovery:0,cutbackLaunchTime:0,airLaunchSource:'flat',launchTricks:0,
+      popRecovery:0,cutbackLaunchTime:0,airLaunchSource:'flat',launchTricks:0,airJumpsUsed:0,
       stormStage:1,stormDifficulty:0,barrel:null,barrelTime:0,barrelsSurvived:0,barrelRun:null,lastBarrelAward:-1,lastPrunedCourse:-1,nextBarrelDistance:STORM_BARREL_FIRST,
     });
     this.updateObjective();
@@ -55,7 +56,30 @@ export class SurfGame {
   start() { this.reset(); this.phase = 'running'; this.onEvent({ type: 'start' }); }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
+  setRewardBoard(id) {
+    this.rewardBoard=getRewardBoard(id)?.id||null;
+    // Changing equipment cannot refill an extra jump during an existing flight.
+    if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
+    return this.rewardBoard;
+  }
+  get rewardBoardDefinition() {return getRewardBoard(this.rewardBoard);}
+  get popRecoveryDuration() {return POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);}
   get popCooldown() {return this.popRecovery;}
+  get airJumpReady() {
+    return this.phase==='running'&&!(this.countdownRemaining>0)&&this.airborne&&this.airtime>=.12&&
+      this.bailTime<=0&&!this.trick&&!this.pipeRide&&!this.grinding&&!this.lipMove&&
+      this.airJumpsUsed<(this.rewardBoardDefinition?.airJumps||0);
+  }
+  tryAirJump() {
+    if(!this.airJumpReady)return false;
+    this.airJumpsUsed++;
+    // Add lift in the same flight: never erase an unfinished trick, reset its
+    // combo or turn this into another race-boost award opportunity.
+    this.vy=Math.min(18,Math.max(6.2,this.vy+2.2));this.charge=0;
+    if(this.mode==='surf'&&this.airLaunchSource==='flat')this.airLaunchSource='sky';
+    this.onEvent({type:'airJump',rewardBoard:this.rewardBoard,vfx:'wind'});
+    return true;
+  }
   // Race subclasses can reward a landed trick without changing ordinary surf speeds.
   get forwardSpeedBonus() {return 0;}
   get popReady() {
@@ -73,7 +97,8 @@ export class SurfGame {
   addCombo(name, points, isTrick = false) {
     const repeats = this.repetitions[name] || 0;
     this.repetitions[name] = repeats + 1;
-    this.comboBase += Math.round(points * Math.max(0.25, 1 - repeats * 0.2));
+    const rewardMultiplier=isTrick?(this.rewardBoardDefinition?.trickPointsMultiplier||1):1;
+    this.comboBase += Math.round(points * Math.max(0.25, 1 - repeats * 0.2)*rewardMultiplier);
     if (isTrick) { this.multiplier = Math.min(8, this.multiplier + 1); this.pendingTricks++; }
     this.comboNames.push(name);
     this.comboTime = COMBO_WINDOW;
@@ -96,7 +121,7 @@ export class SurfGame {
     const lost = this.comboBase * this.multiplier;
     this.clearCombo(); this.trick = null; this.airborne = false;
     this.charge = 0; this.vy = 0; this.bailTime = 1.35; this.speed = 8;
-    this.popRecovery=POP_COOLDOWN;this.cutbackLaunchTime=0;
+    this.popRecovery=POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);this.cutbackLaunchTime=0;this.airJumpsUsed=0;
     if(this.barrelRun)this.barrelRun.bailed=true;
     if(this.barrel)this.barrel.inside=false;
     this.rotation = 0; this.flipRotation = 0; this.boardRotation = 0;this.rollRotation=0;this.cutback=0;this.cutbackActive=false; this.wipeouts++;
@@ -105,9 +130,10 @@ export class SurfGame {
     if(this.mode==='surf'&&this.rulesId==='storm'&&this.lives===0)this.finish('OUT OF LIVES');
   }
   jump() {
+    if(this.airborne)return this.tryAirJump();
     if(!this.popReady)return false;
     this.lastJump = this.elapsed;
-    this.airLaunchSource=this.launchSource;this.launchTricks=0;this.popRecovery=POP_COOLDOWN;
+    this.airLaunchSource=this.launchSource;this.launchTricks=0;this.popRecovery=this.popRecoveryDuration;this.airJumpsUsed=0;
     this.airborne = true; this.airtime = 0; this.trick = null;
     this.vy=this.airLaunchSource==='flat'?2.2+this.charge*.4:(this.airLaunchSource==='lip'?8.2:7.6)+this.charge*2.5;
     this.cutbackLaunchTime=0;
@@ -129,7 +155,7 @@ export class SurfGame {
     this.rotation+=t.spin||0;this.flipRotation+=t.flip||0;
     this.boardRotation+=t.boardSpin||0;this.rollRotation+=t.roll||0;
     this.launchTricks++;this.addCombo(t.name,t.points,true);this.lastCompletedTrickType=t.type;this.trick=null;
-    this.onEvent({type:'trick',name:t.name});return true;
+    this.onEvent({type:'trick',name:t.name,rewardBoard:this.rewardBoard||null,vfx:this.rewardBoardDefinition?.vfx||null});return true;
   }
   updateAirTrick(dt) {
     if(!this.trick)return;
@@ -137,6 +163,7 @@ export class SurfGame {
     if(this.trick.age>=this.trick.duration)this.completeTrick();
   }
   resolveLandingTrick() {
+    this.airJumpsUsed=0;
     if(!this.trick)return {landed:true,assisted:false};
     const grace=Math.min(LANDING_GRACE,this.trick.duration*.2);
     if(this.trick.duration-this.trick.age>grace+1e-8){this.bail('UNFINISHED TRICK');return {landed:false,assisted:false};}

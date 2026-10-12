@@ -1,6 +1,8 @@
 import { WaveParkGame } from './park.js';
 import { SurfRaceGame } from './surf-race.js';
 import { ParkRaceGame, createParkRaceCourse } from './park-race.js';
+import { TOURNAMENT_LADDERS,sanitizeTournamentProgress,tournamentLadder,recordTournamentWin } from './tournament-progress.js';
+export { TOURNAMENT_LADDERS,sanitizeTournamentProgress,tournamentLadder,selectTournamentLadder,nextTournamentLadder } from './tournament-progress.js';
 
 export const TOURNAMENT_SECONDS=90;
 export const TOURNAMENT_RIVALS=Object.freeze([
@@ -15,25 +17,24 @@ export function tournamentCourseLength(rival) {
   return rival.venue==='park'?createParkRaceCourse(rival.id).length:rival.courseLength;
 }
 
+export function tournamentRivalsForLadder(progressOrIndex=0) {
+  const ladder=tournamentLadder(progressOrIndex);
+  if(ladder===TOURNAMENT_LADDERS[0])return TOURNAMENT_RIVALS;
+  return Object.freeze(TOURNAMENT_RIVALS.map(rival=>Object.freeze({...rival,
+    pace:Math.min(.98,rival.pace+ladder.paceOffset),
+    subtitle:`${ladder.name} · ${rival.subtitle}`,
+  })));
+}
+
 // Recreate the scene at each rank so its real rival and ordered race course
 // share that venue's ordinary movement, collisions and trick controls.
 export function createTournamentGame(onEvent=()=>{},progress=null) {
   const safe=sanitizeTournamentProgress(progress);
   const roundIndex=Math.min(safe.completedRounds,TOURNAMENT_RIVALS.length-1);
-  const rival=TOURNAMENT_RIVALS[roundIndex];
+  const rival=tournamentRivalsForLadder(safe)[roundIndex];
   return rival.venue==='surf'
     ?new SurfRaceGame(onEvent,{progress:safe,roundIndex,rival,roundCount:TOURNAMENT_RIVALS.length})
     :new ParkRaceGame(onEvent,{progress:safe,roundIndex,rival,roundCount:TOURNAMENT_RIVALS.length});
-}
-
-// Saved data can unlock only an existing rung; strings, inherited fields and
-// out-of-range values must not quietly turn a corrupt save into a championship.
-export function sanitizeTournamentProgress(value) {
-  const valid=value!==null&&typeof value==='object'&&!Array.isArray(value)&&
-    Object.hasOwn(value,'version')&&value.version===1&&
-    Object.hasOwn(value,'completedRounds')&&Number.isInteger(value.completedRounds)&&
-    value.completedRounds>=0&&value.completedRounds<=TOURNAMENT_RIVALS.length;
-  return {version:1,completedRounds:valid?value.completedRounds:0};
 }
 
 // Rivals bank at fixed moments. Neither the schedule nor the final target can
@@ -60,7 +61,10 @@ export class TournamentGame extends WaveParkGame {
     this.reset();
   }
 
-  get rival() {return TOURNAMENT_RIVALS[this.roundIndex]||TOURNAMENT_RIVALS[0];}
+  get rival() {return tournamentRivalsForLadder(this._tournamentProgress)[this.roundIndex]||TOURNAMENT_RIVALS[0];}
+  get ladder() {return tournamentLadder(this._tournamentProgress);}
+  get ladderIndex() {return this._tournamentProgress?.ladderIndex||0;}
+  get allLaddersComplete() {return this._tournamentProgress?.completedLadders===TOURNAMENT_LADDERS.length;}
   get target() {return this.rival.target;}
   get roundNumber() {return this.roundIndex+1;}
   get complete() {return this._tournamentProgress?.completedRounds===TOURNAMENT_RIVALS.length;}
@@ -76,6 +80,7 @@ export class TournamentGame extends WaveParkGame {
     this.time=TOURNAMENT_SECONDS;
     this.rivalScore=0;
     this.result=null;
+    this.unlockedBoardId=null;
     this._finishing=false;
     this.updateObjective();
     this.onEvent({type:'reset',tournament:true,roundIndex:this.roundIndex});
@@ -119,10 +124,14 @@ export class TournamentGame extends WaveParkGame {
     this.trick=null;
     this.lastCompletedTrickType=null;
     this.result=this.score>this.target?'win':'loss';
-    if(this.result==='win')this._tournamentProgress.completedRounds=Math.max(this._tournamentProgress.completedRounds,this.roundIndex+1);
+    if(this.result==='win') {
+      const before=this._tournamentProgress.completedLadders;
+      this._tournamentProgress=recordTournamentWin(this._tournamentProgress,this.roundIndex);
+      this.unlockedBoardId=this._tournamentProgress.completedLadders>before?this.ladder.rewardId:null;
+    }
     this.resultReason=this.result==='win'?(this.complete?'CHAMPION':'RIVAL BEATEN'):this.score===this.target?'TIE - RIVAL HOLDS RANK':'TARGET NOT BEATEN';
     this.phase='finished';
-    this.onEvent({type:'finish',tournament:true,reason:this.resultReason,result:this.result,roundIndex:this.roundIndex,roundNumber:this.roundNumber,rival:this.rival,target:this.target,score:this.score,complete:this.complete,progress:this.getProgress()});
+    this.onEvent({type:'finish',tournament:true,reason:this.resultReason,result:this.result,roundIndex:this.roundIndex,roundNumber:this.roundNumber,rival:this.rival,target:this.target,score:this.score,complete:this.complete,progress:this.getProgress(),ladderIndex:this.ladderIndex,ladder:this.ladder,allLaddersComplete:this.allLaddersComplete,unlockedBoardId:this.unlockedBoardId});
     return true;
   }
 }

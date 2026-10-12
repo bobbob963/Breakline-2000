@@ -20,7 +20,7 @@ test('all four characters can independently select twelve outfits and eight boar
       for (const boardDesign of Object.keys(BOARD_DESIGNS)) {
         const selected = Object.freeze({ character, outfit, boardDesign, boardColor: '#24c5ba' });
         const validated = validateProfile(selected);
-        assert.deepEqual(validated, selected);
+        assert.deepEqual(validated, { ...selected, rewardBoard: null });
         assert.notEqual(validated, selected, 'validation must return an independent profile');
       }
     }
@@ -48,13 +48,13 @@ test('every rider has a usable default outfit and Jax keeps his two complete cre
 test('old saved profiles keep character and board while acquiring the default outfit', () => {
   const legacy = { character: 'reef', boardColor: '#8755bb', boardDesign: 'flames' };
   const validated = validateProfile(legacy);
-  assert.deepEqual(validated, { ...legacy, outfit: 'riptide' });
+  assert.deepEqual(validated, { ...legacy, outfit: 'riptide', rewardBoard: null });
   assert.equal(Object.hasOwn(legacy, 'outfit'), false);
 });
 
 test('invalid fields reset individually without discarding other customization choices', () => {
   const selected = { character: 'nova', outfit: 'castaway', boardDesign: 'hibiscus', boardColor: '#e95b39' };
   for (const field of Object.keys(DEFAULT_PROFILE)) {
-    assert.deepEqual(validateProfile({ ...selected, [field]: 'bad-choice' }), { ...selected, [field]: DEFAULT_PROFILE[field] });
+    assert.deepEqual(validateProfile({ ...selected, [field]: 'bad-choice' }), { ...selected, rewardBoard: null, [field]: DEFAULT_PROFILE[field] });
   }
 });

@@ -40,14 +40,14 @@ test('corrupt or inherited save fields cannot unlock rounds and returned progres
     {version:1,completedRounds:Infinity}, {version:1,completedRounds:-1},
     {version:1,completedRounds:6}, {version:1,completedRounds:2.5},
     Object.create({version:1,completedRounds:5}), {version:1,constructor:5},
-  ])assert.deepEqual(sanitizeTournamentProgress(value),{version:1,completedRounds:0});
+  ])assert.deepEqual(sanitizeTournamentProgress(value),{version:2,ladderIndex:0,completedRounds:0,completedLadders:0});
   for(let completedRounds=0;completedRounds<=5;completedRounds++) {
     const value={version:1,completedRounds,extra:'discard'};
-    assert.deepEqual(sanitizeTournamentProgress(value),{version:1,completedRounds});
+    assert.deepEqual(sanitizeTournamentProgress(value),{version:2,ladderIndex:0,completedRounds,completedLadders:completedRounds===5?1:0});
   }
   const source={version:1,completedRounds:2},game=new TournamentGame(()=>{},source);
   source.completedRounds=5;const copy=game.getProgress();copy.completedRounds=5;
-  assert.deepEqual(game.getProgress(),{version:1,completedRounds:2});
+  assert.deepEqual(game.getProgress(),{version:2,ladderIndex:0,completedRounds:2,completedLadders:0});
   assert.equal(game.roundIndex,2);assert.equal(game.complete,false);
 });
 

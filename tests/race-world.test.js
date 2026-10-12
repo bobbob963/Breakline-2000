@@ -146,7 +146,7 @@ test('switching modes and replacing profiles releases owned race resources befor
 
 test('declared rival profile is used while its board stays distinct from the player', () => {
   const profile = rivalProfile({ id: 'static', profile: { character: 'jax', outfit: 'yardcrew', boardColor: '#24c5ba', boardDesign: 'tribal' } }, { boardColor: '#24c5ba' });
-  assert.deepEqual(profile, { character: 'jax', outfit: 'yardcrew', boardColor: '#f5ede0', boardDesign: 'tribal' });
+  assert.deepEqual(profile, { character: 'jax', outfit: 'yardcrew', boardColor: '#f5ede0', boardDesign: 'tribal', rewardBoard: null });
 });
 
 test('grounded board alignment matches actual ocean triangles across both halves of their cells', () => {

@@ -95,7 +95,7 @@ test('course progress is ordered and cannot be advanced by a shortcut to the fin
 });
 
 test('factory countdown and pause freeze both riders, and restart resets gates without losing rank',()=>{
-  const game=new ParkRaceGame(()=>{},{progress:{completedRounds:2},roundIndex:2});game.start();
+  const game=new ParkRaceGame(()=>{},{progress:{version:1,completedRounds:2},roundIndex:2});game.start();
   const initial=[game.x,game.z,game.opponent.x,game.opponent.z];
   assert.equal(game.jump(),false);assert.equal(game.doCutback(1),false);
   advance(game,2,{pump:true,left:true});assert.deepEqual([game.x,game.z,game.opponent.x,game.opponent.z],initial);

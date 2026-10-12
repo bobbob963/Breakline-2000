@@ -1,0 +1,141 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import { validateProfile } from '../src/appearance.js';
+import { getRewardBoard, rewardBoardUnlocked } from '../src/board-rewards.js';
+import { SurfGame, COMBO_WINDOW, MIN_X, MAX_X, waveCrest } from '../src/game.js';
+import { WaveParkGame, PARK_BOUNDS } from '../src/park.js';
+import { createTournamentGame, sanitizeTournamentProgress, nextTournamentLadder, selectTournamentLadder } from '../src/tournament.js';
+import { COMBO_ANIMATIONS } from '../src/combo-animations.js';
+
+const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const noOp = () => {};
+function block(first, last) {
+  const start = source.indexOf(first), end = source.indexOf(last, start + first.length);
+  assert.ok(start >= 0 && end > start, `production block ${first} exists`);
+  return source.slice(start, end);
+}
+function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }) {
+  const writes = [], visual = [], previews = [], updates = [];
+  const context = {
+    profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
+    tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
+    game: new SurfGame(), write: (key, value) => writes.push([key, JSON.parse(value)]),
+    world: { setProfile: profile => visual.push({ ...profile }) },
+    preview: { setProfile: profile => previews.push({ ...profile }) },
+    updateCustomizationChoices: () => updates.push(true),
+  };
+  vm.runInNewContext(block('function setProfile(', 'function openWorkshop('), context);
+  return { context, writes, visual, previews, updates };
+}
+
+test('the actual board-shop action rejects locked rewards and applies an earned board to save, physics and both renders', () => {
+  const { context, writes, visual, previews, updates } = equipFixture();
+  const original = { ...context.profile };
+  assert.equal(context.setProfile({ rewardBoard: 'lightning' }), false);
+  assert.deepEqual(context.profile, original); assert.equal(writes.length, 0); assert.equal(visual.length, 0);
+  assert.equal(context.setProfile({ rewardBoard: 'guitar' }), true);
+  assert.equal(context.game.rewardBoard, 'guitar'); assert.equal(context.game.rewardBoardDefinition.trickPointsMultiplier, 1.25);
+  assert.equal(writes.at(-1)[0], 'breakline99-profile');
+  assert.deepEqual(writes.at(-1)[1], { ...original, rewardBoard: 'guitar' });
+  assert.deepEqual(visual.at(-1), context.profile); assert.deepEqual(previews.at(-1), context.profile); assert.equal(updates.length, 1);
+  context.setProfile({ outfit: 'blackout' }); assert.equal(context.profile.rewardBoard, 'guitar', 'changing clothes preserves the prize deck');
+  context.setProfile({ rewardBoard: null }); assert.equal(context.game.rewardBoardDefinition, null);
+  assert.equal(context.profile.boardDesign, 'tribal'); assert.equal(context.profile.boardColor, '#24c5ba');
+});
+
+test('boot restoration strips a locked board but restores an earned board and migrates the old championship', () => {
+  const boot = block('let profile;try', 'const isParkMode=');
+  for (const scenario of [
+    { reward: 'sky', progress: { version: 2, ladderIndex: 0, completedRounds: 0, completedLadders: 0 }, expected: null },
+    { reward: 'guitar', progress: { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }, expected: 'guitar' },
+    { reward: 'sky', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, expected: 'sky' },
+    { reward: 'guitar', progress: { version: 1, completedRounds: 5 }, expected: 'guitar', legacy: true },
+  ]) {
+    const values = new Map([
+      ['breakline99-profile', JSON.stringify({ rewardBoard: scenario.reward })],
+      [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
+    ]);
+    const context = { validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, read: (key, fallback) => values.get(key) ?? fallback };
+    vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
+    assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
+    if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);
+  }
+});
+
+test('the production finish handler saves the newly won board before equipment is offered, and replay keeps it', () => {
+  const fixture = equipFixture({ version: 2, ladderIndex: 0, completedRounds: 4, completedLadders: 0 });
+  const { context, writes } = fixture;
+  let results = 0;
+  Object.assign(context, {
+    selectedMode: 'tournament', audio: { event: noOp }, special: { gain: noOp, bail: noOp },
+    toast: noOp, saveBest: noOp, showResults: () => results++, clearInput: noOp,
+    isParkMode: () => context.game.mode === 'park', fmt: n => String(n),
+  });
+  context.world.onEvent = noOp;
+  vm.runInNewContext(block('function onEvent(', 'function makeGame('), context);
+  context.game = createTournamentGame(context.onEvent, context.tournamentProgress); context.game.start();
+  assert.equal(context.setProfile({ rewardBoard: 'guitar' }), false);
+  context.game.finish('win');
+  assert.equal(results, 1); assert.equal(context.tournamentProgress.completedLadders, 1);
+  assert.deepEqual(writes.at(-1), ['breakline99-tournament-v2', { version: 2, ladderIndex: 0, completedRounds: 5, completedLadders: 1 }]);
+  assert.equal(context.setProfile({ rewardBoard: 'guitar' }), true);
+  const replay = selectTournamentLadder(context.tournamentProgress, 0);
+  context.tournamentProgress = replay; context.game = createTournamentGame(context.onEvent, replay);
+  assert.equal(context.setProfile({ rewardBoard: 'guitar' }), true);
+  context.game.start(); context.game.finish('loss');
+  assert.equal(context.tournamentProgress.completedLadders, 1); assert.equal(context.profile.rewardBoard, 'guitar');
+  assert.equal(context.game.rewardBoardDefinition.trickPointsMultiplier, 1.25);
+});
+
+test('the actual start and retry actions carry an equipped board into the next ladder without equipping the rival', () => {
+  const fixture = equipFixture({ version: 2, ladderIndex: 0, completedRounds: 5, completedLadders: 1 });
+  const { context } = fixture;
+  context.setProfile({ rewardBoard: 'guitar' });
+  const element = { classList: { add: noOp, remove: noOp }, focus: noOp };
+  Object.assign(context, {
+    createTournamentGame, nextTournamentLadder, selectTournamentLadder, onEvent: noOp,
+    selectedMode: 'tournament', selectedParkStart: 'basin', wasted: { reset: noOp }, closeWorkshop: noOp, closeModal: noOp, clearInput: noOp,
+    special: { reset: noOp }, soundPreference: 'off', audio: { enabled: false, setMode: noOp, setScene: noOp },
+    updateModeMenu: noOp, updateSoundLabel: noOp, document: { body: element }, $: () => element,
+  });
+  context.world.setMode = noOp;
+  context.game = createTournamentGame(context.onEvent, context.tournamentProgress);
+  vm.runInNewContext(block('function startRun(', 'function goHome('), context);
+  context.startRun(); assert.equal(context.game.ladderIndex, 1); assert.equal(context.game.rewardBoard, 'guitar');
+  assert.equal(context.game.opponent.rewardBoardDefinition, null);
+  context.restartRun(); assert.equal(context.game.ladderIndex, 1); assert.equal(context.game.rewardBoard, 'guitar');
+  context.selectedMode = 'park'; context.game = new WaveParkGame(); context.startRun();
+  assert.equal(context.game.rewardBoard, 'guitar'); assert.equal(context.game.mode, 'park');
+});
+
+test('the real HUD shows the active perk, only prompts an eligible Skybound jump, and uses Solar recovery duration', () => {
+  const elements = new Map();
+  const $ = id => {
+    if (!elements.has(id)) {
+      const classes = new Set(), element = {
+        textContent: '', style: { setProperty: noOp }, querySelector: () => ({ textContent: '' }),
+        classList: { toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }, contains: name => classes.has(name) },
+      };
+      element.parentElement = element; elements.set(id, element);
+    }
+    return elements.get(id);
+  };
+  const game = new SurfGame(); game.setRewardBoard('sky'); game.start();
+  const context = {
+    $, game, profile: validateProfile({ rewardBoard: 'sky' }), getRewardBoard, selectedMode: 'surf', best: 0,
+    clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
+    COMBO_WINDOW, COMBO_ANIMATIONS, special: { value: 0, ready: false }, completedGoals: () => [false, false, false], challengeFlags: [], toast: noOp,
+  };
+  vm.runInNewContext(block('function updateHud(', "window.addEventListener('keydown'"), context);
+  context.updateHud(); assert.match($('reward-ride-status').textContent, /SKYBOUND/);
+  assert.doesNotMatch($('pop-label').textContent, /SECOND AIR/);
+  game.jump(); for (let i = 0; i < 20; i++) game.update(1 / 120);
+  context.updateHud(); assert.match($('pop-label').textContent, /SPACE FOR SECOND AIR/);
+  game.jump(); context.updateHud(); assert.doesNotMatch($('pop-label').textContent, /SECOND AIR/);
+  game.setRewardBoard('solar'); context.profile.rewardBoard = 'solar'; game.start(); game.jump();
+  for (let i = 0; i < 100 && game.airborne; i++) game.update(1 / 120);
+  context.updateHud(); assert.equal($('pop-ready-bar').style.width, '0%');
+  assert.match($('reward-ride-status').textContent, /SOLAR FLARE/);
+});

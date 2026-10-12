@@ -5,7 +5,8 @@ import vm from 'node:vm';
 import { createKeydownHandler, CONTROL_KEYS } from '../src/keyboard.js';
 import { WaveParkGame } from '../src/park.js';
 import { SurfGame, TRICKS, waveCrest, waveHeight } from '../src/game.js';
-import { createTournamentGame, sanitizeTournamentProgress, TOURNAMENT_RIVALS } from '../src/tournament.js';
+import { createTournamentGame, sanitizeTournamentProgress, TOURNAMENT_RIVALS,nextTournamentLadder,selectTournamentLadder } from '../src/tournament.js';
+import { getRewardBoard } from '../src/board-rewards.js';
 import { surfRaceTrickInput } from '../src/surf-race.js';
 
 function inputRoute(game) {
@@ -96,6 +97,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
   const element={classList:{add:noOp,remove:noOp},focus:noOp};
   const context={
     game:null,tournamentProgress:sanitizeTournamentProgress(progress),createTournamentGame,sanitizeTournamentProgress,
+    nextTournamentLadder,selectTournamentLadder,profile:{rewardBoard:null},
     selectedMode:'tournament',selectedParkStart:'filters',modalMode:null,workshopMode:null,bootReady:true,input:{},
     soundPreference:'off',audio:{enabled:true,setScene:noOp,setMode:noOp},world:{setMode:noOp},special:{reset:noOp},wasted:{reset:noOp},
     closeWorkshop:noOp,closeModal(){context.modalMode=null;},clearInput:noOp,updateModeMenu:noOp,updateSoundLabel:noOp,
@@ -148,12 +150,27 @@ test('Enter retries a lost or tied rival rather than advancing the ladder',()=>{
   }
 });
 
-test('Enter after the championship starts a fresh ladder and replaces the completed save',()=>{
+test('Enter after a championship starts the next ladder and preserves the earned board',()=>{
   const route=tournamentRoute({version:1,completedRounds:4});route.press('Enter');finishTournament(route);
   const champion=route.context.game;assert.equal(champion.complete,true);route.press('Enter');
   assert.notEqual(route.context.game,champion);assert.equal(route.context.game.roundIndex,0);
   assert.equal(route.context.game.complete,false);assert.equal(route.context.game.phase,'running');
-  assert.deepEqual(route.saved.at(-1),['breakline99-tournament-v1',{version:1,completedRounds:0}]);
+  assert.equal(route.context.game.ladderIndex,1);
+  assert.deepEqual(route.saved.at(-1),['breakline99-tournament-v2',{version:2,ladderIndex:1,completedRounds:0,completedLadders:1}]);
+});
+
+test('Enter through all five ladders unlocks every board and final replay keeps the complete collection',()=>{
+  const route=tournamentRoute();route.press('Enter');
+  const rewards=[];
+  for(let ladder=0;ladder<5;ladder++)for(let rank=0;rank<5;rank++) {
+    const game=route.context.game;assert.equal(game.ladderIndex,ladder);assert.equal(game.roundIndex,rank);
+    finishTournament(route);if(game.unlockedBoardId)rewards.push(game.unlockedBoardId);
+    route.press('Enter');
+  }
+  assert.deepEqual(rewards,['guitar','lightning','vortex','solar','sky']);
+  assert.equal(route.context.game.ladderIndex,4);assert.equal(route.context.game.roundIndex,0);
+  assert.equal(route.context.game.allLaddersComplete,true);assert.equal(route.context.game.complete,false);
+  assert.deepEqual(route.saved.at(-1),['breakline99-tournament-v2',{version:2,ladderIndex:4,completedRounds:0,completedLadders:5}]);
 });
 
 test('losing an R-key championship replay makes Enter retry that rival without erasing the title',()=>{
@@ -194,9 +211,10 @@ test('production race results handle every venue and the final championship with
     const game=createTournamentGame(()=>{},{version:1,completedRounds:round});game.start();game.finish(win?'win':'loss');
     let modal;
     const context={game,TOURNAMENT_RIVALS,tournamentProgress:game.getProgress(),clearInput(){},isParkMode:()=>game.mode==='park',
+      getRewardBoard,nextTournamentLadder,profile:{rewardBoard:null},rewardCard:()=>'<div>PRIZE BOARD</div>',
       fmt:n=>Math.round(n).toString(),clockText:n=>n.toFixed(1),openModal:(...args)=>{modal=args;}};
     vm.runInNewContext(source.slice(first,last),context);context.showTournamentResults();
-    assert.equal(modal[0],'results');assert.equal(modal[3],win?(round===4?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL');
+    assert.equal(modal[0],'results');assert.equal(modal[3],win?(round===4?'NEXT LADDER':'NEXT RIVAL'):'RETRY RIVAL');
     assert.match(modal[2],game.mode==='park'?/WATERWORKS RACE/:/SURF RACE/);
     assert.doesNotMatch(modal[2],/undefined|NaN|BANKED SCORE/);
     if(round===4&&win)assert.match(modal[2],/ALL FIVE RIVALS DEFEATED/);

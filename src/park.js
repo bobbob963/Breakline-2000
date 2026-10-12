@@ -1,4 +1,4 @@
-import { SurfGame, RUN_SECONDS, POP_COOLDOWN, clamp } from './game.js';
+import { SurfGame, RUN_SECONDS, clamp } from './game.js';
 
 const CUTBACK_SECONDS=.72;
 const CUTBACK_TURN=145*Math.PI/180;
@@ -387,6 +387,7 @@ export class WaveParkGame extends SurfGame {
 
   jump() {
     if(this.phase!=='running'||this.bailTime>0)return false;
+    if(this.airborne)return this.tryAirJump();
     if(this.lipMove)return false;
     if(this.pipeRide) {
       const angle=Math.atan2(Math.sin(this.pipeRide.angle),Math.cos(this.pipeRide.angle));
@@ -416,7 +417,7 @@ export class WaveParkGame extends SurfGame {
     this.cancelCutback();
     this.lastJump = this.elapsed;
     this.rampReturn=null;
-    this.popRecovery=POP_COOLDOWN;this.airLaunchSource='ramp';this.launchTricks=0;
+    this.popRecovery=this.popRecoveryDuration;this.airLaunchSource='ramp';this.launchTricks=0;this.airJumpsUsed=0;
     this.airborne = true;
     this.airtime = 0;
     this.trick = null;
@@ -751,7 +752,7 @@ export class WaveParkGame extends SurfGame {
     this.cancelCutback();
     this.grinding={rail,kind:rail.kind||'rail',rampId:rail.rampId,dir:Math.sign(along)||1,local,age:0,ticks:0};
     this.x=rail.x-Math.sin(rail.rotation)*local;this.z=rail.z-Math.cos(rail.rotation)*local;
-    this.airborne=false;this.vy=0;this.y=railTopHeight(rail,local);this.grindCount++;
+    this.airborne=false;this.vy=0;this.airJumpsUsed=0;this.y=railTopHeight(rail,local);this.grindCount++;
     this.addCombo(rail.kind==='coping'?'COPING SLIDE':'WATER SLIDE',350,true);this.onEvent({type:'grind',id:rail.id,kind:rail.kind||'rail'});
   }
 
