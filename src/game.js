@@ -56,6 +56,8 @@ export class SurfGame {
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
   get popCooldown() {return this.popRecovery;}
+  // Race subclasses can reward a landed trick without changing ordinary surf speeds.
+  get forwardSpeedBonus() {return 0;}
   get popReady() {
     const pipeFloor=!this.pipeRide||Math.abs(Math.atan2(Math.sin(this.pipeRide.angle),Math.cos(this.pipeRide.angle)))<.12;
     return this.phase==='running'&&!this.airborne&&this.bailTime<=0&&!this.cutbackActive&&!this.lipMove&&pipeFloor&&this.popCooldown===0;
@@ -181,7 +183,7 @@ export class SurfGame {
     if(chord&&this.cutbackChordArmed&&this.doCutback(chord))this.cutbackChordArmed=false;
     this.current=(1.35*Math.sin(this.distance*.022+this.elapsed*.5)+.7*Math.sin(this.elapsed*1.1))*this.rules.currentStrength*(1+this.stormDifficulty*.8);
     if(this.cutbackActive){this.cutbackAge+=dt;this.cutbackProgress=clamp(this.cutbackAge/.72,0,1);this.cutback=Math.sin(this.cutbackProgress*Math.PI);}
-    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : (input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5)*(this.cutbackActive?.72:1);
+    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : (input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5+this.forwardSpeedBonus)*(this.cutbackActive?.72:1);
     const previousSpeed = this.speed, decay = Math.exp(-dt * 1.7);
     this.speed = targetSpeed + (previousSpeed - targetSpeed) * decay;
     this.distance += targetSpeed * dt + (previousSpeed - targetSpeed) * (1 - decay) / 1.7;

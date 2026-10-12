@@ -8,6 +8,36 @@ import { CONTROL_KEYS, createKeydownHandler } from './keyboard.js';
 
 const STEP=1/120;
 
+// Deterministic review playback through the same public controls as a player.
+// Every run waits for GO, cuts back, charges a real pop and lands its tricks.
+export function createRaceBoostDemo(kind='single') {
+  return {kind:kind==='combo'?'combo':'single',stage:'countdown',chargeTime:0,trickIndex:0,landed:false,failed:false};
+}
+
+export function raceBoostDemoControls(game,demo,dt=STEP) {
+  const controls={pump:true};
+  if(game.countdownRemaining>0)return controls;
+  if(game.bailTime>0){demo.failed=true;return controls;}
+  if(demo.stage==='countdown')demo.stage='cutback';
+  if(demo.stage==='cutback') {
+    if(!game.cutbackActive&&game.cutbackLaunchTime>0)demo.stage='charge';
+    else return {...controls,right:true,grind:true};
+  }
+  if(demo.stage==='charge') {
+    demo.chargeTime+=dt;
+    if(demo.chargeTime<.64)return {...controls,jump:true};
+    if(game.jump())demo.stage='air';
+  }
+  if(demo.stage==='air') {
+    const tricks=demo.kind==='combo'?['spin','tweak']:['tweak'];
+    if(game.airborne&&!game.trick&&demo.trickIndex<tricks.length&&game.airtime>.04) {
+      if(game.doTrick(tricks[demo.trickIndex]))demo.trickIndex++;
+    }
+    if(!game.airborne){demo.landed=game.launchTricks===tricks.length;demo.failed=!demo.landed;demo.stage='done';}
+  }
+  return controls;
+}
+
 // A review-only route follower: it can press ordinary controls but cannot
 // grant checkpoint credit, set positions or alter either racer's physics.
 export function raceLabControls(game) {
@@ -34,7 +64,7 @@ export function raceLabControls(game) {
 
 async function boot() {
   const $=id=>document.getElementById(id),pressed=new Set();
-  let world,game,scenario=null,input={},actualInput={},events=[],accumulator=0;
+  let world,game,scenario=null,input={},actualInput={},events=[],accumulator=0,boostDemo=null;
   const clearInput=()=>{pressed.clear();input={};};
   function syncInput(){input={};for(const code of pressed)input[CONTROL_KEYS[code]]=true;}
   function onEvent(event) {
@@ -46,7 +76,7 @@ async function boot() {
   }
   function start(kind=scenario) {
     if(!kind)return;
-    clearInput();accumulator=0;events=[];scenario=kind;
+    clearInput();accumulator=0;events=[];scenario=kind;boostDemo=null;
     if(kind==='rivet'||kind==='static')game=createTournamentGame(()=>{},{version:1,completedRounds:kind==='rivet'?1:3});
     else game=kind==='park'?new WaveParkGame():new SurfGame();
     game.onEvent=onEvent;game.start();
@@ -55,7 +85,12 @@ async function boot() {
   }
   function pause() {
     clearInput();
-    if(game?.phase==='running')game.pause();else if(game?.phase==='paused')game.resume();
+    if(game?.phase==='running')game.pause();else if(game?.phase==='paused'){boostDemo=null;game.resume();}
+  }
+  function startBoostDemo(kind) {
+    start(scenario==='static'?'static':'rivet');
+    boostDemo=createRaceBoostDemo(kind);
+    $('status').textContent=`${kind==='combo'?'Spin → Tweaked Grab combo':'Tweaked Grab'}: waiting for GO, then a cutback and charged pop. Playback pauses after the clean landing; resume to feel the boost.`;
   }
   function counters() {
     if(!game)return;
@@ -74,8 +109,12 @@ async function boot() {
     $('stat-wipeouts').textContent=`${game.wipeouts} / ${rival?rival.wipeouts:'—'}`;
     $('stat-input').textContent=Object.entries(actualInput).filter(([,value])=>value).map(([key])=>key).join(' + ')||'none';
     $('stat-pop').textContent=`${game.popCooldown.toFixed(2)} s / ${game.launchSource}`;
+    $('stat-boost').textContent=race&&game.boostTime>0?`${game.boostLabel} · +${game.boostSpeed.toFixed(1)} m/s · ${game.boostTime.toFixed(2)} s`:'None';
+    $('stat-combo').textContent=`${game.pendingTricks} tricks · ${game.comboBase*game.multiplier} points`;
     $('stat-result').textContent=game.resultReason||'—';
     $('events').textContent=events.join('\n');$('pause').textContent=game.phase==='running'?'Pause':'Resume';
+    $('hud-boost').textContent=race&&game.boostTime>0?`${game.boostLabel} +${game.boostSpeed.toFixed(0)} m/s`:'LAND TRICKS TO BOOST';
+    $('hud-boost').hidden=!race;
     $('frame').disabled=game.phase==='finished';
     $('track').hidden=!race;
     if(race) {
@@ -84,14 +123,19 @@ async function boot() {
     }
   }
   function tick() {
-    actualInput=$('autopilot').checked?raceLabControls(game):input;
+    actualInput=boostDemo?raceBoostDemoControls(game,boostDemo):$('autopilot').checked?raceLabControls(game):input;
     game.update(STEP,actualInput);
+    if(boostDemo&&(boostDemo.landed||boostDemo.failed)) {
+      game.pause();clearInput();
+      $('status').textContent=boostDemo.landed?`${boostDemo.kind==='combo'?'Two-trick combo':'Single trick'} landed cleanly. Paused with the earned boost: press Resume to continue.`:'The demonstration wiped out. Restart the demo to retry the same legal input sequence.';
+    }
   }
   try {
     await loadCharacterTextures();
     world=new SurfWorld($('viewport'),validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));
     game=new SurfGame();$('loading').remove();
     for(const kind of ['rivet','static','surf','park'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
+    for(const kind of ['single','combo'])$('boost-'+kind).addEventListener('click',()=>{startBoostDemo(kind);$('boost-'+kind).blur();});
     $('restart').addEventListener('click',()=>start());
     $('pause').addEventListener('click',pause);
     $('frame').addEventListener('click',()=>{if(!scenario||game.phase==='finished')return;game.resume();tick();game.pause();counters();});

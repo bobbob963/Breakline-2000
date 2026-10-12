@@ -82,6 +82,7 @@ function onEvent(e){
   if(e.type==='raceGate'&&!e.opponent)toast(`CHECKPOINT ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
   if(e.type==='raceMiss'&&!e.opponent)toast('MISSED CHECKPOINT · LINE UP BETWEEN THE FLAGS',true);
   if(e.type==='raceGo')toast('GO! · W TO PUMP');
+  if(e.type==='raceBoost')toast(`${e.combo?'COMBO':'TRICK'} BOOST! · +${Math.round(e.speed*3.6)} KM/H`);
   if(e.type==='cutback')toast(isParkMode()?'SHARP CUTBACK':'CUTBACK SET · POP FOR AIR!');
   if(e.type==='grind')toast('WATER SLIDE!');
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
@@ -111,10 +112,11 @@ function updateModeMenu(){
   $('rival-hud').classList.toggle('race-hud',!!game.isRace);
   $('rival-hud').querySelector('small').textContent=game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
   $('race-progress').classList.toggle('hidden',!game.isRace);
+  $('race-boost').classList.toggle('hidden',!game.isRace);
   if(game.isTournament){
     $('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / ${game.isRace?'SURF RACE':'90 SEC SCORE BATTLE'}`;
     $('level-name').textContent=game.isRace?'SUNSET POINT / RIVAL RACE':'WATERWORKS / SCORE BATTLE';
-    $('mode-description').textContent=game.complete?'The circuit is yours. Start a new ladder or inspect the rivals you defeated.':game.isRace?`${game.rival.name} is riding beside you. Pump with W, steer through every flagged checkpoint and reach the ${fmt(game.course.length)}m finish first.`:`${game.rival.name} · ${game.rival.subtitle}. Bank more than ${fmt(game.target)} points in 90 seconds to take their rank.`;
+    $('mode-description').textContent=game.complete?'The circuit is yours. Start a new ladder or inspect the rivals you defeated.':game.isRace?`Race ${game.rival.name} to the ${fmt(game.course.length)}m finish. Pass every checkpoint. Land tricks for speed boosts; link combos for a bigger burst.`:`${game.rival.name} · ${game.rival.subtitle}. Bank more than ${fmt(game.target)} points in 90 seconds to take their rank.`;
   }
 
 }
@@ -162,6 +164,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
+  ${game.isRace?'<span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding and tighter barrels build as you survive.'}</p>
@@ -237,6 +240,14 @@ function updateHud(){
   $('race-countdown').classList.toggle('hidden',!counting);
   if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
   $('speed').textContent=Math.round(game.speed*3.6);$('speed-bar').style.width=`${Math.min(100,game.speed/25*100)}%`;
+  if(game.isRace){
+    const boosting=game.boostTime>0;
+    $('race-boost').classList.toggle('active',boosting);
+    $('race-boost').classList.toggle('combo-boost',boosting&&game.boostLevel==='combo');
+    $('race-boost-label').textContent=boosting?game.boostLabel:'TRICK BOOST';
+    $('race-boost-detail').textContent=boosting?`${input.brake?'BRAKING':`+${Math.round(game.boostSpeed*3.6)} KM/H`} · ${game.boostTime.toFixed(1)}s`:'LAND TRICKS · COMBOS BOOST MORE';
+    $('race-boost-fill').style.width=`${boosting?Math.min(100,game.boostTime/game.boostDuration*100):0}%`;
+  }
   $('wave-dot').style.left=`${isParkMode()?(game.x-PARK_BOUNDS.minX)/(PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*96:(game.x-MIN_X)/(MAX_X-MIN_X)*96}%`;
   $('wave-dot').parentElement.style.setProperty('--crest-position',`${(waveCrest(-game.distance,game.elapsed)-MIN_X)/(MAX_X-MIN_X)*96}%`);
   const surface=isParkMode()?(game.surface?.pipe?.name||game.surface?.ramp?.name):null;

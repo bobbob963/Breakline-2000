@@ -216,4 +216,6 @@ The generated logo is embedded in `src/brand-art.js`; the exact generation promp
 
 Original project source is MIT licensed; see `LICENSE`. Dependencies retain their own licences. This independent project is not affiliated with Tony Hawk, Activision or Neversoft and uses no proprietary characters, logos, levels, recordings or artwork in gameplay. The separate model and body review pages contain user-supplied reference pictures for comparison; those pictures retain their owners' rights.
 
-For a development-only race review, open `/race-lab.html`. It can run either ocean rival through the real controls without reading or changing your saved Hit List progress.
+In the RIVET and STATIC races, land a completed aerial trick for an automatic **TRICK BOOST**: +6 m/s for 1.4 seconds. Two tricks in an unbanked combo give **COMBO BOOST**: +9 m/s for 2 seconds; longer combos build up to +13 m/s for 3 seconds. The boost meter appears above your speed. Use the existing cutback/powered-pop or wave-lip launch, then complete and land a trick; empty flat hops and banking cannot refresh the boost. Braking suppresses the burst while its timer keeps running, pausing freezes it, and a wipeout or missed checkpoint cancels it. Other modes keep their existing speed rules.
+
+For a development-only race review, open `/race-lab.html`. It can run either ocean rival through the real controls without reading or changing your saved Hit List progress. The single-trick and combo demos use a cutback, charged pop and trick inputs, then pause on the landing so the boost can be inspected.

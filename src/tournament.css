@@ -59,3 +59,11 @@ body[data-session="tournament"] .surf-condition>b{display:none}
 .race-countdown span{font:italic 23px Impact,'Arial Black',sans-serif;letter-spacing:3px}
 .race-countdown strong{font:italic 110px/1.2 Impact,'Arial Black',sans-serif}
 .race-countdown small{font:10px var(--mono);padding:8px 12px;background:#0e1b21c9;color:#efebd1}
+.race-boost{width:195px;margin-bottom:14px;padding:8px 10px;border-left:2px solid #687d7a;background:linear-gradient(90deg,#10232bde,transparent);color:#bac4b6;text-shadow:1px 2px #071518}
+.race-boost>strong{display:block;font:italic 19px/1.15 Impact,'Arial Black',sans-serif;letter-spacing:1px}
+.race-boost>span{display:block;font:bold 7px/1.6 var(--mono);margin-top:5px;white-space:nowrap}
+.race-boost>div{height:5px;margin-top:7px;background:#59787355;transform:skew(-12deg);overflow:hidden}
+.race-boost i{display:block;height:100%;width:0;background:#76dec8}
+.race-boost.active{border-color:#90ead1;color:#b5ffe7;background:linear-gradient(90deg,#144b49e8,transparent)}
+.race-boost.combo-boost{border-color:#f3d664;color:#ffe18d;background:linear-gradient(90deg,#5b4325ed,transparent)}
+.race-boost.combo-boost i{background:#f3d664}
