@@ -1,0 +1,46 @@
+.home-menu{max-height:100%;overflow-y:auto;scrollbar-width:thin;padding:3px 6px 5px 0}
+.mode-card.mode-tournament{grid-column:1/-1;min-height:76px;border-color:#a68c34;background:repeating-linear-gradient(-35deg,#d3b63609 0 13px,transparent 13px 28px),linear-gradient(100deg,#171b1a,#30302a);text-align:left}
+.mode-tournament .mode-copy{padding:10px 16px 10px 87px;background:none}
+.mode-tournament .mode-copy strong{font-size:25px;margin:2px 0 0;color:#e7cf64}
+.mode-tournament .mode-detail{min-height:0;font-size:10px}
+.mode-tournament .mode-status{position:absolute;right:13px;top:12px;margin:0;font-size:7px}
+.tournament-mark{position:absolute;left:14px;top:13px;font:italic 45px/1 Impact,'Arial Black',sans-serif;color:#d7bd58;transform:rotate(-8deg);text-shadow:3px 3px #050808}
+.mode-tournament.is-selected{outline-color:#e6ce68;background-color:#45432b}
+.ladder-button{display:flex;width:100%;justify-content:space-between;margin:0 0 9px;padding:9px 12px;border:1px solid #a49355;background:#181e20;color:#dccb86;font:bold 10px var(--mono);letter-spacing:1px;cursor:pointer}
+.ladder-button:hover{background:#343529}
+.rival-hud{position:absolute;right:25px;top:42px;width:215px;display:flex;flex-direction:column;text-align:right;padding:11px 13px;border-right:3px solid #c8ab45;background:linear-gradient(90deg,transparent,#101717d9);color:#e1d6b5;text-shadow:1px 2px #000}
+.rival-hud small{font:7px/1.5 var(--mono);letter-spacing:.5px;color:#b4b39e}
+.rival-hud>strong{font:italic 22px/1.3 Impact,'Arial Black',sans-serif;color:#e3c75e;margin-top:4px}
+.rival-hud>b{font:italic 33px/1.1 Impact,'Arial Black',sans-serif}
+.rival-hud>span{font:8px/1.5 var(--mono);margin-top:6px}
+.rival-hud>em{font:bold 10px/1.5 var(--mono);color:#df9b75;margin-top:5px}
+.rival-hud.ahead>em{color:#b2d599}
+#modal[data-mode=ladder] .modal-card{max-width:620px;text-align:left;border-color:#948960;padding:22px 30px}
+#modal[data-mode=ladder] .modal-classic-logo{display:none}
+#modal[data-mode=ladder] h2{color:#e4c85f;margin:10px 0;font-size:35px}
+#modal[data-mode=ladder] .kicker{margin-bottom:8px}
+#modal[data-mode=ladder] .rival-ladder{margin:12px 0}
+#modal[data-mode=ladder] .rival-ladder li{padding-top:8px;padding-bottom:8px}
+#modal[data-mode=ladder] .rival-footnote{margin:10px 0}
+#modal[data-mode=ladder] .primary-button{margin-top:12px}
+.rival-intro,.rival-footnote{font:11px/1.65 var(--mono);color:#aeb4ac}
+.rival-ladder{list-style:none;padding:0;margin:20px 0}
+.rival-ladder li{display:grid;grid-template-columns:48px 1fr auto;gap:12px;align-items:center;padding:11px 12px;border-bottom:1px solid #89918035;background:#0b111680}
+.rival-ladder li>b{font:italic 28px/1 Impact,'Arial Black',sans-serif;color:#9ca6a4}
+.rival-ladder li strong{display:block;font:italic 20px/1.2 Impact,'Arial Black',sans-serif;letter-spacing:1px}
+.rival-ladder li span{display:block;font:7px/1.7 var(--mono);color:#959e98;margin-top:3px;letter-spacing:.7px}
+.rival-ladder .rival-target{text-align:right}
+.rival-ladder li.current{border-left:4px solid #e3c450;padding-left:8px;background:#77703c2b;color:#ead98f}
+.rival-ladder li.current>b,.rival-ladder li.current span{color:#d4be72}
+.rival-ladder li.beaten{border-left:4px solid #91b18d;padding-left:8px;color:#a6c0a3}
+.rival-ladder li.locked{opacity:.62}
+.showdown-result{margin:20px 0;padding:18px 12px;background:repeating-linear-gradient(-35deg,#baa34506 0 12px,transparent 12px 24px),#101819;border-top:3px solid #b57b59;border-bottom:1px solid #8b897947}
+.showdown-result.won{border-top-color:#dfc759}
+.showdown-result>span{font:italic 19px Impact,'Arial Black',sans-serif;color:#ddc878}
+.showdown-result>div{display:flex;align-items:center;justify-content:space-around;gap:13px;margin:23px 0}
+.showdown-result section{display:flex;flex-direction:column;gap:8px}
+.showdown-result small{font:8px var(--mono);color:#99a5a0}
+.showdown-result strong{font:italic 39px/1 Impact,'Arial Black',sans-serif;color:#dddcc3}
+.showdown-result>div>b{font:italic 20px Impact,'Arial Black',sans-serif;color:#7d8780}
+.showdown-result p{font:bold 10px/1.6 var(--mono);color:#c7b477}
+@media(max-height:780px){.mode-card:not(.mode-tournament){min-height:100px}.mode-card .mode-copy{padding:8px 10px}.mode-copy strong{margin-top:5px}.mode-detail{min-height:18px}.mode-status{margin-top:4px}.mode-card.mode-tournament{min-height:70px}.mode-tournament .mode-copy{padding:8px 12px 8px 80px}.mode-tournament .mode-copy strong{font-size:23px;margin-top:0}.session-description{min-height:0;padding:8px 0}.home-layout{padding-top:10px;padding-bottom:8px}.garage-button{padding:7px 9px}.start-hint{margin:6px 0 9px}.rival-hud{top:36px}}

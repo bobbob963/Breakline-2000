@@ -13,12 +13,33 @@ export function grabEnvelope(progress) {
   return 1 - smooth((t - GRAB_HOLD_END) / (1 - GRAB_HOLD_END));
 }
 
+// Visual-only second-trick choreography. None of these values changes trick
+// timing, accumulated rotations, score, launch physics or grab eligibility.
+function comboChoreography(id, progress) {
+  const weight=grabEnvelope(progress);
+  if(weight===0)return null;
+  const poses={
+    crosswind:{hip:[-.055,.07,-.11],torso:[-.04,-.52,-.17],leftWrist:[-.62,.55,-.10],leftElbow:[-.42,.54,-.03],board:[-.48,.10,.16,.16,-.08]},
+    flipcatch:{hip:[.025,.07,-.015],torso:[-.12,.08,-.06],leftWrist:[-.22,.59,-.36],leftElbow:[-.42,.45,-.19],board:[.10,.12,.12,0,.10]},
+    decksweep:{hip:[-.10,.085,.09],torso:[-.08,.38,-.20],leftWrist:[-.46,.20,.29],leftElbow:[-.39,.36,.17],board:[.64,-.16,.22,-.31,.14]},
+    coil360:{hip:[0,.10,-.04],torso:[-.10,.20,-.10],leftWrist:[-.145,.26,-.11],leftElbow:[-.32,.29,-.08],rightWrist:[.16,.23,-.14],tuck:.72,board:[-.12,-.08,.13,0,-.02]},
+    crosscut:{hip:[.035,.045,-.075],torso:[-.035,.40,-.12],leftWrist:[-.55,.44,-.27],leftElbow:[-.44,.50,-.05],board:[.12,-.16,.02,.05,-.12]},
+  };
+  const pose=Object.hasOwn(poses,id)?poses[id]:null;
+  if(!pose)return null;
+  const board=pose.board.map(value=>value*weight);
+  // The deck noses up into the catch, then settles underneath the hold. Both
+  // parts have zero endpoint velocity, so this is a catch rather than a snap.
+  if(id==='flipcatch')board[1]+=.34*smooth(progress/.14)*(1-smooth((progress-.14)/.22));
+  return {id,weight,plantFeet:weight,hip:pose.hip.map(value=>value*weight),torso:pose.torso.map(value=>value*weight),leftWrist:pose.leftWrist,leftElbow:pose.leftElbow,rightWrist:pose.rightWrist,tuck:(pose.tuck||0)*weight,board};
+}
+
 export function sampleRiderTrick(game, { air = !!game.airborne } = {}) {
   const result = {
     spin: air ? game.rotation || 0 : 0,
     flip: air ? game.flipRotation || 0 : 0,
     boardSpin: air ? game.boardRotation || 0 : 0,
-    grab: 0, lipGrab: 0, tweak: 0, progress: 0, holdingGrab: false,
+    grab: 0, lipGrab: 0, tweak: 0, progress: 0, holdingGrab: false, comboPose:null,
     boardBank: 0, boardPitch: 0, boardLift: 0, boardSide: 0, boardBack: 0,
   };
   const trick = air ? game.trick : null;
@@ -41,6 +62,11 @@ export function sampleRiderTrick(game, { air = !!game.airborne } = {}) {
     result.boardLift = .27 * result.tweak;
     result.boardSide = -.37 * result.tweak;
     result.boardBack = .11 * result.tweak;
+    const combo=comboChoreography(trick.comboAnimation,progress);
+    if(combo){
+      const {board,...body}=combo;result.comboPose=body;
+      for(const [i,key]of ['boardBank','boardPitch','boardLift','boardSide','boardBack'].entries())result[key]+=board[i];
+    }
     result.progress = progress;
   }
   if (game.lipMove) {

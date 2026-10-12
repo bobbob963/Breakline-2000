@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breakline ’99 · Combo Lab</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#11191e;color:#e9e7d9;font:14px system-ui,sans-serif}header{padding:14px 20px;background:#273139;border-bottom:3px solid #b8a058}h1{margin:3px 0;font-size:23px;letter-spacing:.02em}p{margin:6px 0;line-height:1.45}a{color:#e7c467}.eyebrow{font-size:11px;letter-spacing:.16em;color:#c7b87e;font-weight:700}main{display:grid;grid-template-columns:minmax(0,1fr) 320px}#viewport{height:calc(100vh - 104px);min-height:480px;position:sticky;top:0;background:#586466;overflow:hidden}canvas{display:block;width:100%;height:100%;image-rendering:pixelated}#loading{position:absolute;inset:0;display:grid;place-items:center;z-index:2;background:#1e282d;padding:24px;text-align:center}aside{padding:17px;background:#1b262d;min-width:0}button,select{font:inherit;color:#f2e7c6;background:#35434b;border:1px solid #667278;border-radius:2px;padding:9px 10px;cursor:pointer}button:hover,select:hover{background:#485960}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #f5ce64;outline-offset:3px}button:disabled{opacity:.45;cursor:default}.choice{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;margin:7px 0;text-align:left;font-weight:700}.choice[aria-pressed=true]{color:#141a1d;background:#c3ab62;border-color:#f0d17c}.choice small{font:12px monospace;white-space:nowrap}#description{min-height:42px;color:#cad2d2;font-size:13px}label{display:block;margin:14px 0 5px;font-size:12px;color:#c9d0cf}select{width:100%}.controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:14px 0}#continue{grid-column:1/-1;background:#b9a156;color:#10191e;font-weight:800}#status{min-height:65px;padding:11px;background:#0e191f;border-left:3px solid #c7ad62;line-height:1.45}dl{display:grid;grid-template-columns:1fr 1.15fr;gap:8px 12px;margin:18px 0;font-size:12px}dt{color:#aebabd}dd{margin:0;font-family:monospace;overflow-wrap:anywhere}.note{font-size:12px;color:#acbcbe}#events{padding-top:10px;border-top:1px solid #3f5157;font:11px/1.5 monospace;white-space:pre-wrap;color:#b0cac8;max-height:130px;overflow:auto}.caption{position:absolute;left:16px;bottom:15px;right:16px;pointer-events:none;text-shadow:2px 2px #0a1015}#caption-name{display:block;font:italic 800 25px/1.1 system-ui,sans-serif;color:#f2d47c}#caption-mode{display:block;margin-top:5px;font-size:12px;color:#fff}#key-sequence{font-family:monospace;font-weight:700;color:#ebca71}@media(max-width:820px){main{grid-template-columns:1fr}#viewport{position:relative;height:60vh;min-height:350px}aside{padding:16px}.choice{margin:5px 0}#choices{display:grid;grid-template-columns:1fr 1fr;gap:6px}#description{min-height:0}}@media(max-width:440px){#choices{grid-template-columns:1fr}header{padding:12px 15px}}
+  </style>
+</head>
+<body>
+  <header><span class="eyebrow">BREAKLINE ’99 / WATERWORKS PREVIEW</span><h1>Combo Lab</h1><p>Choose a sequence. Watch the approach, inspect the finishing pose, then continue to land. <a href="/">Back to the game</a></p></header>
+  <main>
+    <div id="viewport"><div id="loading">Loading the Waterworks…</div><div class="caption"><span id="caption-name">Combo Lab</span><span id="caption-mode">Natural quarterpipe launch</span></div></div>
+    <aside>
+      <div id="choices" aria-label="Choose a combo animation"></div>
+      <p id="key-sequence">—</p><p id="description"></p>
+      <label for="comparison">Replay</label><select id="comparison"><option value="combo">Full combo animation</option><option value="single">Compare: finishing trick only</option></select>
+      <label for="rate">Playback speed</label><select id="rate"><option value="1">Normal</option><option value=".5">Half speed</option><option value=".25">Quarter speed</option><option value="2">Double speed</option></select>
+      <div class="controls"><button id="continue" disabled>Continue to landing</button><button id="pause" disabled>Pause</button><button id="restart" disabled>Restart</button></div>
+      <div id="status" role="status" aria-live="polite">Preparing the first replay…</div>
+      <dl>
+        <dt>Named animation</dt><dd id="stat-name">—</dd>
+        <dt>Key sequence</dt><dd id="stat-keys">—</dd>
+        <dt>Simulation</dt><dd id="stat-phase">—</dd>
+        <dt>Simulation time</dt><dd id="stat-time">0.000 s</dd>
+        <dt>Air time</dt><dd id="stat-air">0.000 s</dd>
+        <dt>Base trick</dt><dd id="stat-trick">—</dd>
+        <dt>Finishing progress</dt><dd id="stat-progress">—</dd>
+        <dt>Active combo ID</dt><dd id="stat-combo">none</dd>
+        <dt>Pose</dt><dd id="stat-pose">—</dd>
+        <dt>Fingertip → deck</dt><dd id="stat-contact">—</dd>
+        <dt>Tricks completed</dt><dd id="stat-tricks">0</dd>
+        <dt>Combo points</dt><dd id="stat-points">0</dd>
+      </dl>
+      <p class="note">Both views use the same filter halfpipe start, held W, and natural ramp launch. The comparison skips the first trick and starts the finishing trick at the same point in the flight.</p>
+      <p class="note">The contact readout measures the posed fingertip against the actual transformed deck triangles during a grab. It does not measure whole-body collisions.</p>
+      <pre id="events" aria-label="Recent simulation events"></pre>
+    </aside>
+  </main>
+  <script type="module" src="/src/combo-lab.js"></script>
+</body>
+</html>

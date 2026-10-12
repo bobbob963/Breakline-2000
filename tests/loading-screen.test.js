@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createLoadingScreen, paintLoadingStage } from '../src/loading-screen.js';
+import { createKeydownHandler } from '../src/keyboard.js';
 
 function fakeDocument() {
   const elements = new Map(), events = [];
@@ -125,13 +126,17 @@ test('production global input callbacks ignore keys before game construction', (
   assert.ok(start >= 0 && end > start, 'the production input registration block exists');
   const callbacks = new Map();
   const register = (name, callback) => callbacks.set(name, callback);
+  const bootAction = () => { throw new Error('boot input reached an application action'); };
   const context = {
     window: { addEventListener: register },
     document: { addEventListener: register, hidden: true },
-    bootReady: false, game: undefined, clearInput() {},
+    createKeydownHandler,
+    bootReady: false, game: undefined, workshopMode: null, modalMode: null, input: {}, clearInput() {},
+    toggleSound:bootAction,closeWorkshop:bootAction,cycleCharacter:bootAction,closeModal:bootAction,
+    startRun:bootAction,restartRun:bootAction,pause:bootAction,tryTrick:bootAction,toast:bootAction,
   };
   vm.runInNewContext(source.slice(start, end), context);
-  for (const code of ['Enter', 'Space', 'KeyP', 'Escape', 'KeyR', 'KeyM', 'KeyC', 'KeyA', 'ShiftLeft', 'KeyJ']) {
+  for (const code of ['Enter', 'Space', 'KeyP', 'Escape', 'KeyR', 'KeyM', 'KeyC', 'KeyA', 'ShiftLeft', 'KeyJ', 'KeyB']) {
     const event = { code, preventDefault() { throw new Error('boot input reached game handling'); } };
     assert.doesNotThrow(() => callbacks.get('keydown')(event), code);
     assert.doesNotThrow(() => callbacks.get('keyup')(event), code);

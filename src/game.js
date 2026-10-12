@@ -1,5 +1,6 @@
 // Rendering-independent arcade simulation. Units are metres and seconds.
 import { surfRules } from './session-modes.js';
+import { findComboAnimation } from './combo-animations.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,barrelCrossSection,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 export { SURF_RULES } from './session-modes.js';
 export { waveHeight,waveCrest } from './storm-waves.js';
@@ -38,7 +39,7 @@ export class SurfGame {
       mode: 'surf', phase: 'ready', time: this.rules.startTime, elapsed: 0, distance: 0,
       x: 1, vx: 0, speed: 16, y: waveHeight(1, 0, 0), vy: 0,
       airborne: false, airtime: 0, charge: 0, trick: null,
-      comboBase: 0, multiplier: 1, comboTime: 0, comboNames: [], repetitions: {},
+      comboBase: 0, multiplier: 1, comboTime: 0, comboNames: [], repetitions: {}, lastCompletedTrickType: null,
       score: 0, bestCombo: 0, landedTricks: 0, pendingTricks: 0,
       gates: 0, wipeouts: 0, bailTime: 0, carveTime: 0,
       processed: new Set(), lastJump: -10, rotation: 0, flipRotation: 0, boardRotation: 0,rollRotation:0,
@@ -86,6 +87,7 @@ export class SurfGame {
   clearCombo() {
     this.comboBase = 0; this.multiplier = 1; this.comboTime = 0;
     this.comboNames = []; this.repetitions = {}; this.pendingTricks = 0;
+    this.lastCompletedTrickType = null;
   }
   bail(reason = 'WIPEOUT') {
     if (this.bailTime > 0 || this.phase !== 'running') return;
@@ -114,14 +116,17 @@ export class SurfGame {
     if (!Object.hasOwn(TRICKS,type) || this.phase !== 'running' || !this.airborne || this.trick || this.bailTime > 0) return false;
     if(this.mode==='surf'&&this.airLaunchSource==='flat')return false;
     this.trick = { type, age: 0, ...TRICKS[type] };
-    this.onEvent({ type: 'trickStart', trick: type }); return true;
+    const animation = this.comboBase > 0 ? findComboAnimation(this.lastCompletedTrickType, type) : null;
+    const variation = animation ? { comboAnimation:animation.id, comboAnimationName:animation.name } : {};
+    Object.assign(this.trick, variation);
+    this.onEvent({ type: 'trickStart', trick: type, ...variation }); return true;
   }
   completeTrick() {
     if(!this.trick)return false;
     const t=this.trick;
     this.rotation+=t.spin||0;this.flipRotation+=t.flip||0;
     this.boardRotation+=t.boardSpin||0;this.rollRotation+=t.roll||0;
-    this.launchTricks++;this.addCombo(t.name,t.points,true);this.trick=null;
+    this.launchTricks++;this.addCombo(t.name,t.points,true);this.lastCompletedTrickType=t.type;this.trick=null;
     this.onEvent({type:'trick',name:t.name});return true;
   }
   updateAirTrick(dt) {
@@ -149,6 +154,7 @@ export class SurfGame {
   finish(reason) {
     if(this.phase!=='running')return;
     if(this.airborne||this.bailTime>0||this.cutbackActive)this.clearCombo();else this.bank();
+    this.lastCompletedTrickType = null;
     this.resultReason=reason;this.phase='finished';this.onEvent({type:'finish',reason});
   }
   update(dt, input = {}) {

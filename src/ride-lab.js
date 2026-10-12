@@ -3,12 +3,19 @@ import { WaveParkGame, parkSurface } from './park.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
+import { createKeydownHandler } from './keyboard.js';
 
 const $=id=>document.getElementById(id),degrees=value=>(value*180/Math.PI).toFixed(1)+'°';
-const names={pipe:'WEST PIPE LOOP',lip:'LIP GRAB TURNBACK',coping:'DIRECT COPING ENTRY',air:'QUARTERPIPE AIR',pop:'CHARGED RAMP POP',left:'SHIFT + A CUTBACK',right:'SHIFT + D CUTBACK'};
+const names={pipe:'WEST PIPE LOOP',lip:'LIP GRAB TURNBACK',coping:'DIRECT COPING ENTRY',air:'QUARTERPIPE AIR',pop:'CHARGED RAMP POP',tweak:'TWEAKED GRAB (B)',left:'SHIFT + A CUTBACK',right:'SHIFT + D CUTBACK'};
 let world,game,scenario=null,checkpoint=0,atCheckpoint=false,completed=false,attached=false,input={},events=[];
-let popReleased=false,airStarted=false,longestAir=0,highestY=0;
+let popReleased=false,tweakPressed=false,airStarted=false,longestAir=0,highestY=0;
 const headPosition=new THREE.Vector3();
+// This scenario sends B through the browser's production router. Eligibility,
+// duration and pose still come from the real game and renderer.
+const routeTrickKey=createKeydownHandler(
+  ()=>({bootReady:!!game,workshopMode:null,modalMode:null,game,input}),
+  {tryTrick:type=>game.doTrick(type)}
+);
 
 function onEvent(event) {
   if(!game)return;
@@ -19,9 +26,9 @@ function onEvent(event) {
 
 function start(kind) {
   scenario=kind;checkpoint=0;atCheckpoint=false;completed=false;attached=false;events=[];
-  popReleased=false;airStarted=false;longestAir=0;highestY=0;
+  popReleased=false;tweakPressed=false;airStarted=false;longestAir=0;highestY=0;
   game.start(kind==='pipe'?'west':['left','right'].includes(kind)?'basin':'filters');
-  $('status').textContent={pipe:'Approaching the west tunnel. The first stop is a wall ride.',lip:'Pumping up the filter halfpipe with E held.',coping:'Pumping up the filter halfpipe with Shift held. No jump input.',air:'Pumping up the filter halfpipe. No jump input; the ramp should carry the rider into the air.',pop:'Holding Space on the approach, then releasing it at 78% of the ramp.',left:'Holding Shift + A from the South Canal drop-in.',right:'Holding Shift + D from the South Canal drop-in.'}[kind];
+  $('status').textContent={pipe:'Approaching the west tunnel. The first stop is a wall ride.',lip:'Pumping up the filter halfpipe with E held.',coping:'Pumping up the filter halfpipe with Shift held. No jump input.',air:'Pumping up the filter halfpipe. No jump input; the ramp should carry the rider into the air.',pop:'Holding Space on the approach, then releasing it at 78% of the ramp.',tweak:'Pumping from the filter drop-in. B will be pressed through the game keyboard handler after the ramp launches the rider.',left:'Holding Shift + A from the South Canal drop-in.',right:'Holding Shift + D from the South Canal drop-in.'}[kind];
   updateCounters();
 }
 
@@ -32,7 +39,7 @@ function controls() {
     return attached?{action:checkpoint<3,right:checkpoint<3,brake:true}:{action:true,pump:true};
   }
   if(scenario==='lip')return {action:true,pump:true};
-  if(scenario==='air'||scenario==='pop')return {pump:true,jump:scenario==='pop'&&!popReleased};
+  if(scenario==='air'||scenario==='pop'||scenario==='tweak')return {pump:true,jump:scenario==='pop'&&!popReleased};
   return {grind:checkpoint<1,pump:checkpoint<1,brake:checkpoint>=1};
 }
 
@@ -60,6 +67,14 @@ function detectCheckpoint() {
     else if(checkpoint===0&&game.airborne&&game.vy<=0)stop('Apex checkpoint: the rider cleared the lip and is turning back into the halfpipe. Continue to land.');
     else if(checkpoint===1&&airStarted&&!game.airborne){game.bank();stop('Sequence complete: ramp air, return to the bowl, and landed safely.',true);}
     else if(game.elapsed>9)stop('Sequence did not complete. Inspect the position and recent events.',true);
+  } else if(scenario==='tweak') {
+    if(game.airborne){airStarted=true;longestAir=Math.max(longestAir,game.airtime);highestY=Math.max(highestY,game.y);}
+    if(game.wipeouts>0)stop('Tweaked Grab ended in a wipeout. Inspect the position and recent events.',true);
+    else if(checkpoint===0&&game.trick?.type==='tweak'&&game.trick.age/game.trick.duration>=.5)stop('B-key checkpoint: Tweaked Grab is halfway through its normal hold. Continue to finish, land and bank.');
+    else if(checkpoint===1&&airStarted&&!game.airborne){
+      const completedGrab=game.comboNames.includes('TWEAKED GRAB'),banked=game.bank();
+      stop(completedGrab&&banked?'Sequence complete: B triggered Tweaked Grab, finished in the air, landed cleanly and banked.':'Sequence ended without a completed, banked Tweaked Grab. Inspect the recent events.',true);
+    } else if(game.elapsed>9)stop('Tweaked Grab did not reach its checkpoint. Inspect the current trick and recent events.',true);
   } else if(scenario==='left'||scenario==='right') {
     if(game.cutbackActive)attached=true;
     if(checkpoint===0&&game.cutbackActive&&game.cutbackProgress>=.5)stop('Cutback checkpoint: the surfer banks into the sharp turn. Continue to finish.');
@@ -73,7 +88,11 @@ function tick() {
   if(scenario==='pop'&&!popReleased&&parkSurface(game.x,game.z).progress>=.78){
     popReleased=true;input.jump=false;game.jump();
   }
-  game.update(1/120,input);detectCheckpoint();
+  game.update(1/120,input);
+  if(scenario==='tweak'&&game.airborne&&!tweakPressed){
+    tweakPressed=true;routeTrickKey({code:'KeyB',repeat:false,preventDefault(){}});
+  }
+  detectCheckpoint();
 }
 
 function resume() {
@@ -95,6 +114,8 @@ function updateCounters() {
   $('stat-time').textContent=game.elapsed.toFixed(3)+' s';
   const action=game.pipeRide?'pipe wall ride':game.lipMove?'lip grab':game.grinding?'coping grind':game.airborne?'airborne':game.cutbackActive?'cutback':'riding';
   $('stat-state').textContent=game.phase+' / '+action;
+  $('stat-trick').textContent=game.trick?`${game.trick.name} / ${(game.trick.age/game.trick.duration*100).toFixed(1)}%`:'none';
+  $('stat-speed').textContent=`${game.speed.toFixed(2)} m/s / ${(game.speed*3.6).toFixed(1)} km/h`;
   $('stat-controls').textContent=Object.entries(input).filter(([,held])=>held).map(([key])=>({action:'E',left:'A',right:'D',pump:'W',brake:'S',grind:'SHIFT',jump:'SPACE'}[key]||key)).join(' + ')||'none';
   $('stat-position').textContent=[game.x,game.y,game.z].map(v=>v.toFixed(2)).join(', ');
   $('stat-heading').textContent=degrees(game.heading);
@@ -116,7 +137,7 @@ try {
   await loadCharacterTextures();
   world=new SurfWorld($('viewport'),validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));world.setMode('park');
   game=new WaveParkGame(onEvent);$('loading').remove();
-  for(const kind of ['pipe','lip','coping','air','pop','left','right'])$('run-'+kind).addEventListener('click',()=>start(kind));
+  for(const kind of ['pipe','lip','coping','air','pop','tweak','left','right'])$('run-'+kind).addEventListener('click',()=>start(kind));
   $('continue').addEventListener('click',resume);
   $('pause').addEventListener('click',()=>{if(game.phase==='running')game.pause();else resume();updateCounters();});
   $('frame').addEventListener('click',()=>step(1));$('step').addEventListener('click',()=>step(30));

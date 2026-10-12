@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breakline ’99 · Wasted Replay</title>
+  <link rel="stylesheet" href="/src/wasted.css">
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#11191f;color:#e8e3d4;font:14px Arial,sans-serif}header{padding:13px 18px;background:#202b32;border-bottom:2px solid #a79662}h1{font-size:20px;margin:3px 0 5px}p{line-height:1.4;margin:5px 0}a{color:#e5c779}.badge{color:#c4b780;font-size:10px;font-weight:bold;letter-spacing:1.6px}main{display:grid;grid-template-columns:minmax(0,1fr) 290px}#stage{position:relative;min-width:0;overflow:hidden;outline:none}#viewport{height:calc(100vh - 96px);min-height:460px;background:#40515c}canvas{display:block;width:100%;height:100%;image-rendering:pixelated}#loading{position:absolute;inset:0;display:grid;place-items:center;z-index:2;background:#18242b}.review-panel{padding:16px;background:#1b272e}.review-panel h2{font-size:13px;letter-spacing:.7px;margin:0 0 10px}.review-panel button{display:block;width:100%;margin:9px 0;padding:10px;border:1px solid #8b8c80;background:#314149;color:#fff0c8;font:700 12px Arial,sans-serif;cursor:pointer}.review-panel button:hover{background:#46585d}.review-panel button:disabled{opacity:.5;cursor:default}.review-panel label{display:block;line-height:1.5;font-size:12px;margin:12px 0}.review-panel input{vertical-align:middle;margin:0 6px 0 0}#status{padding:10px;background:#101c23;border-left:3px solid #b59b56;font-size:12px;line-height:1.5;min-height:70px}dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}dt{color:#b9c7c9}dd{margin:0;text-align:right;font-family:monospace}.note{font-size:11px;color:#b8c4c6}#events{font:10px/1.55 monospace;color:#adcbc9;white-space:pre-wrap;margin-top:14px}#results{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);padding:25px;min-width:260px;background:#111a21eb;border:1px solid #858675;text-align:center;z-index:3}#results[hidden]{display:none}#results h2{margin:0 0 12px;font-size:30px;letter-spacing:2px}#results p{color:#cbd1cc}.wasted-overlay .review-panel{position:absolute;left:18px;bottom:18px;width:min(590px,calc(100% - 310px));padding:10px 13px;background:#152027e8;border:1px solid #82909266;z-index:2;display:grid;grid-template-columns:1fr 190px;gap:6px 15px}.wasted-overlay .review-panel h2{margin:0;grid-column:1/-1;font-size:10px;color:#c3c5ba}.wasted-overlay .review-panel label{margin:0;font-size:11px}.wasted-overlay .review-panel button{margin:0;font-size:10px;padding:8px}.wasted-overlay .review-panel #continue{grid-column:2;grid-row:2}.wasted-overlay .review-panel #restart{grid-column:2;grid-row:3}.wasted-overlay .review-panel #status{grid-column:1;grid-row:3/5;font-size:10px;min-height:0;padding:6px}.wasted-overlay .review-panel dl{grid-column:2;font-size:10px;gap:3px;margin:0}.wasted-overlay .review-panel .note,.wasted-overlay .review-panel #events{display:none}@media(max-width:760px){main{grid-template-columns:1fr}#viewport{height:65vh;min-height:350px}.wasted-overlay .review-panel{left:10px;right:10px;bottom:78px;width:auto;padding:8px;grid-template-columns:1fr 160px}.wasted-overlay .review-panel dl{display:none}.wasted-overlay .review-panel h2{font-size:9px}header p{font-size:12px}}
+  </style>
+</head>
+<body>
+  <header><span class="badge">BREAKLINE ’99 / LOCAL REVIEW</span><h1>Wasted replay</h1><p>Three natural Storm wipeouts, followed by the game’s WASTED sequence. <a href="/">Back to the game</a></p></header>
+  <main><section id="stage" tabindex="-1" aria-label="Storm replay"><div id="viewport"></div><div id="loading">Loading the Storm replay…</div><article id="results" hidden><span class="badge">REPLAY COMPLETE</span><h2>RUN OVER</h2><p id="result-detail"></p><p>Restart using the local review controls.</p></article></section><div id="review-home"><aside class="review-panel" id="review-panel">
+    <h2>LOCAL REVIEW CONTROLS</h2>
+    <label><input id="pause-title" type="checkbox" checked>Pause at the WASTED title</label>
+    <button id="continue" type="button" disabled>Continue replay to results</button>
+    <button id="restart" type="button">Restart replay</button>
+    <div id="status" role="status">Preparing the replay…</div>
+    <dl><dt>Lives</dt><dd id="stat-lives">3 / 3</dd><dt>Wipeouts</dt><dd id="stat-wipeouts">0 / 3</dd><dt>Game phase</dt><dd id="stat-phase">ready</dd><dt>Run time</dt><dd id="stat-time">0.000 s</dd><dt>Title time</dt><dd id="stat-title">0.00 s</dd></dl>
+    <p class="note">The replay holds D through the real Storm game. Lives, collisions, wipeouts, and the final result come from normal play. Review controls are separate from the main game.</p>
+    <pre id="events" aria-label="Recent replay events"></pre>
+  </aside></div></main><script type="module" src="/src/event-lab.js"></script>
+</body>
+</html>

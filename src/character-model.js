@@ -39,7 +39,7 @@ function segment(parent,rings,m,geometry=null){
 function shoeGeometry(sole=false){
   // A shoe last, rather than a round limb tube: a block heel, raised instep,
   // broad toe box and a flat outsole with a small toe bevel.
-  const rows=[[-.18,.035,.023,-.072],[-.07,.047,.049,-.068],[.19,.050,.048,-.058],[.44,.052,.039,-.048],[.73,.057,.027,-.037],[.98,.049,.022,-.028],[1.08,.031,.012,-.024]],p=[],uv=[],ix=[];
+  const rows=[[-.20,.039,.024,-.072],[-.07,.050,.053,-.068],[.19,.054,.052,-.058],[.44,.060,.043,-.048],[.73,.064,.031,-.037],[.98,.055,.024,-.028],[1.08,.037,.014,-.024]],p=[],uv=[],ix=[];
   rows.forEach(([t,w,top,bottom])=>{
     const hi=sole?bottom+.003:top,lo=sole?bottom-.009:bottom;
     const perimeter=[[w,lo+(hi-lo)*.4],[w*.86,hi*.76+lo*.24],[0,hi],[-w*.86,hi*.76+lo*.24],[-w,lo+(hi-lo)*.4],[-w*.88,lo],[0,lo],[w*.88,lo],[w,lo+(hi-lo)*.4]];
@@ -101,8 +101,10 @@ function clothChain(parent,rings,material,name){
       let back=new THREE.Vector3(0,0,1).addScaledVector(dir,-dir.z);
       if(back.lengthSq()<.01)back=new THREE.Vector3(0,1,0).addScaledVector(dir,-dir.y);
       back.normalize();const right=dir.clone().cross(back).normalize();back=right.clone().cross(dir).normalize();q.setFromRotationMatrix(basis.makeBasis(right,dir,back));
-      const crease=rings[i][5];
-      CLOTH_RING.forEach(([x,z],j)=>{const v=new THREE.Vector3(x*rx+ox,crease?.[j%8]||0,z*rz+oz).applyQuaternion(q).add(centre);p.setXYZ(i*9+j,v.x,v.y,v.z);});
+      const crease=rings[i][5],fold=rings[i][6];
+      // Sparse, directional cloth ridges alter broad planes at a knee or cuff.
+      // They are not a ring of alternating spikes and never move sewn roots.
+      CLOTH_RING.forEach(([x,z],j)=>{const scale=1+(fold?.[j%8]||0),v=new THREE.Vector3(x*rx*scale+ox,crease?.[j%8]||0,z*rz*scale+oz).applyQuaternion(q).add(centre);p.setXYZ(i*9+j,v.x,v.y,v.z);});
     });
     const last=rings.at(-1)[0],end=(last<=1?va:vb).clone().lerp(last<=1?vb:vc,last<=1?last:last-1);p.setXYZ(rings.length*9,end.x,end.y,end.z);p.needsUpdate=true;g.computeVertexNormals();g.computeBoundingSphere();
   }};
@@ -121,7 +123,10 @@ function shirtShell(body,rings,material,{sleeves=false,open=false,loose=false}={
   }
   // The outer acromion sits below the shoulder crest; a constant-height ring
   // gave each sleeve a little square epaulet at the top of its silhouette.
-  for(const j of [0,4,8])g.attributes.position.setY(4*9+j,rings[4][0]-.017);
+  for(let j=0;j<9;j++){
+    const drop=[0,4,8].includes(j)?.025:[1,3,5,7].includes(j)?.006:.010;
+    g.attributes.position.setY(4*9+j,rings[4][0]-drop);
+  }
   // An actual armhole replaces the old intersecting narrow sleeve plugs. Both
   // pieces use the same boundary vertices, in every animated pose.
   for(let r=0;r<rings.length-1;r++)for(let j=0;j<8;j++){
@@ -153,7 +158,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
   // The chest has a pectoral volume, a narrower abdomen and a sloping shoulder
   // yoke. Loose tops hang almost straight from the chest over the waistband.
   const chestRings=[[-.08,.155*build,.098],[.075,.146*build,.100],[.25,.188*build,.127,0,-.008],[.397,.202*build,.120,0,.002],[.452,.184*build,.091],[.487,.103,.063],[.503,.063,.051]];
-  const garmentRings=[[-.115,.213*build,.141],[.06,.195*build,.127,0,.003],[.25,.217*build,.142,0,-.005],[.397,.220*build,.131,0,.003],[.452,.235*build,.102],[.487,.108,.068],[.503,.065,.056]];
+  const garmentRings=[[-.115,.213*build,.141],[.06,.202*build,.131,0,.003],[.25,.224*build,.147,0,-.006],[.397,.225*build,.138,0,.003],[.455,.240*build,.106],[.487,.108,.068],[.503,.065,.056]];
   const chest=mesh(body,clothGeometry(chestRings),skin);chest.name='chest';
   let shell=null;
   if(!bare){
@@ -196,7 +201,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     const group=new THREE.Group();body.add(group);const prefix=side<0?'left':'right';group.name=prefix+'-arm';
     const covered=outfit.sleeves!=='none',quarter=outfit.sleeves==='threequarter';
     const upper=segment(group,covered?[[.70,.043,.039],[.84,.039,.035],[1,.033,.032]]:[[0,.055,.046],[.22,.052,.047],[.57,.044,.042],[1,.033,.032]],skin),lower=segment(group,quarter?[[.43,.037,.032],[.67,.033,.028],[1,.024,.020]]:[[0,.034,.032],[.27,.041,.036],[.67,.033,.028],[1,.024,.020]],skin);upper.model.name=prefix+'-upper-arm';lower.model.name=prefix+'-forearm';
-    const sleeveR=sweat?.065:loose?.060:.048,long=outfit.sleeves==='long';
+    const sleeveR=sweat?.067:loose?.062:.048,long=outfit.sleeves==='long';
     const elbowFold=[0,.005,-.007,.004,0,-.004,.008,-.003],cuffFold=[-.003,.002,.004,-.003,.004,-.002,-.004,.003];
     const sleeveRings=long?[[0,sleeveR,.06],[.35,sleeveR*1.03,.060],[.69,sleeveR,.058,0,.006],[.95,sleeveR*.92,.060,0,.004,elbowFold],[1.18,sleeveR*.86,.050],[1.50,.048,.044],[1.76,.046,.043,0,0,cuffFold],[1.91,.040,.035],[2,.030,.027]]:outfit.sleeves==='threequarter'?[[0,sleeveR,.056],[.37,sleeveR*1.03,.056],[.79,sleeveR*.96,.056,0,.004,elbowFold],[1.13,.048,.043],[1.53,.041,.036]]:[[0,sleeveR,.056],[.36,sleeveR*1.03,.056],[.67,sleeveR,.055],[.86,sleeveR*.95,.051,0,0,cuffFold]];
     const cloth=outfit.sleeves!=='none'?clothChain(group,sleeveRings,sleeve,prefix+'-sleeve'):null;
@@ -223,10 +228,11 @@ export function createCharacter({id,character,outfit,fabricTexture}){
   function leg(side){
     const prefix=side<0?'left':'right';
     const skinUpper=segment(rider,[[0,.078,.078],[.28,.088,.08],[.7,.067,.063],[1,.047,.048]],wet?shirt:skin);
-    const skinLower=segment(rider,[[0,.049,.047],[.28,.062,.051],[.67,.043,.038],[1,.027,.028]],wet?shirt:skin);
+    const skinLower=segment(rider,[[0,.051,.048],[.28,.067,.055],[.54,.052,.044],[.76,.040,.036],[1,.028,.029]],wet?shirt:skin);
     skinUpper.model.name=prefix+'-thigh';skinLower.model.name=prefix+'-calf';
-    const kneeFold=[-.002,.006,-.011,.005,.001,-.003,.009,-.004],ankleFold=[.006,-.005,.014,-.004,-.008,.006,-.012,.004];
-    const cloth=!wet?clothChain(rider,trousers?[[0,.113,.104],[.58,.118,.109],[.80,.113,.103,0,-.006],[1.01,.101,.106,0,-.004,kneeFold],[1.26,.098,.093,0,.005],[1.55,.101,.092],[1.78,.111,.105,-side*.004,.002,ankleFold],[1.91,.101,.090,side*.003,0],[2,.107,.096,0,0,ankleFold]]:[[0,.113,.102],[.58,.119,.104],[.80,.117,.105],[1.00,.111,.100,0,.003,kneeFold],[1.13,.111,.095]],shorts,prefix+(trousers?'-trousers':'-shorts')):null;
+    const kneeFold=[-.003,.010,-.018,.006,.002,-.004,.012,-.006],ankleFold=[.008,-.008,.018,-.005,-.010,.008,-.016,.006];
+    const kneePlane=[0,.055,.025,-.035,0,0,-.025,.025],cuffPlane=[.035,.045,-.025,-.025,0,.015,.045,-.015];
+    const cloth=!wet?clothChain(rider,trousers?[[0,.113,.104],[.52,.121,.114],[.79,.117,.108,side*.003,-.006],[1.01,.105,.107,0,-.006,kneeFold,kneePlane],[1.25,.098,.089,0,.005],[1.51,.105,.099,-side*.003,.006],[1.75,.112,.105,-side*.004,.002,ankleFold,cuffPlane],[1.91,.103,.088,side*.003,0],[2,.110,.098,0,0,ankleFold,cuffPlane]]:[[0,.113,.102],[.56,.124,.110],[.80,.120,.109],[1.00,.113,.103,0,.003,kneeFold,kneePlane],[1.13,.113,.098]],shorts,prefix+(trousers?'-trousers':'-shorts')):null;
     // Boardshorts cover the entire thigh and end below the knee. Rendering a
     // second, rigid skin tube beneath them lets its hip cap poke through the
     // tailored seat when the rider bends. The wetsuit uses this tube as cloth.
@@ -239,12 +245,13 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     // Thin contrasting lace bands are attached to the foot, not floating cubes.
     for(let i=0;i<3;i++){const lace=mesh(shoe.group,new THREE.BoxGeometry(.065,.017,.003),cream);lace.position.set(0,.25+i*.09,.047-i*.003);}
     let points;
-    return{cloth,set(hip,knee,ankle,toe,shoes,footUp=null){
+    return{cloth,set(hip,knee,ankle,toe,shoes,footUp=null,footBlend=1){
       knee=jointBetween(hip,ankle,.478,.45,[0,0,-1]);
       points={hip,knee,ankle,toe};skinUpper.set(hip,knee);skinLower.set(knee,ankle);foot.set(ankle,toe);shoe.set(ankle,toe);sole.set(ankle,toe);sock.set(knee,ankle);
       if(footUp){
         const along=V(toe).sub(V(ankle)).normalize(),up=V(footUp).addScaledVector(along,-V(footUp).dot(along)).normalize(),right=along.clone().cross(up).normalize(),basis=new THREE.Matrix4().makeBasis(right,along,up);
-        for(const item of [foot,shoe,sole])item.group.quaternion.setFromRotationMatrix(basis);
+        const planted=new THREE.Quaternion().setFromRotationMatrix(basis);
+        for(const item of [foot,shoe,sole])item.group.quaternion.slerp(planted,footBlend);
         sole.group.position.copy(V(ankle));
       }
       foot.group.visible=!shoes;shoe.group.visible=sole.group.visible=sock.group.visible=shoes;
@@ -282,28 +289,54 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     p.needsUpdate=true;yokeGeometry.computeVertexNormals();yokeGeometry.computeBoundingSphere();
     legs.forEach((leg,i)=>leg.cloth?.set(leg.points.hip,leg.points.knee,leg.points.ankle,roots[i].map(toRider)));
   }
-  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1}={}){
+  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null}={}){
     shell?.resetNormals();
     if(mode)activeMode=mode;grab=THREE.MathUtils.clamp(Math.max(grab,lipGrab),0,1);
     tweak=air&&!standing?THREE.MathUtils.clamp(tweak,0,1):0;
+    const combo=air&&!standing&&comboPose?.weight>0?comboPose:null;
     cutback=standing||air?0:THREE.MathUtils.clamp(cutback,0,1);
     const shoes=activeMode==='park'||standing,breath=Math.sin(time*1.7)*.002;
     rider.rotation.set(0,standing?0:-Math.PI/2,0);
     rider.position.y=air&&!standing?.12:0;
-    if(standing){
+    if(standing&&inspectionPose==='tpose'){
+      // Opt-in reference inspection only. The gameplay and ordinary standing
+      // branches below retain their authored poses without any adjustment.
+      body.position.set(0,1.001,0);body.rotation.set(0,0,0);head.rotation.set(0,0,0);
+      body.updateMatrix();
+      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.12,.53,-.02],[-.12,.085,0],[-.15,.047,-.194],shoes);
+      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.12,.53,-.02],[.12,.085,0],[.15,.047,-.194],shoes);
+      for(const [i,side]of [[0,-1],[1,1]]){
+        const x=side*.194*build;
+        // A tiny forward elbow bend makes the near-straight IK well-defined;
+        // wrist and fingertip heights remain exactly at shoulder height.
+        arms[i].set([x,.437,.002],[x+side*.32,.437,-.023],[x+side*.6095,.437,.002]);
+      }
+    }else if(standing){
       body.position.set(.020,1.001+breath,.012);body.rotation.set(-.028,.075,.036);head.rotation.set(.022,-.11,.012);
       body.updateMatrix();
       legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.105,.527,-.018],[-.117,.085,-.010],[-.151,.047,-.204],shoes);
       legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.115,.531,.019],[.126,.084,.060],[.163,.047,-.132],shoes);
       // Nearly extended, unlocked arms hang beside the garment. The bend hint
       // points forward, preventing the old sideways, mannequin-like elbows.
-      arms[0].set([-.194*build,.437,.002],[-.194*build,.145,.065],[-.229*build,-.151,-.095]);
-      arms[1].set([.194*build,.437,.003],[.209*build,.139,.043],[.235*build,-.148,-.043]);
+      arms[0].set([-.194*build,.437,.002],[-.194*build,.145,.065],[-.223*build,-.151,-.095]);
+      arms[1].set([.194*build,.437,.003],[.209*build,.139,.043],[.229*build,-.148,-.043]);
     }else{
-      const turn=cutback*Math.sign(cutbackDirection||1),tuck=Math.min(1,charge*.85+grab+cutback*.35),hy=.80-tuck*.37,hz=.04+tuck*.25;
-      body.position.set(-lean*.03-turn*.04-.14*tweak,hy+breath+.10*tweak,hz+.13*tweak);
-      body.rotation.set(-.16-tuck*.40+turn*.18-.01*tweak,-.07+turn*.20-.48*tweak,-lean*.12-turn*.10+.40*tweak);
+      const turn=cutback*Math.sign(cutbackDirection||1),tuck=Math.min(1,charge*.85+grab+cutback*.35+(combo?.tuck||0));
+      // Grounded compression is an athletic hinge: the hips stay above the
+      // knees while the chest comes forward. The previous deep seat is still
+      // available to the separate airborne/board-grab choreography and IK.
+      const riding=1-Math.max(grab,air?1:0),compression=Math.min(1,charge+cutback*.65);
+      const hy=THREE.MathUtils.lerp(.80-tuck*.37,.90-compression*.25,riding);
+      const hz=THREE.MathUtils.lerp(.04+tuck*.25,.055+compression*.12,riding);
+      const hinge=THREE.MathUtils.lerp(-.16-tuck*.40,-.25-compression*.42,riding);
+      body.position.set(-.025*riding-lean*.03-turn*.04-.14*tweak,hy+breath+.10*tweak,hz+.13*tweak);
+      body.rotation.set(hinge+turn*.18-.01*tweak,-.07-.035*riding+turn*.20-.48*tweak,(-.025+compression*.015)*riding-lean*.12-turn*.10+.40*tweak);
       head.rotation.set(.17+tuck*.2-.10*tweak,1.15-turn*.30+.10*tweak,-.025-.055*tweak);
+      if(combo){
+        body.position.add(V(combo.hip));
+        body.rotation.x+=combo.torso[0];body.rotation.y+=combo.torso[1];body.rotation.z+=combo.torso[2];
+        head.rotation.y-=combo.torso[1]*.35;
+      }
       rider.updateWorldMatrix(true,true);
       // Production supplies a world-space point from the actual generated
       // surfboard after all rig, heading, spin, flip, and board-lift transforms.
@@ -319,20 +352,27 @@ export function createCharacter({id,character,outfit,fabricTexture}){
       body.updateMatrix();
       const ky=.494-tuck*.064,kz=-.254-tuck*.087;
       const inverseRider=rider.matrixWorld.clone().invert();
-      const feet=boardFeetWorld&&tweak>0?boardFeetWorld.map(foot=>({ankle:rider.worldToLocal(foot.ankle.clone()).toArray(),toe:rider.worldToLocal(foot.toe.clone()).toArray(),up:foot.up?.clone().transformDirection(inverseRider).toArray()})):[{ankle:[-.34,.215,.035],toe:[-.36,.181,-.163]},{ankle:[.36,.215,.069],toe:[.395,.181,-.128]}];
-      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.236,ky,kz],feet[0].ankle,feet[0].toe,shoes,feet[0].up);
-      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.246,ky+.012,kz+.056],feet[1].ankle,feet[1].toe,shoes,feet[1].up);
-      const leftRest=mix([-.46,.042,-.186],[-.37,-.16,-.27],cutback);
+      const plantedFeet=boardFeetWorld&&(tweak>0||combo?.plantFeet>0);
+      const feet=plantedFeet?boardFeetWorld.map(foot=>({ankle:rider.worldToLocal(foot.ankle.clone()).toArray(),toe:rider.worldToLocal(foot.toe.clone()).toArray(),up:foot.up?.clone().transformDirection(inverseRider).toArray()})):[{ankle:[-.34,.215,.035],toe:[-.36,.181,-.163]},{ankle:[.36,.215,.069],toe:[.395,.181,-.128]}];
+      const footBlend=tweak>0?1:combo?.plantFeet||1;
+      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.236,ky,kz],feet[0].ankle,feet[0].toe,shoes,feet[0].up,footBlend);
+      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.246,ky+.012,kz+.056],feet[1].ankle,feet[1].toe,shoes,feet[1].up,footBlend);
+      const leftBalance=mix([-.46,.042,-.186],[-.365,.045-compression*.10,-.245-compression*.065],riding);
+      const leftRest=mix(leftBalance,[-.37,-.16,-.27],cutback);
       // Keep the free arm reaching upward while the torso lays over and twists;
       // raising it only in torso space made it tip sideways with the chest.
       const raisedWrist=V([-.12,.57,-.06]).applyQuaternion(body.quaternion.clone().invert()).add(V([-.194*build,.437,.002])).toArray();
-      arms[0].set([-.194*build,.437,.002],mix([-.37,.233,-.055],mix([-.29,.58,.00],[-.42,.69,.11],tweak),grab),mix(leftRest,mix([-.25,.86,-.12],raisedWrist,tweak),grab));
+      let freeElbow=mix([-.37,.233,-.055],mix([-.29,.58,.00],[-.42,.69,.11],tweak),grab),freeWrist=mix(leftRest,mix([-.25,.86,-.12],raisedWrist,tweak),grab);
+      if(combo){freeElbow=mix(freeElbow,combo.leftElbow,combo.weight);freeWrist=mix(freeWrist,combo.leftWrist,combo.weight);}
+      arms[0].set([-.194*build,.437,.002],freeElbow,freeWrist);
       const shoulder=[.194*build,.437,.003];
       rider.updateWorldMatrix(true,true);
       const contact=body.worldToLocal(contactWorld.clone());
       const direction=contact.clone().sub(V(shoulder)).normalize();
       const targetWrist=contact.clone().addScaledVector(direction,-.15);
-      const rightRest=mix([.42,-.018,-.14],[.41,.075,-.30],cutback);
+      const rightBalance=mix([.42,-.018,-.14],[.365,-.035-compression*.045,.010-compression*.035],riding);
+      let rightRest=mix(rightBalance,[.41,.075,-.30],cutback);
+      if(combo?.rightWrist)rightRest=mix(rightRest,combo.rightWrist,combo.weight);
       const wrist=mix(rightRest,targetWrist.toArray(),grab),delta=V(wrist).sub(V(shoulder));
       const d=Math.min(.609,delta.length()),axis=delta.normalize(),upper=.32,lower=.29;
       const along=(upper*upper-lower*lower+d*d)/(2*d),off=Math.sqrt(Math.max(0,upper*upper-along*along));

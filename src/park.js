@@ -475,11 +475,17 @@ export class WaveParkGame extends SurfGame {
     else if (this.grinding) this.updateRail(dt, input);
     else {
       const active = this.bailTime <= 0;
+      const pushing=input.pump||(!this.airborne&&!this.cutbackActive&&input.jump);
+      const groundTurn=1.65+.55*(1-clamp((this.speed-3.5)/11.5,0,1));
       if(this.cutbackActive)this.updateCutback(dt);
-      else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : 1.65) * dt;
-      const targetSpeed = active ? (input.brake ? 3.5 : input.pump ? 23.5 : 15)*(this.cutbackActive?.72:1) : 3;
-      this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * (input.brake ? 3.6 : 1.5)));
-      const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:11));
+      else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : groundTurn) * dt;
+      const targetSpeed = active ? (input.brake ? 3.5 : pushing ? 23.5 : 15)*(this.cutbackActive?.72:1) : 3;
+      // Crouching pumps the board toward the same limit as W. Let earned
+      // momentum coast through a flight/landing instead of braking toward cruise.
+      const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15;
+      const acceleration=input.brake?3.6:coasting?(this.airborne?.10:.35):1.5;
+      this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * acceleration));
+      const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:14));
       if(this.rampReturn)this.updateRampReturn(dt,steering);
       else {
         // A ramp pop redirects some speed upward. Keep that short climbing

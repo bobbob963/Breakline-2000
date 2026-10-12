@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { retroMaterial } from './appearance.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
+import { waterworksTexture as texture } from './waterworks-textures.js';
 import * as PARK from './park.js';
 
 const TAU = Math.PI * 2;
@@ -26,39 +27,10 @@ function tube(g, material, a, b, radius = .15, sides = 8) {
   m.position.copy(start.add(end).multiplyScalar(.5));
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize()); return m;
 }
-function texture(kind = 'concrete') {
-  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
-  const c = canvas.getContext('2d');
-  const palette = kind === 'rust' ? ['#926447', '#452f25', '#c98c59']
-    : kind === 'flow' ? ['#667965', '#394d40', '#b1b998'] : ['#bfc1ae', '#65705e', '#e0ddc6'];
-  c.fillStyle = palette[0]; c.fillRect(0, 0, 128, 128);
-  let seed = kind === 'rust' ? 73 : 991;
-  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-  for (let i = 0; i < 950; i++) {
-    c.globalAlpha = .05 + random() * .15; c.fillStyle = palette[i % 2 + 1];
-    c.fillRect(Math.floor(random() * 128), Math.floor(random() * 128), 1 + Math.floor(random() * 4), 1 + Math.floor(random() * 5));
-  }
-  c.globalAlpha = .25;
-  if (kind === 'rust') {
-    for (let i = 0; i < 20; i++) { c.fillStyle = i % 2 ? palette[1] : palette[2]; c.fillRect(i * 7, 0, 1 + i % 3, 28 + (i * 31) % 96); }
-    c.fillStyle = '#2d2920'; c.fillRect(0, 0, 128, 2);
-  } else if (kind === 'flow') {
-    for (let i = 0; i < 20; i++) { c.fillStyle = i % 2 ? palette[1] : palette[2]; c.fillRect((i * 29) % 128, 0, 2 + i % 4, 128); }
-  } else {
-    c.fillStyle = palette[1]; c.fillRect(0, 0, 128, 2); c.fillRect(0, 63, 128, 1); c.fillRect(0, 0, 1, 128);
-    for (let i = 0; i < 12; i++) c.fillRect((i * 19) % 128, 2, 1 + i % 3, 6 + (i * 17) % 51);
-  }
-  c.globalAlpha = 1;
-  const map = new THREE.CanvasTexture(canvas); map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  // Pixelated close up, filtered mip levels far away: stable concrete instead of
-  // the old animated nearest-filter floor and overlapping coplanar grid decals.
-  map.magFilter = THREE.NearestFilter; map.minFilter = THREE.LinearMipmapLinearFilter;
-  map.generateMipmaps = true; map.colorSpace = THREE.SRGBColorSpace; return map;
-}
 function sign(g, text, x, y, z, width = 22, height = 3.4, rotation = 0, color = '#ded5a7') {
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
-  const c = canvas.getContext('2d'); c.fillStyle = '#263027'; c.fillRect(0, 0, 512, 96);
-  c.strokeStyle = '#8e9377'; c.lineWidth = 5; c.strokeRect(4, 4, 504, 88);
+  const c = canvas.getContext('2d'); c.fillStyle = '#2b3030'; c.fillRect(0, 0, 512, 96);
+  c.strokeStyle = '#94978d'; c.lineWidth = 5; c.strokeRect(4, 4, 504, 88);
   c.fillStyle = color; c.font = 'bold 35px Arial'; c.textAlign = 'center'; c.fillText(text, 256, 61);
   for (let i = 0; i < 55; i++) { c.fillStyle = '#17231955'; c.fillRect((i * 137) % 512, (i * 23) % 96, 4, 2); }
   const map = new THREE.CanvasTexture(canvas); map.magFilter = THREE.NearestFilter; map.minFilter = THREE.LinearMipmapLinearFilter;
@@ -71,19 +43,37 @@ function addTerrain(g, material) {
   const width = b.maxX - b.minX, length = b.maxZ - b.minZ;
   const nx = Math.ceil(width / 1.2), nz = Math.ceil(length / 1.2), dx = width / nx, dz = length / nz;
   const positions = [], uvs = [], colors = [], indices = [];
-  const dry = new THREE.Color('#b6b6a0'), wet = new THREE.Color('#92a08c'), water = new THREE.Color('#91afa0'), crest = new THREE.Color('#d3d6b8');
+  const dry = new THREE.Color('#e0ded4'), wet = new THREE.Color('#939c91'), rampColor = new THREE.Color('#d7d3c4');
+  const worn = new THREE.Color('#eeeadb'), grime = new THREE.Color('#68736c');
+  const rampPaint = PARK.PARK_RAMPS.map(ramp => ({ ...ramp, c:Math.cos(ramp.rotation), s:Math.sin(ramp.rotation) }));
   const vertex = (x, z, biasX = 0, biasZ = 0, overrideY) => {
     if (Math.abs(x) < 1e-7) x = 0;
     if (Math.abs(z) < 1e-7) z = 0;
     const y = overrideY ?? parkHeight(x + biasX, z + biasZ);
     const base = PARK.parkTerrainHeight ? PARK.parkTerrainHeight(x + biasX, z + biasZ) : 0;
     const lift = Math.max(0, y - base), color = dry.clone().lerp(wet, THREE.MathUtils.clamp(-y / 2.2, 0, 1));
-    if (lift > .1) color.lerp(water, Math.min(1, lift / .7));
-    if (lift > 6) color.lerp(crest, Math.min(.5, (lift - 6) * .1));
-    const stain = .94 + Math.sin(x * .057 + z * .037) * .025 + Math.sin(z * .17 - x * .13) * .018;
+    if (lift > .1) {
+      color.lerp(rampColor, Math.min(1, lift / .7));
+      // Baked wear follows the real ramp footprint. No floating decal or
+      // displaced edge can disagree with the rideable collision surface.
+      for (const ramp of rampPaint) {
+        const ox=x+biasX-ramp.x, oz=z+biasZ-ramp.z;
+        const u=ox*ramp.c-oz*ramp.s, v=-ox*ramp.s-oz*ramp.c;
+        if(Math.abs(u)>ramp.width/2||Math.abs(v)>ramp.length/2)continue;
+        const t=v/ramp.length+.5, sideDistance=ramp.width/2-Math.abs(u);
+        const nearEdge=1-THREE.MathUtils.smoothstep(sideDistance,.15,2.4);
+        color.lerp(grime, nearEdge*.23);
+        if(['quarter','kicker','access'].includes(ramp.type)) {
+          const lip=THREE.MathUtils.smoothstep(t,.89,.975);
+          color.lerp(grime,lip*.43);
+          color.lerp(worn,Math.max(0,1-Math.abs(t-.84)/.065)*.18);
+        }
+      }
+    }
+    const stain = .94 + Math.sin(x * .087 + z * .041) * .045 + Math.sin(z * .13 - x * .09) * .028;
     color.multiplyScalar(stain * (Math.abs(x) > width * .29 ? .94 : 1));
     const index = positions.length / 3;
-    positions.push(x, y, z); uvs.push(x / 12, z / 12); colors.push(color.r, color.g, color.b); return index;
+    positions.push(x, y, z); uvs.push(x / 10, z / 10); colors.push(color.r, color.g, color.b); return index;
   };
   for (let iz = 0; iz <= nz; iz++) for (let ix = 0; ix <= nx; ix++) vertex(b.minX + ix * dx, b.minZ + iz * dz);
 
@@ -280,18 +270,18 @@ function batchStatic(group, animated) {
 export function createWaterworks() {
   const group = new THREE.Group(); group.name = 'the-waterworks-sunken-basin';
   const b = PARK.PARK_BOUNDS, width = b.maxX - b.minX, length = b.maxZ - b.minZ;
-  const concreteMap = texture(), floorMap = texture(), rustMap = texture('rust');
-  const concrete = retroMaterial('#78806a', concreteMap), paleConcrete = retroMaterial('#a4a68b', concreteMap);
-  const damp = retroMaterial('#38493b', concreteMap), dark = retroMaterial('#26372e'), metal = retroMaterial('#606953');
-  const rust = retroMaterial(0xffffff, rustMap), darkRust = retroMaterial('#725d46', rustMap);
-  const pale = retroMaterial('#c4c2a0'), yellow = retroMaterial('#bca34e');
-  const lamp = new THREE.MeshBasicMaterial({ color: '#cfc78f' });
+  const concreteMap = texture(), floorMap = texture('floor'), rustMap = texture('rust'), steelMap = texture('steel');
+  const concrete = retroMaterial('#c0c2bb', concreteMap), paleConcrete = retroMaterial('#e1dfd1', concreteMap);
+  const damp = retroMaterial('#737f76', concreteMap), dark = retroMaterial('#343d3d', steelMap), metal = retroMaterial('#a0a49a', steelMap);
+  const rust = retroMaterial('#d2c8b7', rustMap), darkRust = retroMaterial('#827e73', rustMap);
+  const pale = retroMaterial('#c4c5b0'), yellow = retroMaterial('#b6a46a', concreteMap);
+  const lamp = new THREE.MeshBasicMaterial({ color: '#ddd4ac' });
   const logoMap = new THREE.CanvasTexture(createClassicLogoCanvas());
   logoMap.name = 'classic-breakline-factory-banner';
   logoMap.magFilter = THREE.NearestFilter; logoMap.minFilter = THREE.LinearMipmapLinearFilter;
   logoMap.generateMipmaps = true; logoMap.colorSpace = THREE.SRGBColorSpace;
   const logoMaterial = new THREE.MeshLambertMaterial({ map: logoMap, alphaTest: .1, side: THREE.DoubleSide });
-  const waterMap = texture('flow'), flowingWater = retroMaterial('#798773', waterMap); flowingWater.side = THREE.DoubleSide;
+  const waterMap = texture('flow'), flowingWater = retroMaterial('#a4b0a2', waterMap); flowingWater.side = THREE.DoubleSide;
   // The rideable ground intentionally skips retroMaterial's vertex snapping:
   // snapping a dense, shallow-angle heightfield can invert tiny screen triangles.
   const terrain = addTerrain(group, new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorMap, flatShading: true }));
@@ -391,10 +381,10 @@ export function createWaterworks() {
 
   // Contact surfaces skip screen-space vertex snapping, just like the ground:
   // the bore stays steady as the rider circles the walls and ceiling.
-  const outerPipe = new THREE.MeshLambertMaterial({color:0xffffff,map:rustMap,flatShading:true});
-  const innerPipe = new THREE.MeshLambertMaterial({color:'#77654e',map:rustMap,flatShading:true,side:THREE.BackSide});
-  const flange = new THREE.MeshLambertMaterial({color:'#6b6550',map:rustMap,flatShading:true,side:THREE.DoubleSide});
-  const copingMetal = new THREE.MeshLambertMaterial({color:'#c5c8b1',map:concreteMap,flatShading:true});
+  const outerPipe = new THREE.MeshLambertMaterial({color:'#ccc5b7',map:rustMap,flatShading:true});
+  const innerPipe = new THREE.MeshLambertMaterial({color:'#aaa896',map:rustMap,flatShading:true,side:THREE.BackSide});
+  const flange = new THREE.MeshLambertMaterial({color:'#737b77',map:steelMap,flatShading:true,side:THREE.DoubleSide});
+  const copingMetal = new THREE.MeshLambertMaterial({color:'#828a84',map:steelMap,flatShading:true});
   for (const pipe of PARK.PARK_PIPES || []) {
     pipeShell(group, pipe, outerPipe, innerPipe, flange, pale);
     const mouth = localPoint(pipe, 0, pipe.centerY + pipe.radius + 2.35, -pipe.length/2);
@@ -410,5 +400,6 @@ export function createWaterworks() {
   // Foam belongs to actual discharge, not to the stable floor material.
   batchStatic(group, new Set([...foam.map(f => f.mesh), ...flows, ...logoBanners]));
   group.userData.terrainVertexCount = terrain.geometry.attributes.position.count;
+  group.userData.art = { palette:'worn-neutral-concrete', textures:128, paint:'fixed-original-baked-grime', collisionGeometryUnchanged:true };
   return { group, waterMap, foam, update: time => { waterMap.offset.y = -time * .16; } };
 }

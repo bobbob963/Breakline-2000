@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createCharacter } from '../src/character-model.js';
+import { createCharacter as createV8Character } from '../src/character-model-v8-reference.js';
 import { CHARACTERS, OUTFITS, createSurfer, disposeSurfer } from '../src/appearance.js';
 import { GRAB_HOLD_START, GRAB_HOLD_END, grabEnvelope, sampleRiderTrick } from '../src/rider-pose.js';
 import { TRICKS } from '../src/game.js';
@@ -15,11 +16,11 @@ const canvasContext = new Proxy({}, {
 });
 const canvasDocument = { createElement: () => ({ width: 1, height: 1, getContext: () => canvasContext }) };
 
-function makeModel(character, outfit) {
+function makeModel(character, outfit, builder = createCharacter) {
   const saved = globalThis.document;
   globalThis.document = canvasDocument;
   try {
-    return createCharacter({ id: character, character: CHARACTERS[character], outfit: OUTFITS[outfit], fabricTexture: () => new THREE.Texture() });
+    return builder({ id: character, character: CHARACTERS[character], outfit: OUTFITS[outfit], fabricTexture: () => new THREE.Texture() });
   } finally {
     if (saved === undefined) delete globalThis.document;
     else globalThis.document = saved;
@@ -269,6 +270,84 @@ test('neutral standing has unlocked asymmetric joints without returning to a wid
   t.diagnostic(`Actual standing joint angles over the breathing cycle: elbows ${range('elbow')}°, knees ${range('knee')}°; both sides keep their original physical limb lengths in the separate pose tests.`);
 });
 
+test('both comparison builders expose a level, sewn T-pose without changing default poses', t => {
+  let inspected=0,seams=0;
+  for(const [version,builder]of [['current',createCharacter],['v8',createV8Character]]){
+    for(const character of Object.keys(CHARACTERS))for(const outfit of ['riptide','yardcrew','reefskin']){
+      const model=makeModel(character,outfit,builder),label=`${version}/${character}/${outfit}`;
+      try{
+        model.pose({standing:true,mode:'park',time:.4});
+        const defaultStanding=visibleGeometry(model).vertices;
+        model.pose({standing:true,mode:'park',inspectionPose:'tpose'});
+        const geometry=visibleGeometry(model),lm=model.landmarks;
+        assert.ok(geometry.vertices.every(p=>[p.x,p.y,p.z].every(Number.isFinite)),`${label}: non-finite inspection geometry`);
+        assert.ok(model.body.rotation.toArray().slice(0,3).every(x=>x===0)&&model.head.rotation.toArray().slice(0,3).every(x=>x===0),`${label}: inspection torso/head must face straight ahead`);
+        for(const side of ['left','right']){
+          for(const point of ['Elbow','Wrist','Fingertip'])assert.ok(Math.abs(lm[side+point].y-lm[side+'Shoulder'].y)<1e-7,`${label}: ${side} inspection arm is not level`);
+          for(const [a,b,length]of [['Shoulder','Elbow',.32],['Elbow','Wrist',.29],['Wrist','Fingertip',.15],['Hip','Knee',.478],['Knee','Ankle',.45]]){
+            assert.ok(Math.abs(lm[side+a].distanceTo(lm[side+b])-length)<1e-6,`${label}: ${side} inspection ${a}-${b} stretched`);
+          }
+          const torso=geometry.meshes.find(m=>m.object.name==='torso'),sleeve=geometry.meshes.find(m=>m.object.name===side+'-sleeve');
+          if(torso&&sleeve)for(const [i,index]of torso.object.userData.armholes[side].entries()){
+            assert.ok(torso.points[index].distanceTo(sleeve.points[i])<1e-6,`${label}: T-pose opens ${side} armhole`);seams++;
+          }
+          const leg=geometry.meshes.find(m=>m.object.name===side+'-trousers'||m.object.name===side+'-shorts');
+          if(leg){
+            const connected=geometry.meshes.filter(m=>m.object.name==='trouser-yoke'||m.object.name===(side==='left'?'right':'left')+(outfit==='yardcrew'?'-trousers':'-shorts')).flatMap(m=>m.points);
+            for(const vertex of leg.points.slice(0,8)){assert.ok(Math.min(...connected.map(p=>p.distanceTo(vertex)))<1e-6,`${label}: T-pose opens the trouser seat`);seams++;}
+          }
+        }
+        assert.ok(lm.leftFingertip.x<lm.leftShoulder.x-.75&&lm.rightFingertip.x>lm.rightShoulder.x+.75,`${label}: arms did not extend to a real T-pose`);
+        assert.ok(Math.abs(lm.leftAnkle.y-lm.rightAnkle.y)<1e-9&&Math.abs(lm.leftAnkle.z-lm.rightAnkle.z)<1e-9,`${label}: inspection feet need the same neutral plane`);
+        model.pose({standing:true,mode:'park',time:.4});
+        const restored=visibleGeometry(model).vertices;
+        assert.equal(restored.length,defaultStanding.length);
+        assert.ok(restored.every((p,i)=>p.distanceTo(defaultStanding[i])<1e-7),`${label}: opting out failed to restore the actual ordinary standing triangles`);
+        const riding={mode:'park',charge:.4,time:.4};model.pose(riding);
+        const defaultRiding=visibleGeometry(model).vertices;
+        model.pose({...riding,inspectionPose:'tpose'});
+        assert.ok(visibleGeometry(model).vertices.every((p,i)=>p.distanceTo(defaultRiding[i])<1e-7),`${label}: inspection argument changed a gameplay pose`);
+        inspected++;
+      }finally{disposeModel(model);}
+    }
+  }
+  assert.equal(inspected,24);t.diagnostic(`${inspected} old/new short-sleeve, sweatshirt and wetsuit bodies: level fixed-length arms, ${seams} actual seam vertices, exact ordinary-pose restoration and no gameplay effect.`);
+});
+
+test('grounded charging hinges an adult rider forward without collapsing into a seated pose', t => {
+  const rows=[];
+  for(const character of Object.keys(CHARACTERS))for(const outfit of Object.keys(OUTFITS)){
+    const model=makeModel(character,outfit),label=`${character}/${outfit}`;
+    try{
+      let previousHip=Infinity,previousHinge=-Infinity;
+      for(const charge of [0,.25,.5,.75,1]){
+        model.pose({mode:'park',charge});model.rider.updateMatrixWorld(true);
+        const p=name=>model.rider.worldToLocal(model.landmarks[name].clone());
+        const hip=p('leftHip').add(p('rightHip')).multiplyScalar(.5),knee=p('leftKnee').add(p('rightKnee')).multiplyScalar(.5);
+        const ankle=p('leftAnkle').add(p('rightAnkle')).multiplyScalar(.5),shoulder=p('leftShoulder').add(p('rightShoulder')).multiplyScalar(.5);
+        const hinge=Math.atan2(hip.z-shoulder.z,shoulder.y-hip.y)*180/Math.PI;
+        assert.ok(hip.y<previousHip&&hinge>previousHinge,`${label}: charging must progressively lower hips and hinge chest forward`);
+        assert.ok(hip.y-knee.y>.12,`${label}: hips collapsed to knee height while grounded`);
+        assert.ok(hip.y-ankle.y>.38,`${label}: hips sit too close to the board`);
+        assert.ok(hip.z-ankle.z<.16,`${label}: rearward hip shift creates a chair-like seat`);
+        assert.ok(shoulder.z<hip.z-.09,`${label}: chest must balance forward over bent legs`);
+        if(charge===1)assert.ok(hinge>30&&hinge<45,`${label}: full crouch should have a clear, controlled forward hinge (${hinge} degrees)`);
+        assert.ok(Math.abs(p('leftWrist').z-p('rightWrist').z)>.12,`${label}: arms lost their asymmetric forward/trailing balance`);
+        previousHip=hip.y;previousHinge=hinge;
+        for(const [side,expectedAnkle,expectedToe]of [['left',[-.34,.215,.035],[-.36,.181,-.163]],['right',[.36,.215,.069],[.395,.181,-.128]]]){
+          assert.ok(p(side+'Ankle').distanceTo(new THREE.Vector3(...expectedAnkle))<1e-8,`${label}: ${side} planted ankle slid while charging`);
+          assert.ok(p(side+'Toe').distanceTo(new THREE.Vector3(...expectedToe))<1e-8,`${label}: ${side} planted toe slid while charging`);
+          for(const [a,b,length]of [['Shoulder','Elbow',.32],['Elbow','Wrist',.29],['Hip','Knee',.478],['Knee','Ankle',.45]]){
+            assert.ok(Math.abs(p(side+a).distanceTo(p(side+b))-length)<.003,`${label}: ${side} ${a}-${b} changed length`);
+          }
+        }
+        if(charge===1)rows.push({height:hip.y,kneeGap:hip.y-knee.y,hinge});
+      }
+    }finally{disposeModel(model);}
+  }
+  t.diagnostic(`48 full-charge bodies: hip height ${Math.min(...rows.map(r=>r.height)).toFixed(3)}m; minimum hip-to-knee rise ${Math.min(...rows.map(r=>r.kneeGap)).toFixed(3)}m; torso hinge ${Math.min(...rows.map(r=>r.hinge)).toFixed(1)}–${Math.max(...rows.map(r=>r.hinge)).toFixed(1)} degrees. All 240 charge poses retain four fixed limb lengths and planted feet.`);
+});
+
 test('loose torso meshes retain a shaped waist and uneven open hem rather than a rectangular shell', t => {
   const rows = [];
   for (const character of Object.keys(CHARACTERS)) for (const outfit of ['yardcrew', 'suncrew', 'riptide']) {
@@ -315,17 +394,24 @@ test('the photographed Reef raglan hip patch resolves to front-facing shorts rat
     assert.equal(covered.object.name, 'left-shorts', 'the hip patch must resolve to the actual shorts surface');
     assert.equal(covered.object.material.side, THREE.FrontSide, 'the cloth must not rely on drawing a reversed face');
 
-    // Negative control: restoring the former fully enabled thigh must expose
-    // this exact defect. This guards the reproducer itself, not only a boolean
-    // visibility setting or an unrelated ray which never touched the patch.
-    const thigh = model.rider.getObjectByName('left-thigh'), wasVisible = thigh.parent.visible;
-    thigh.parent.visible = true;
-    const exposed = ray.intersectObjects(renderedMeshes(), false)[0];
-    thigh.parent.visible = wasVisible;
-    assert.equal(exposed?.object.name, 'left-thigh', 'negative control did not reproduce the original hip wedge');
-    const penetration = covered.distance - exposed.distance;
-    assert.ok(penetration > .06, `reproducer should detect the substantial skin penetration, measured ${penetration}m`);
-    t.diagnostic(`Photographic patch is covered by real FrontSide shorts; enabling the former hidden thigh reproduces ${(penetration * 1000).toFixed(1)}mm of skin protrusion.`);
+    // Preserve the photographic reproducer on the saved v8 pose: the current
+    // higher riding stance intentionally no longer shares that old hip angle.
+    // Restoring its former fully enabled thigh must still expose the defect.
+    const previous = makeModel('reef', 'raglan', createV8Character);
+    try {
+      previous.pose({ mode: 'park', charge: 0 }); previous.rider.updateMatrixWorld(true);
+      const oldTarget = previous.body.localToWorld(new THREE.Vector3(-.2291667, -.0523077, 0));
+      const oldOutward = new THREE.Vector3(0, .18, 1).normalize().transformDirection(previous.body.matrixWorld);
+      ray.set(oldTarget.clone().addScaledVector(oldOutward, 2), oldOutward.clone().negate());
+      const oldMeshes = () => { const rows=[]; previous.rider.traverseVisible(o => { if(o.isMesh)rows.push(o); }); return rows; };
+      const oldCovered = ray.intersectObjects(oldMeshes(), false)[0];
+      previous.rider.getObjectByName('left-thigh').parent.visible = true;
+      const exposed = ray.intersectObjects(oldMeshes(), false)[0];
+      assert.equal(exposed?.object.name, 'left-thigh', 'negative control did not reproduce the original hip wedge');
+      const penetration = oldCovered.distance - exposed.distance;
+      assert.ok(penetration > .06, `reproducer should detect substantial skin penetration, measured ${penetration}m`);
+      t.diagnostic(`Current hip has real FrontSide shorts; the retained photographic pose reproduces ${(penetration * 1000).toFixed(1)}mm of protrusion when its hidden thigh is restored.`);
+    } finally { disposeModel(previous); }
   } finally { disposeModel(model); }
 });
 

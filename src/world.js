@@ -55,8 +55,10 @@ export class SurfWorld {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(1); this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0xdcc29a); container.appendChild(this.renderer.domElement);
-    this.scene.add(new THREE.HemisphereLight(0xb4d9e3, 0x3a364b, 2.0));
-    const sunLight = new THREE.DirectionalLight(0xffe3bb, 2.3); sunLight.position.set(-40, 45, -80); this.scene.add(sunLight);
+    this.ambientLight = new THREE.HemisphereLight(0xb4d9e3, 0x3a364b, 2.0);
+    this.scene.add(this.ambientLight);
+    this.keyLight = new THREE.DirectionalLight(0xffe3bb, 2.3);
+    this.keyLight.position.set(-40, 45, -80); this.scene.add(this.keyLight);
     this.createSky();
     const shared = new Set(this.scene.children);
     mat.sand.map = pixelTexture('#9d9678','#d1c7a6',64,5);
@@ -92,11 +94,19 @@ export class SurfWorld {
   setMode(mode) {
     this.mode = mode === 'park' ? 'park' : 'surf';
     this.surfStage.visible = this.mode === 'surf'; this.parkStage.visible = this.mode === 'park';
-    this.scene.fog.color.set(this.mode==='park'?0x555e59:0x91a7b0);
+    this.scene.fog.color.set(this.mode==='park'?0x62686b:0x91a7b0);
     this.scene.fog.near=this.mode==='park'?115:85;
     this.scene.fog.far=this.mode==='park'?335:265;
     this.sky.visible=this.mode==='surf';
-    this.scene.background.set(this.mode==='park'?0x69736c:0xe7c48d);
+    this.scene.background.set(this.mode==='park'?0x70767a:0xe7c48d);
+    // Factory light stays neutral so painted concrete, rust and clothing keep
+    // their own colours; broad directional shading carries the low-poly forms.
+    this.ambientLight.color.set(this.mode==='park'?0xd5d9df:0xb4d9e3);
+    this.ambientLight.groundColor.set(this.mode==='park'?0x333a43:0x3a364b);
+    this.ambientLight.intensity=this.mode==='park'?1.5:2;
+    this.keyLight.color.set(this.mode==='park'?0xe5dfd1:0xffe3bb);
+    this.keyLight.intensity=this.mode==='park'?1.85:2.3;
+    this.shadow.material.color.set(this.mode==='park'?0x182029:0x154f58);
   }
   createPark() {
     const park=createWaterworks();
@@ -310,7 +320,7 @@ export class SurfWorld {
     const lean = attract ? Math.sin(t * .7) * .10 : isPark ? -(game.steering||0)*.16 : -game.vx * .024;
     const air = !attract && game.airborne;
     const bail = !attract && game.bailTime > 0;
-    const {spin,flip,boardSpin,grab,lipGrab,tweak=0,boardBank=0,boardPitch=0,boardLift=0,boardSide=0,boardBack=0}=sampleRiderTrick(game,{air});
+    const {spin,flip,boardSpin,grab,lipGrab,tweak=0,comboPose=null,boardBank=0,boardPitch=0,boardLift=0,boardSide=0,boardBack=0}=sampleRiderTrick(game,{air});
     s.rig.rotation.order='YXZ';
     s.rig.rotation.y=heading-(isPark?0:turn*1.05);
     s.yaw.rotation.y = spin - (isPark?(game.grinding?Math.PI/2:0):(attract ? .3 : game.vx * .035));
@@ -324,7 +334,7 @@ export class SurfWorld {
     s.boardPivot.rotation.order='YXZ';
     s.boardPivot.rotation.set(boardPitch,boardSpin,flip+boardBank);
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
-    s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,cutback,cutbackDirection:game.cutbackDirection||1});
+    s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,cutbackDirection:game.cutbackDirection||1});
     s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
     const ground=isPark?(surface?.height??parkHeight(x,z)):waveHeight(x,z,t);
     this.shadow.position.set(x, ground + .055, z);

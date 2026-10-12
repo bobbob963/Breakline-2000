@@ -16,6 +16,7 @@
     <button class="scenario" id="run-coping">Ride straight onto coping</button>
     <button class="scenario" id="run-air">Quarterpipe air</button>
     <button class="scenario" id="run-pop">Charged ramp pop</button>
+    <button class="scenario" id="run-tweak">Tweaked grab (B)</button>
     <button class="scenario" id="run-left">Shift cutback left</button>
     <button class="scenario" id="run-right">Shift cutback right</button>
     <div class="controls"><button id="continue">Continue to next checkpoint</button><button id="pause">Pause</button><button id="frame">+1 frame</button><button id="step">+0.25 seconds</button></div>
@@ -23,8 +24,9 @@
     <div id="status" role="status">Choose a sequence.</div>
     <dl>
       <dt>Sequence</dt><dd id="stat-sequence">—</dd><dt>Simulation time</dt><dd id="stat-time">0.000 s</dd><dt>State</dt><dd id="stat-state">ready</dd><dt>Controls held</dt><dd id="stat-controls">none</dd><dt>Position</dt><dd id="stat-position">—</dd><dt>Heading</dt><dd id="stat-heading">—</dd><dt>Pipe angle / loops</dt><dd id="stat-pipe">—</dd><dt>Rider up</dt><dd id="stat-up">—</dd><dt>Lip grab</dt><dd id="stat-lip">—</dd><dt>Grind</dt><dd id="stat-grind">—</dd><dt>Head position</dt><dd id="stat-head">—</dd><dt>Score / combo</dt><dd id="stat-score">—</dd><dt>Wipeouts</dt><dd id="stat-wipeouts">0</dd>
+      <dt>Current trick</dt><dd id="stat-trick">none</dd><dt>Speed</dt><dd id="stat-speed">—</dd>
       <dt>Ramp / progress</dt><dd id="stat-ramp">—</dd><dt>Longest air / peak height</dt><dd id="stat-air">—</dd>
-    </dl><p class="note">Starts use the same legal drop-in locations as the game. The demo supplies held controls and a Space release for the ramp pop; it never replaces rider coordinates, collision results, or poses.</p><pre id="events" aria-label="Recent game events"></pre>
+    </dl><p class="note">Starts use the same legal drop-in locations as the game. The demo supplies held controls, a Space release for the ramp pop, and the shared B-key route for Tweaked Grab; it never replaces rider coordinates, collision results, or poses.</p><pre id="events" aria-label="Recent game events"></pre>
   </aside></main><script type="module" src="/src/ride-lab.js"></script>
 </body>
 </html>

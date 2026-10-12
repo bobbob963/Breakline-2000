@@ -56,3 +56,6 @@
 #modal[data-mode="pause"] .pause-tools{display:grid}
 .pause-tools .secondary-button{margin-top:0;padding:11px 9px;min-height:37px}
 @media(max-width:480px){.pause-tools{gap:7px}.pause-tools .secondary-button{font-size:8px;letter-spacing:.4px;padding:10px 5px}}
+
+/* Named combo moves belong in the existing Controls panel, not new corner buttons. */
+.combo-guide{margin:20px 0 17px;padding:14px 0;border-top:1px solid #b6b4a750;border-bottom:1px solid #b6b4a750}.combo-guide h3{font:italic 22px var(--display);color:#e6c85c;margin:0 0 7px;letter-spacing:.7px}.combo-guide p{margin:0 0 11px}.combo-guide dl{margin:0}.combo-guide dl>div{padding:8px 0}.combo-guide dt{font:bold 11px var(--mono);color:#f2e9cf}.combo-guide dt strong{margin-left:10px;color:#e9cf73}.combo-guide dd{font:11px/1.5 Arial,sans-serif;margin:5px 0 0;color:#d7dcd5}

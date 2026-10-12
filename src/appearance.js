@@ -255,10 +255,10 @@ export function createSurfer(settings=DEFAULT_PROFILE,characterFactory=createCha
     // the complete hierarchy here also respects transformed scene ancestors.
     rig.updateWorldMatrix(true,true);
     const boardTargetWorld=board.localToWorld(board.userData.grabRailLocal.clone());
-    // Tweak airs move and bank the held board. The foot bindings are authored
+    // Tweak/combo airs move and bank the held board. Foot bindings are authored
     // on that same deck, so leg IK follows its actual final world transform.
     // Independent kickflips retain the existing loose-board choreography.
-    const boardFeetWorld=options.tweak>0?[
+    const boardFeetWorld=options.tweak>0||options.comboPose?.plantFeet>0?[
       {ankle:new THREE.Vector3(-.035,.215,-.34),toe:new THREE.Vector3(.163,.181,-.36)},
       {ankle:new THREE.Vector3(-.069,.215,.36),toe:new THREE.Vector3(.128,.181,.395)},
     ].map(foot=>({...Object.fromEntries(Object.entries(foot).map(([key,point])=>[key,board.localToWorld(point)])),up:new THREE.Vector3(0,1,0).transformDirection(board.matrixWorld)})):null;
