@@ -5,7 +5,8 @@ import vm from 'node:vm';
 import { createKeydownHandler, CONTROL_KEYS } from '../src/keyboard.js';
 import { WaveParkGame } from '../src/park.js';
 import { SurfGame, TRICKS, waveCrest, waveHeight } from '../src/game.js';
-import { TournamentGame, sanitizeTournamentProgress } from '../src/tournament.js';
+import { createTournamentGame, sanitizeTournamentProgress } from '../src/tournament.js';
+import { raceOpponentInput } from '../src/surf-race.js';
 
 function inputRoute(game) {
   const calls = [], state = { bootReady:true, workshopMode:null, modalMode:null, game, input:{} };
@@ -94,14 +95,14 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
   const noOp=()=>{},saved=[],calls=[];
   const element={classList:{add:noOp,remove:noOp},focus:noOp};
   const context={
-    game:null,tournamentProgress:sanitizeTournamentProgress(progress),TournamentGame,sanitizeTournamentProgress,
+    game:null,tournamentProgress:sanitizeTournamentProgress(progress),createTournamentGame,sanitizeTournamentProgress,
     selectedMode:'tournament',selectedParkStart:'filters',modalMode:null,workshopMode:null,bootReady:true,input:{},
-    soundPreference:'off',audio:{enabled:true,setScene:noOp},special:{reset:noOp},wasted:{reset:noOp},
+    soundPreference:'off',audio:{enabled:true,setScene:noOp,setMode:noOp},world:{setMode:noOp},special:{reset:noOp},wasted:{reset:noOp},
     closeWorkshop:noOp,closeModal(){context.modalMode=null;},clearInput:noOp,updateModeMenu:noOp,updateSoundLabel:noOp,
     document:{body:element},$:()=>element,write:(key,value)=>saved.push([key,JSON.parse(value)]),
     onEvent(event){if(event.type==='finish'){context.tournamentProgress=context.game.getProgress();context.modalMode='results';}},
   };
-  context.game=new TournamentGame(context.onEvent,context.tournamentProgress);
+  context.game=createTournamentGame(context.onEvent,context.tournamentProgress);
   vm.runInNewContext(source.slice(first,last),context);
   const handler=createKeydownHandler(()=>context,{
     startRun(){calls.push('startRun');context.startRun();},
@@ -130,18 +131,21 @@ test('R retries the winning heat while Enter results advances to the next rival'
     const route=tournamentRoute();route.press('Enter');finishTournament(route);route.calls.length=0;
     const game=route.context.game;assert.equal(game.roundIndex,0);assert.equal(game.result,'win');route.press(code);
     assert.deepEqual(route.calls,[code==='KeyR'?'restartRun':'startRun']);
-    assert.equal(route.context.game,game);assert.equal(game.phase,'running');assert.equal(game.score,0);
-    assert.equal(game.roundIndex,code==='KeyR'?0:1);assert.equal(game.time,90);assert.equal(game.result,null);
-    assert.equal(game.getProgress().completedRounds,1);
+    const next=route.context.game;
+    if(code==='KeyR')assert.equal(next,game);else assert.notEqual(next,game);
+    assert.equal(next.phase,'running');assert.equal(next.score,0);
+    assert.equal(next.roundIndex,code==='KeyR'?0:1);assert.equal(next.mode,code==='KeyR'?'park':'surf');
+    assert.equal(next.time,code==='KeyR'?90:0);assert.equal(next.result,null);
+    assert.equal(next.getProgress().completedRounds,1);
   }
 });
 
 test('Enter retries a lost or tied rival rather than advancing the ladder',()=>{
   for(const difference of [-1,0]) {
-    const route=tournamentRoute({version:1,completedRounds:1});route.press('Enter');finishTournament(route,difference);
+    const route=tournamentRoute({version:1,completedRounds:2});route.press('Enter');finishTournament(route,difference);
     assert.equal(route.context.game.result,'loss');route.press('Enter');
-    assert.equal(route.context.game.roundIndex,1);assert.equal(route.context.game.phase,'running');
-    assert.equal(route.context.game.score,0);assert.equal(route.context.game.getProgress().completedRounds,1);
+    assert.equal(route.context.game.roundIndex,2);assert.equal(route.context.game.phase,'running');
+    assert.equal(route.context.game.score,0);assert.equal(route.context.game.getProgress().completedRounds,2);
   }
 });
 
@@ -159,4 +163,27 @@ test('losing an R-key championship replay makes Enter retry that rival without e
   finishTournament(route,-1);const retry=route.context.game;route.press('Enter');
   assert.equal(route.context.game,retry);assert.equal(retry.roundIndex,4);assert.equal(retry.phase,'running');
   assert.equal(retry.complete,true);assert.equal(retry.score,0);assert.deepEqual(route.saved,[]);
+});
+
+test('winning either ocean race advances the real Enter action back to the correct Waterworks battle',()=>{
+  for(const round of[1,3]){
+    const route=tournamentRoute({version:1,completedRounds:round});route.press('Enter');
+    const race=route.context.game;
+    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,raceOpponentInput(race,race.course,1));
+    assert.equal(race.result,'win');assert.equal(route.context.modalMode,'results');
+    route.press('Enter');const next=route.context.game;
+    assert.notEqual(next,race);assert.equal(next.mode,'park');assert.equal(next.roundIndex,round+1);
+    assert.equal(next.time,90);assert.equal(next.phase,'running');assert.equal(next.result,null);
+  }
+});
+
+test('R after a race win and Enter after a race loss both restart that race with a fresh opponent',()=>{
+  for(const win of[true,false]){
+    const route=tournamentRoute({version:1,completedRounds:1});route.press('Enter');
+    const race=route.context.game,opponent=race.opponent;
+    for(let i=0;i<120*80&&race.phase==='running';i++)race.update(1/120,win?raceOpponentInput(race,race.course,1):{brake:true});
+    assert.equal(race.result,win?'win':'loss');route.press(win?'KeyR':'Enter');
+    assert.equal(route.context.game,race);assert.equal(race.roundIndex,1);assert.equal(race.countdownRemaining,3);
+    assert.notEqual(race.opponent,opponent);assert.equal(race.opponent.distance,0);assert.equal(race.result,null);
+  }
 });

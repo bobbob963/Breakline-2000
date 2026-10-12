@@ -4,6 +4,8 @@ import { createStormBarrels, resolveBarrelCamera } from './barrel-wave.js';
 import { stormDifficulty } from './storm-waves.js';
 import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
+import { createRaceWorld } from './race-world.js';
+import { OCEAN_MESH, renderedWaveHeight, alignRiderToOcean } from './ocean-surface.js';
 import { waveHeight, courseItem, clamp } from './game.js';
 import { createSurfer, disposeSurfer, retroMaterial, pixelTexture, DEFAULT_PROFILE } from './appearance.js';
 import { PARK_RAMPS, PARK_RAILS, PARK_BOUNDS, parkHeight, parkSurface, rampHeight } from './park.js';
@@ -68,6 +70,7 @@ export class SurfWorld {
     this.surfStage = new THREE.Group();
     for (const child of [...this.scene.children]) if (!shared.has(child)) this.surfStage.add(child);
     this.scene.add(this.surfStage);
+    this.raceWorld=createRaceWorld(profile);this.surfStage.add(this.raceWorld.group);
     this.createPark();
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
     this.createParticles();this.createRain();
@@ -88,11 +91,13 @@ export class SurfWorld {
   toggleQuality() { this.retro = !this.retro; this.resize(); return this.retro; }
   setProfile(profile) {
     this.profile = profile;
+    this.raceWorld.setProfile(profile);
     this.scene.remove(this.surfer.rig); disposeSurfer(this.surfer);
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
   }
   setMode(mode) {
     this.mode = mode === 'park' ? 'park' : 'surf';
+    if(this.mode==='park')this.raceWorld.reset();
     this.surfStage.visible = this.mode === 'surf'; this.parkStage.visible = this.mode === 'park';
     this.scene.fog.color.set(this.mode==='park'?0x62686b:0x91a7b0);
     this.scene.fog.near=this.mode==='park'?115:85;
@@ -129,7 +134,8 @@ export class SurfWorld {
     }
   }
   createOcean() {
-    const geo = new THREE.PlaneGeometry(340, 450, 68, 100); geo.rotateX(-Math.PI / 2);
+    const {width,length,columns,rows}=OCEAN_MESH;
+    const geo = new THREE.PlaneGeometry(width, length, columns, rows); geo.rotateX(-Math.PI / 2);
     this.waterMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 },uStorm:{value:0} }, side: THREE.DoubleSide,
       vertexShader: `uniform float uTime; varying vec3 vWorld; varying float vRidge;
         void main(){vec3 p=position;vec3 w=(modelMatrix*vec4(p,1.)).xyz;
@@ -257,6 +263,7 @@ export class SurfWorld {
   }
   onEvent(event, game) {
     if (event.type === 'start') {
+      this.raceWorld.reset();
       this.setMode(game.mode);
       const z=game.mode==='park'?game.z:-game.distance;
       this.cameraHeading=game.heading||0;
@@ -266,7 +273,7 @@ export class SurfWorld {
     }
     if(event.type==='bail'&&game.mode==='park')this.parkCamera=createParkCameraState();
     if (['land', 'bail', 'jump'].includes(event.type)) this.spray(game.x, game.y, game.mode==='park'?game.z:-game.distance, event.type === 'bail' ? 1.7 : 1.2, 24);
-    if (event.type === 'reset') for (const p of this.particles) { p.life = 0; p.mesh.visible = false; }
+    if (event.type === 'reset') { this.raceWorld.reset();for (const p of this.particles) { p.life = 0; p.mesh.visible = false; } }
   }
   update(dt, game) {
     const attract = game.phase === 'ready';
@@ -276,7 +283,8 @@ export class SurfWorld {
     const t = attract ? this.time : game.elapsed, d = attract ? this.time * 9 : game.distance;
     const x = attract ? (isPark?0:-1.4 + Math.sin(t * .6) * 1.1) : game.x;
     const z = isPark?(attract?22:game.z):-d;
-    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : game.y;
+    const oceanZ=Math.floor(-d/30)*30-90;
+    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : game.isRace ? alignRiderToOcean(x,game.y,z,t,oceanZ) : game.y;
     const heading=isPark?game.heading||0:0;
     const storm=!isPark&&game.rulesId==='storm',intensity=storm?stormDifficulty(t):0;
     this.stormBarrels.update(d,t,intensity,storm);
@@ -284,7 +292,7 @@ export class SurfWorld {
     this.sun.visible=!storm;this.rain.visible=storm;this.rain.position.set(x,y-(t*16)%14,z);
     if(storm){this.rain.geometry.setDrawRange(0,Math.round(95+intensity*145)*2);this.rain.material.opacity=.29+intensity*.24;}
     if(!isPark){this.scene.fog.color.set(storm?0x576c79:0x91a7b0);this.scene.fog.near=storm?75-intensity*18:85;this.scene.fog.far=storm?215-intensity*55:265;}
-    this.ocean.position.z = Math.floor(-d / 30) * 30 - 90;
+    this.ocean.position.z = oceanZ;
     this.coast.position.z = -d - 80; this.sky.position.z = isPark?0:-d;
     if(this.parkUpdate)this.parkUpdate(t);
     for(const f of this.parkFoam)f.mesh.position.y=f.y+Math.sin(t*3+f.phase)*.07;
@@ -307,11 +315,12 @@ export class SurfWorld {
       const c = this.course[i], item = courseItem(first+i,game.rulesId); c.index = item.index;
       const gy = waveHeight(item.x, -item.distance, t);
       c.ringGroup.position.set(item.x, gy + 1.6, -item.distance);
-      c.ringGroup.visible = !game.processed.has(`g${item.index}`) && !attract;
+      c.ringGroup.visible = !game.isRace && !game.processed.has(`g${item.index}`) && !attract;
       c.ring.scale.setScalar(item.ringRadius/2.5);c.ring.rotation.z = t * .3; c.sparkle.rotation.set(t * 2, t, 0);
-      c.buoyGroup.position.set(item.x, gy, -item.distance); c.buoyGroup.visible = !attract;
+      c.buoyGroup.position.set(item.x, gy, -item.distance); c.buoyGroup.visible = !game.isRace && !attract;
       c.hazard.position.set(item.hazardX,waveHeight(item.hazardX,-item.hazardDistance,t),-item.hazardDistance);c.hazard.scale.set(item.hazardRadius/2,1,1); c.hazard.visible = !attract;
     }
+    this.raceWorld.update(game,t,oceanZ);
     const s = this.surfer;
     const rideUp=game.pipeRide?game.rideUp:{x:0,y:1,z:0};
     s.rig.position.set(x+rideUp.x*.055, y+rideUp.y*.055, z+rideUp.z*.055);
@@ -336,7 +345,7 @@ export class SurfWorld {
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
     s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,cutbackDirection:game.cutbackDirection||1});
     s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
-    const ground=isPark?(surface?.height??parkHeight(x,z)):waveHeight(x,z,t);
+    const ground=isPark?(surface?.height??parkHeight(x,z)):game.isRace?renderedWaveHeight(x,z,t,oceanZ):waveHeight(x,z,t);
     this.shadow.position.set(x, ground + .055, z);
     this.shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - ground) * .07) : 1);
     this.shadow.visible = !bail&&!game.pipeRide;
@@ -363,6 +372,15 @@ export class SurfWorld {
     }else{
       target=attract?new THREE.Vector3(x+10,y+6.5,z+13):new THREE.Vector3(x+1,y+2.6,z+4.7+(game.speed-18)*.035);
       look=new THREE.Vector3(x-.25,y+.9,z-.4);
+      if(game.isRace&&!attract){
+        // Keep nearby head-to-head riders in shot without relocating either
+        // racer or allowing a distant opponent to drag the camera away.
+        const rival=game.opponent,gap=rival?Math.abs(rival.distance-d):Infinity;
+        const together=gap<22?1-gap/22:0;
+        const midpoint=rival?clamp((rival.x-x)*.4,-3,3)*together:0;
+        target.set(x+.7+midpoint,y+3.7,z+7.4);
+        look.set(x+midpoint,y+1.05,z-3.2);
+      }
       if(!attract&&grab>0){target.x+=grab*1.8;target.y-=grab*.65;target.z-=grab*.9;look.set(x,y+.55,z);}
       if(storm&&!attract&&game.barrel?.inside){
         // A slightly lower, central view shows the opening and the moving roof.
@@ -375,13 +393,14 @@ export class SurfWorld {
     if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
     else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
-    const fieldOfView=parkFrame?parkFrame.fov:50;
+    const fieldOfView=parkFrame?parkFrame.fov:game.isRace&&!attract?58:50;
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.renderer.render(this.scene, this.camera);
   }
   dispose() {
     this.resizeObserver.disconnect();
+    this.raceWorld.dispose();
     this.scene.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
     this.renderer.dispose(); this.renderer.domElement.remove();
   }

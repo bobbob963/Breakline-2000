@@ -1,14 +1,14 @@
 # BREAKLINE ’99 — Version 8.0
 
-**Published update — 11 October 2026.** Includes the rebuilt bodies with restored painted faces, improved Waterworks handling, five custom combo animations, The Hit List score tournament, and the third-wipeout WASTED sequence. Open this repository through the linked StackBlitz project to play the latest source.
+**Published update — 12 October 2026.** Includes the rebuilt bodies with restored painted faces, improved Waterworks handling, five custom combo animations, The Hit List with two physical Surf Session races and three Waterworks score battles, and the third-wipeout WASTED sequence. Open this repository through the linked StackBlitz project to play the latest source.
 
 A separately supplied local body comparison includes ten reference presets and matching camera controls. User-supplied reference images and their review pages remain local; this repository contains the original game artwork only.
 
 Five custom combo animations work in every mode. Complete the first trick, then start the second while airborne: **J → L** for Crosswind Grab, **K → L** for Flip Catch, **U → H** for Deck Sweep, **L → F** for Coiled 360, or **J → B** for Crosscut Tweak. Crosscut adds a board twist, counterturned torso, tucked legs and an across-body free arm while the grabbing hand stays on the surfboard. The first move must finish; pressing both keys together does not queue a combo. You can link the pair across separate airs while the scoring combo remains unbanked. Banking, a wipeout, expiry or restarting clears the sequence. These are body/board animation variations with the original trick timing, scores, repetition penalties and special rules. The Controls panel lists them, and the HUD gives a follow-up key hint after a matching first move.
 
-**New modes and presentation:** Storm Rider's third wipeout now freezes the fallen rider in a desaturated, slowly zooming scene beneath a red **WASTED** title. The original in-game sequence lasts 3.4 seconds before results; skip becomes available after 0.8 seconds. Input is isolated until it ends, and reduced-motion preferences disable the zoom. This is an original GTA-inspired presentation, not imported GTA footage or audio. `event-lab.html` runs a real three-wipeout Storm replay for inspection.
+**Modes and presentation:** Storm Rider's third wipeout now freezes the fallen rider in a desaturated, slowly zooming scene beneath a red **WASTED** title. The original in-game sequence lasts 3.4 seconds before results; skip becomes available after 0.8 seconds. Input is isolated until it ends, and reduced-motion preferences disable the zoom. This is an original GTA-inspired presentation, not imported GTA footage or audio. `event-lab.html` runs a real three-wipeout Storm replay for inspection.
 
-**The Hit List** is a fifth mode: five 90-second Waterworks score showdowns inspired by the rival ladder in the original Most Wanted. Beat MOXIE (1,800), RIVET (3,500), UNDERTOW (6,000), STATIC (9,000) and KINGTIDE (13,000). Rival scores follow fixed recorded-run schedules; there are no physical AI racers or rubberbanding. Only banked points count, and ties leave the rival on top. Safely landed pending combos bank at the buzzer; unfinished aerial, pipe, grind and lip moves are discarded. Win to advance, retry a loss, and defeat all five to become champion. Completed ranks save in this browser. **Enter / NEXT RIVAL** advances after a win; **R / RESTART** retries the same rival. A new ladder resets tournament progress only.
+**The Hit List** mixes three 90-second Waterworks score battles with two head-to-head Surf Session races. Beat MOXIE (1,800 points), race RIVET over 960 metres, beat UNDERTOW (6,000 points), race STATIC over 1,280 metres, then beat KINGTIDE (13,000 points). Both ocean rivals are visible surfers using the same movement, currents and reef collisions as the player. Their pace never changes in response to your score or position. After the three-second countdown, hold **W** to pump, steer with **A/D**, pass every flagged checkpoint and reach the checkered finish first. Missing a gate puts that surfer back just before it with a speed penalty. Both racers stop when paused; retry resets both. Points do not decide race results. Waterworks battles still use recorded score targets and require a strictly higher banked score. Completed ranks save automatically. **Enter / NEXT RIVAL** advances after a win; **R / RESTART** retries the same rival. A new ladder resets tournament progress only.
 
 With the development server running, open `/combo-lab.html` to replay all five combinations. Each replay pauses during the custom move and can continue through landing; the ordinary finishing-trick option shows the default animation for comparison. An offline Combo-Replays.html is supplied separately.
 
@@ -46,9 +46,9 @@ Every mode now requires **1.4 seconds of grounded recovery after landing before 
 
 Use StackBlitz to run this source project without installing development tools. A standalone offline Play-Breakline-99.html is available in the separately supplied local download.
 
-**Latest online source:** the GitHub main branch now includes The Hit List tournament and Crosscut Tweak. Reopen the StackBlitz import link to load current source. An older saved StackBlitz fork does not update automatically.
+**Latest online source:** the GitHub main branch now includes the mixed Hit List with physical Surf Session rivals and Crosscut Tweak. Reopen the StackBlitz import link to load current source. An older saved StackBlitz fork does not update automatically.
 
-**Updating a saved fork:** replace its source with the current contents of this repository, including all src/ and tests/ files and both new replay HTML entry points. Preserve package.json, index.html and the lockfile at the project root.
+**Updating a saved fork:** replace its source with the current contents of this repository, including all src/ and tests/ files and all replay HTML entry points. Preserve package.json, index.html and the lockfile at the project root.
 
 To import the source manually:
 
@@ -77,9 +77,9 @@ Official guides: [import projects](https://developer.stackblitz.com/guides/user-
 | **The Waterworks — Lower Sewage Works** | Steer through a 240 × 360 metre sunken factory basin, with 18 ramps/banks, 2 hollow rust tunnels and 18 grind lines. Wave lips launch you automatically; quarter pipes turn you back into the park. | Ride 5 different ramps. |
 | **Reef Rush — Checkpoint Coast** | Start with 35 seconds. Each ring adds 8 seconds. Collect 12 rings to win. | Finish 12 checkpoints. |
 | **Storm Rider — Squall Point** | Endless survival with 3 lives. Ride curling barrels as the current, pace and storm build over time. The timer counts upward; only losing all lives ends the run. | Ride through 3 barrels. |
-| **The Hit List — Waterworks Rival Circuit** | Five 90-second score showdowns. Beat a recorded rival score to claim each rank. | Defeat KINGTIDE and become champion. |
+| **The Hit List — Coast + Factory Circuit** | Three Waterworks score battles and two Surf Session races against visible AI surfers. Pass every checkpoint and finish first in race rounds. | Defeat KINGTIDE and become champion. |
 
-The four freestyle/survival modes also challenge you to score **5,000 points** and bank **one 1,500-point combo**. The Hit List replaces these goals with the current rival score. Each mode has its own best score. Storm Rider also saves your longest survival time. Use **MAIN MENU** to change modes or customise your rider.
+The four freestyle/survival modes also challenge you to score **5,000 points** and bank **one 1,500-point combo**. The Hit List replaces these goals with either the rival score or race position and checkpoint progress. Each mode has its own best score. Storm Rider also saves your longest survival time. Use **MAIN MENU** to change modes or customise your rider.
 
 In **Storm Rider**, the HUD shows **SURVIVED** time and a new swell stage every 30 seconds. Difficulty rises smoothly throughout the run: riding speed, current strength, rain and reduced visibility build while the barrel opening tightens. The increases stay within playable limits. Follow **BARREL AHEAD** toward the open lane, stay beneath the curling water and ride out cleanly for a bonus. The visible falling lip and roof have matching collision, so jumping into them can cost a life. The three-barrel challenge is a milestone; completing it does not end survival.
 
@@ -215,3 +215,5 @@ The generated logo is embedded in `src/brand-art.js`; the exact generation promp
 ## Licence
 
 Original project source is MIT licensed; see `LICENSE`. Dependencies retain their own licences. This independent project is not affiliated with Tony Hawk, Activision or Neversoft and uses no proprietary characters, logos, levels, recordings or artwork in gameplay. The separate model and body review pages contain user-supplied reference pictures for comparison; those pictures retain their owners' rights.
+
+For a development-only race review, open `/race-lab.html`. It can run either ocean rival through the real controls without reading or changing your saved Hit List progress.

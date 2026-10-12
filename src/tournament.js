@@ -1,13 +1,25 @@
 import { WaveParkGame } from './park.js';
+import { SurfRaceGame } from './surf-race.js';
 
 export const TOURNAMENT_SECONDS=90;
 export const TOURNAMENT_RIVALS=Object.freeze([
-  Object.freeze({id:'moxie',name:'MOXIE',subtitle:'THE LOCAL UPSTART',style:'Clean airs. No hesitation.',rank:5,target:1800,startId:'filters'}),
-  Object.freeze({id:'rivet',name:'RIVET',subtitle:'THE PIPE SPECIALIST',style:'Steel nerves. Long lines.',rank:4,target:3500,startId:'west'}),
-  Object.freeze({id:'undertow',name:'UNDERTOW',subtitle:'THE BOWL REGULAR',style:'Deep transitions. Heavy scores.',rank:3,target:6000,startId:'filters'}),
-  Object.freeze({id:'static',name:'STATIC',subtitle:'THE STYLE COLLECTOR',style:'Mix it up. Make every landing count.',rank:2,target:9000,startId:'basin'}),
-  Object.freeze({id:'kingtide',name:'KINGTIDE',subtitle:'THE WATERWORKS CHAMPION',style:'One final heat. Own the whole park.',rank:1,target:13000,startId:'filters'}),
+  Object.freeze({id:'moxie',name:'MOXIE',subtitle:'THE LOCAL UPSTART',style:'Clean airs. No hesitation.',event:'score',rank:5,target:1800,startId:'filters'}),
+  Object.freeze({id:'rivet',name:'RIVET',subtitle:'THE POINT BREAK CHARGER',style:'Thread the buoys. Beat him to the beach.',event:'race',courseLength:960,pace:.6,profile:Object.freeze({character:'reef',outfit:'neon',boardColor:'#e95b39',boardDesign:'flames'}),rank:4,target:3500,startId:'west'}),
+  Object.freeze({id:'undertow',name:'UNDERTOW',subtitle:'THE BOWL REGULAR',style:'Deep transitions. Heavy scores.',event:'score',rank:3,target:6000,startId:'filters'}),
+  Object.freeze({id:'static',name:'STATIC',subtitle:'THE OPEN WATER ACE',style:'A longer break. A faster rival. Hold your line.',event:'race',courseLength:1280,pace:.86,profile:Object.freeze({character:'nova',outfit:'static',boardColor:'#24c5ba',boardDesign:'checker'}),rank:2,target:9000,startId:'basin'}),
+  Object.freeze({id:'kingtide',name:'KINGTIDE',subtitle:'THE WATERWORKS CHAMPION',style:'One final heat. Own the whole park.',event:'score',rank:1,target:13000,startId:'filters'}),
 ]);
+
+// Recreate the scene when a ladder rung changes: score heats use Waterworks,
+// while the two ocean rounds share Surf Session's controls and wave physics.
+export function createTournamentGame(onEvent=()=>{},progress=null) {
+  const safe=sanitizeTournamentProgress(progress);
+  const roundIndex=Math.min(safe.completedRounds,TOURNAMENT_RIVALS.length-1);
+  const rival=TOURNAMENT_RIVALS[roundIndex];
+  return rival.event==='race'
+    ?new SurfRaceGame(onEvent,{progress:safe,roundIndex,rival,roundCount:TOURNAMENT_RIVALS.length})
+    :new TournamentGame(onEvent,safe);
+}
 
 // Saved data can unlock only an existing rung; strings, inherited fields and
 // out-of-range values must not quietly turn a corrupt save into a championship.

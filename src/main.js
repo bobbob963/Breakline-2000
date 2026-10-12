@@ -6,7 +6,7 @@ import './survival.css';
 import './classic-logo.css';
 import './tournament.css';
 import './wasted.css';
-import { TournamentGame, TOURNAMENT_RIVALS, sanitizeTournamentProgress } from './tournament.js';
+import { createTournamentGame, TOURNAMENT_RIVALS, sanitizeTournamentProgress } from './tournament.js';
 import { createWastedSequence } from './wasted.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
@@ -35,12 +35,12 @@ let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm','tournament'].includes(selectedMode))selectedMode='surf';
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v1','null')));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
-const isParkMode=()=>selectedMode==='park'||selectedMode==='tournament';
+const isParkMode=()=>game?.mode==='park';
 $('loading-tip').textContent={
   surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
   park:'Hold SHIFT while turning for a sharp cutback. At a ramp lip, SHIFT catches the coping. E rides pipe walls.',
   rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
-  tournament:'Beat five rival scores in Waterworks. Bank before each 90-second heat ends.',
+  tournament:'Race RIVET and STATIC on the swell. Beat the other three rivals in Waterworks score battles.',
   storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
 }[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
@@ -59,7 +59,7 @@ let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
 const modeInfo={
-  tournament:{name:'THE HIT LIST',level:'WATERWORKS / RIVAL CIRCUIT',description:'Five rivals. 90-second heats. Beat their recorded scores to climb the ladder and claim the factory.'},
+  tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five rivals. Three score battles. Two head-to-head surf races. Take every rank to own the circuit.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
   surf:{name:'SURF SESSION',level:'SUNSET POINT',description:'Two minutes on the swell. Carve, launch off the lip and link tricks with more forgiving landings.'},
@@ -79,14 +79,17 @@ function onEvent(e){
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
   if(e.type==='bail'){special.bail();toast(e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
+  if(e.type==='raceGate'&&!e.opponent)toast(`CHECKPOINT ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
+  if(e.type==='raceMiss'&&!e.opponent)toast('MISSED CHECKPOINT · LINE UP BETWEEN THE FLAGS',true);
+  if(e.type==='raceGo')toast('GO! · W TO PUMP');
   if(e.type==='cutback')toast(isParkMode()?'SHARP CUTBACK':'CUTBACK SET · POP FOR AIR!');
   if(e.type==='grind')toast('WATER SLIDE!');
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
   if(e.type==='barrelExit'){toast(`BARREL RIDE · +${fmt(e.points||0)}`);saveBest();}
-  if(e.type==='start')toast(isParkMode()?'THE WATERWORKS · DROP IN':'DROP IN!');
+  if(e.type==='start')toast(game?.isRace?`${game.rival.name} · FIRST TO THE FINISH`:isParkMode()?'THE WATERWORKS · DROP IN':'DROP IN!');
   if(e.type==='finish'){saveBest();if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v1',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
 }
-function makeGame(){game=selectedMode==='tournament'?new TournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function makeGame(){game=selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
   document.querySelectorAll('[data-mode]').forEach(b=>{const active=b.dataset.mode===selectedMode;b.classList.toggle('is-selected',active);b.setAttribute('aria-pressed',String(active));const label=b.querySelector('.mode-status');if(label)label.textContent=active?'▶ SELECTED':'▶ SELECT MODE';});
   if($('selected-mode-name'))$('selected-mode-name').textContent=modeInfo[selectedMode].name;
@@ -99,13 +102,20 @@ function updateModeMenu(){
   document.body.classList.toggle('park-mode',isParkMode());
   document.body.dataset.session=selectedMode;
   $('session-badge').textContent={surf:'2 MIN. / SCORE ATTACK',park:'2 MIN. / FREESTYLE',rush:'12 CHECKPOINTS / +8 SEC',storm:'ENDLESS / 3 LIVES'}[selectedMode];
-  $('timer-label').textContent=selectedMode==='storm'?'SURVIVED':'TIME';
+  $('timer-label').textContent=game.isRace?'RACE TIME':selectedMode==='storm'?'SURVIVED':'TIME';
   $('surf-condition').classList.toggle('hidden',isParkMode());
   $('rival-hud').classList.toggle('hidden',!game.isTournament);
   document.querySelector('.goals').classList.toggle('hidden',game.isTournament);
   $('ladder-button').classList.toggle('hidden',!game.isTournament);
   $('start').querySelector('span').textContent=game.isTournament?(game.complete?'NEW LADDER':`CHALLENGE ${game.rival.name}`):'DROP IN';
-  if(game.isTournament){$('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / 90 SEC HEATS`;$('mode-description').textContent=game.complete?'The factory is yours. Start a new ladder or inspect the rivals you defeated.':`${game.rival.name} · ${game.rival.subtitle}. Bank more than ${fmt(game.target)} points in 90 seconds to take their rank.`;}
+  $('rival-hud').classList.toggle('race-hud',!!game.isRace);
+  $('rival-hud').querySelector('small').textContent=game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
+  $('race-progress').classList.toggle('hidden',!game.isRace);
+  if(game.isTournament){
+    $('session-badge').textContent=`${game.complete?'CHAMPION':`RANK #${game.rival.rank}`} / ${game.isRace?'SURF RACE':'90 SEC SCORE BATTLE'}`;
+    $('level-name').textContent=game.isRace?'SUNSET POINT / RIVAL RACE':'WATERWORKS / SCORE BATTLE';
+    $('mode-description').textContent=game.complete?'The circuit is yours. Start a new ladder or inspect the rivals you defeated.':game.isRace?`${game.rival.name} is riding beside you. Pump with W, steer through every flagged checkpoint and reach the ${fmt(game.course.length)}m finish first.`:`${game.rival.name} · ${game.rival.subtitle}. Bank more than ${fmt(game.target)} points in 90 seconds to take their rank.`;
+  }
 
 }
 function selectMode(mode){if(!modeInfo[mode])return;selectedMode=mode;write('breakline99-mode',mode);clearInput();makeGame();updateModeMenu();updateSoundLabel();}
@@ -119,11 +129,11 @@ function startRun(kind='default'){
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
   audio.setScene('ride');
   if(game.isTournament){
-    if(kind!=='retry'&&game.complete&&(game.phase==='ready'||game.result==='win')){tournamentProgress=sanitizeTournamentProgress(null);write('breakline99-tournament-v1',JSON.stringify(tournamentProgress));game=new TournamentGame(onEvent,tournamentProgress);game.start();}
-    else if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game.nextRound();
+    if(kind!=='retry'&&game.complete&&(game.phase==='ready'||game.result==='win')){tournamentProgress=sanitizeTournamentProgress(null);write('breakline99-tournament-v1',JSON.stringify(tournamentProgress));game=createTournamentGame(onEvent,tournamentProgress);game.start();}
+    else if(kind!=='retry'&&game.phase==='finished'&&game.result==='win'){game=createTournamentGame(onEvent,game.getProgress());game.start();}
     else game.retry();
   }else game.start(selectedMode==='park'?selectedParkStart:undefined);
-  updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
+  world.setMode(game.mode);audio.setMode(game.mode);updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function restartRun(){startRun('retry');}
 function goHome(){
@@ -165,11 +175,15 @@ function showResults(){
   <div class="result-goals">${goalNames().map((name,i)=>`${complete[i]?'◆':'◇'} ${name}`).join('<br>')}</div>${selectedMode==='storm'?`<p class="survival-result">SURVIVED <b>${clockText(game.elapsed)}</b> · SWELL ${game.stormStage||1}<br>BEST SURVIVAL: ${clockText(bestSurvival)} · BARRELS: ${game.barrelsSurvived||0}</p>`:''}<p>PERSONAL BEST SCORE: ${fmt(best)}</p>`,'RIDE AGAIN',modeInfo[selectedMode].name);
 }
 
-function ladderRows(){return `<ol class="rival-ladder">${TOURNAMENT_RIVALS.map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.subtitle}</span></div><div class="rival-target"><strong>${fmt(r.target)}</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
-function showLadder(){openModal('ladder','THE HIT LIST',`<p class="rival-intro">Five score showdowns. One factory. Beat each recorded rival run in a 90-second heat to claim their rank. Ties leave the rival on top.</p>${ladderRows()}<p class="rival-footnote">Bank your tricks. Only landed points count. Your completed ranks save automatically.</p>`,game.complete?'NEW LADDER':`CHALLENGE ${game.rival.name}`,'WATERWORKS / RIVAL CIRCUIT');}
+function ladderRows(){return `<ol class="rival-ladder">${TOURNAMENT_RIVALS.map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.event==='race'?'SURF SESSION · HEAD-TO-HEAD':'WATERWORKS · SCORE BATTLE'}</span></div><div class="rival-target"><strong>${r.event==='race'?`${fmt(r.courseLength)}m`:fmt(r.target)}</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
+function showLadder(){openModal('ladder','THE HIT LIST',`<p class="rival-intro">Take on RIVET and STATIC in live Surf Session races. Beat MOXIE, UNDERTOW and KINGTIDE in 90-second Waterworks score battles.</p>${ladderRows()}<p class="rival-footnote">Races: pass every flagged checkpoint and finish first. Score battles: bank more points than the rival. Your ranks save automatically.</p>`,game.complete?'NEW LADDER':`CHALLENGE ${game.rival.name}`,'COAST + FACTORY / RIVAL CIRCUIT');}
 function showTournamentResults(){
   clearInput();const win=game.result==='win';
-  openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name}</span><div><section><small>YOUR BANKED SCORE</small><strong>${fmt(game.score)}</strong></section><b>VS</b><section><small>${game.rival.name}</small><strong>${fmt(game.target)}</strong></section></div><p>${win?(game.complete?'ALL FIVE RIVALS DEFEATED. THE FACTORY IS YOURS.':`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):game.score===game.target?'TIED SCORE. THE RIVAL KEEPS THEIR RANK.':'BANK A BIGGER SCORE TO TAKE THIS RANK.'}</p></div><div class="results-stats"><span>BEST COMBO<b>${fmt(game.bestCombo)}</b></span><span>TRICKS BANKED<b>${game.landedTricks}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Recorded rival score · 90-second heat · Unlanded combos do not count.</p>`,win?(game.complete?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL','THE HIT LIST / SHOWDOWN');
+  if(game.isRace){
+    const finished=game.finishTime!=null,opponentFinished=game.opponentFinishTime!=null;
+    openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name} · SURF RACE</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${finished?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m TO FINISH`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${opponentFinished?clockText(game.opponentFinishTime):`${fmt(Math.max(0,game.course.length-game.opponent.distance))}m TO FINISH`}</small></section></div><p>${win?`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`:'PUMP WITH W, KEEP A CLEAN LINE AND PASS EVERY CHECKPOINT.'}</p></div><div class="results-stats"><span>COURSE<b>${fmt(game.course.length)}m</b></span><span>CHECKPOINTS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Head-to-head Surf Session race · First across the finish wins.</p>`,win?'NEXT RIVAL':'RETRY RIVAL','THE HIT LIST / SURF RACE');return;
+  }
+  openModal('results',game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name}</span><div><section><small>YOUR BANKED SCORE</small><strong>${fmt(game.score)}</strong></section><b>VS</b><section><small>${game.rival.name}</small><strong>${fmt(game.target)}</strong></section></div><p>${win?(game.complete?'ALL FIVE RIVALS DEFEATED. THE CIRCUIT IS YOURS.':`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):game.score===game.target?'TIED SCORE. THE RIVAL KEEPS THEIR RANK.':'BANK A BIGGER SCORE TO TAKE THIS RANK.'}</p></div><div class="results-stats"><span>BEST COMBO<b>${fmt(game.bestCombo)}</b></span><span>TRICKS BANKED<b>${game.landedTricks}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>RIVALS BEATEN<b>${tournamentProgress.completedRounds} / 5</b></span></div><p class="rival-footnote">Recorded rival score · 90-second heat · Unlanded combos do not count.</p>`,win?(game.complete?'NEW LADDER':'NEXT RIVAL'):'RETRY RIVAL','THE HIT LIST / SHOWDOWN');
 }
 
 function renderCustomizationChoices(){
@@ -218,7 +232,10 @@ function tryTrick(type){if(game.mode==='surf'&&game.airborne&&game.airLaunchSour
 function tryPop(){if(!game.jump()&&!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);
-  $('timer').textContent=clockText(selectedMode==='storm'?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&game.time<=20);
+  $('timer').textContent=clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&!game.isRace&&game.time<=20);
+  const counting=game.isRace&&game.phase==='running'&&game.countdownRemaining>0;
+  $('race-countdown').classList.toggle('hidden',!counting);
+  if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
   $('speed').textContent=Math.round(game.speed*3.6);$('speed-bar').style.width=`${Math.min(100,game.speed/25*100)}%`;
   $('wave-dot').style.left=`${isParkMode()?(game.x-PARK_BOUNDS.minX)/(PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*96:(game.x-MIN_X)/(MAX_X-MIN_X)*96}%`;
   $('wave-dot').parentElement.style.setProperty('--crest-position',`${(waveCrest(-game.distance,game.elapsed)-MIN_X)/(MAX_X-MIN_X)*96}%`);
@@ -241,12 +258,22 @@ function updateHud(){
   if($('special-label'))$('special-label').textContent=special.ready?'100% READY · I':`SPECIAL ${Math.floor(special.value*100)}%`;
   const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTournament&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
   $('goal-gates').querySelector('span').textContent=isParkMode()?`Hit 5 ramps (${Math.min(5,game.visitedRamps.size)}/5)`:selectedMode==='rush'?`Checkpoints (${Math.min(12,game.gates)}/12)`:selectedMode==='storm'?`Barrel rides (${Math.min(3,game.barrelsSurvived||0)}/3)`:`Sun rings (${Math.min(6,game.gates)}/6)`;
-  if(game.isTournament){$('rival-name').textContent=`#${game.rival.rank} ${game.rival.name}`;$('rival-score').textContent=fmt(game.rivalScore);$('rival-target').textContent=`FINAL SCORE ${fmt(game.target)} · HEAT ${game.roundNumber}/5`;const gap=game.score-game.rivalScore;$('rival-gap').textContent=gap>0?`LEADING BY ${fmt(gap)}`:gap<0?`${fmt(-gap)} BEHIND`:'LEVEL SCORES';$('rival-hud').classList.toggle('ahead',gap>0);}
+  if(game.isTournament){
+    $('rival-name').textContent=`#${game.rival.rank} ${game.rival.name}`;
+    const gap=game.isRace?game.lead:game.score-game.rivalScore;
+    $('rival-score').textContent=game.isRace?`${game.racePosition===1?'1ST':'2ND'} / 2`:fmt(game.rivalScore);
+    $('rival-target').textContent=game.isRace?`${fmt(game.distanceRemaining)}m TO FINISH · CHECKPOINTS ${game.nextCheckpoint}/${game.course.checkpoints.length}`:`FINAL SCORE ${fmt(game.target)} · HEAT ${game.roundNumber}/5`;
+    $('rival-gap').textContent=Math.abs(gap)<.5?(game.isRace?'SIDE BY SIDE':'LEVEL SCORES'):gap>0?`LEADING BY ${fmt(gap)}${game.isRace?'m':''}`:`${fmt(-gap)}${game.isRace?'m':''} BEHIND`;
+    $('rival-hud').classList.toggle('ahead',gap>0);
+    if(game.isRace){$('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.distance/game.course.length*100))}%`;$('race-rival-progress').style.width=`${Math.max(0,Math.min(100,game.opponent.distance/game.course.length*100))}%`;}
+  }
   if(isParkMode())parkMap?.update(game);
   else {
-    $('surf-objective').textContent=selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
+    $('surf-objective').textContent=game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
     const tube=game.barrel,barrelHint=tube?.inside?'BARREL RIDE · HOLD THE OPEN LINE':tube&&tube.startDistance-game.distance<70?(game.x>tube.x+1.5?'BARREL AHEAD · CARVE LEFT':game.x<tube.x-1.5?'BARREL AHEAD · CARVE RIGHT':'BARREL AHEAD · HOLD YOUR LINE'):'';
-    $('surf-warning').textContent=game.bailTime>0?'RECOVERING…':game.landingWarning||barrelHint||((game.danger||0)>.6?(Math.abs(game.x)>13?'WAVE EDGE · STEER BACK IN':'REEF AHEAD · CHANGE YOUR LINE'):'SHIFT + A / D · CUTBACK');
+    const nextGate=game.isRace?game.course.checkpoints[game.nextCheckpoint]:null;
+    const raceHint=nextGate?`GATE ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
+    $('surf-warning').textContent=game.bailTime>0?'RECOVERING…':game.landingWarning||barrelHint||((game.danger||0)>.6?(Math.abs(game.x)>13?'WAVE EDGE · STEER BACK IN':'REEF AHEAD · CHANGE YOUR LINE'):raceHint||'SHIFT + A / D · CUTBACK');
     $('risk-fill').style.width=`${(game.danger||0)*100}%`;
     $('surf-condition').classList.toggle('danger',(game.danger||0)>.65);
   }

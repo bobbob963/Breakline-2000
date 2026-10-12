@@ -44,3 +44,16 @@
 .showdown-result>div>b{font:italic 20px Impact,'Arial Black',sans-serif;color:#7d8780}
 .showdown-result p{font:bold 10px/1.6 var(--mono);color:#c7b477}
 @media(max-height:780px){.mode-card:not(.mode-tournament){min-height:100px}.mode-card .mode-copy{padding:8px 10px}.mode-copy strong{margin-top:5px}.mode-detail{min-height:18px}.mode-status{margin-top:4px}.mode-card.mode-tournament{min-height:70px}.mode-tournament .mode-copy{padding:8px 12px 8px 80px}.mode-tournament .mode-copy strong{font-size:23px;margin-top:0}.session-description{min-height:0;padding:8px 0}.home-layout{padding-top:10px;padding-bottom:8px}.garage-button{padding:7px 9px}.start-hint{margin:6px 0 9px}.rival-hud{top:36px}}
+.race-hud{width:248px;border-color:#5ebdae}
+.race-hud>strong{color:#a6e0d5}
+.race-hud>span{line-height:1.8}
+.race-progress{margin-top:11px;padding-top:8px;border-top:1px solid #b9bfa740}
+.race-progress>div{display:flex;align-items:center;gap:8px;margin:6px 0}
+.race-progress span{width:35px;font:7px var(--mono);color:#bec6b8}
+.race-progress i{display:block;flex:1;height:5px;background:#69787960;overflow:hidden;transform:skew(-12deg)}
+.race-progress b{display:block;height:100%;width:0;background:#e6c960}
+.race-progress>div+div b{background:#70cbbd}
+.race-countdown{position:absolute;inset:30% 0 auto;text-align:center;pointer-events:none;text-shadow:3px 4px #081518;display:flex;flex-direction:column;align-items:center;color:#f2de97}
+.race-countdown span{font:italic 23px Impact,'Arial Black',sans-serif;letter-spacing:3px}
+.race-countdown strong{font:italic 110px/1.2 Impact,'Arial Black',sans-serif}
+.race-countdown small{font:10px var(--mono);padding:8px 12px;background:#0e1b21c9;color:#efebd1}
