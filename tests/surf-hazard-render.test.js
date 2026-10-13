@@ -20,11 +20,21 @@ test('driftwood and whirlpool meshes use physical descriptors and the visible wa
   const whirl=descriptors.find(item=>item.type==='whirlpool');assert.ok(whirl);assert.equal(renderer.maskCount,1);assert.deepEqual(renderer.masks[0].toArray(),[whirl.x,whirl.z,whirl.radiusX]);
   const mesh=renderer.group.children.find(mesh=>mesh.visible&&mesh.userData.type==='whirlpool');assert.ok(mesh.geometry.attributes.position.getY(0)<renderedWaveHeight(whirl.x,whirl.z,time,oceanZ)-1,'actual recessed core sits in the ocean hole');renderer.dispose();
 });
-test('weather obstacles never appear in races, park, Reef Rush or the home preview',()=>{
+test('Survival hazards and ocean holes disappear on switching to Surf Session in every weather',()=>{
+  const renderer=createSurfHazardRenderer();
+  for(const weatherId of ['dawn','noon','sunset','dusk','storm']){
+    renderer.update(game(),12,-330);assert.ok(renderer.activeCount>0);assert.ok(renderer.maskCount>0);
+    renderer.update({...game(),rulesId:'surf',weatherId},12,-330);
+    assert.equal(renderer.group.visible,false);assert.equal(renderer.activeCount,0);assert.equal(renderer.maskCount,0);
+  }
+  renderer.dispose();
+});
+
+test('Survival obstacles never appear in races, park, Reef Rush or the home preview',()=>{
   const renderer=createSurfHazardRenderer();
   for(const state of [{...game(),isRace:true},{...game(),mode:'park'},{...game(),surfAdventureEnabled:false}]){renderer.update(state,12,-330);assert.equal(renderer.activeCount,0);assert.equal(renderer.maskCount,0);}
   renderer.update(game(),12,-330,{attract:true});assert.equal(renderer.activeCount,0);assert.equal(renderer.maskCount,0);
-  renderer.update({...game(50),rulesId:'surf'},12,-150);assert.ok(renderer.activeCount>0);assert.equal(renderer.maskCount,0);renderer.dispose();
+  renderer.update({...game(50),rulesId:'rush'},12,-150);assert.equal(renderer.activeCount,0);assert.equal(renderer.maskCount,0);renderer.dispose();
 });
 test('hazard pools remain bounded over an endless run and dispose every owned resource once',()=>{
   const renderer=createSurfHazardRenderer(),resources=new Set();

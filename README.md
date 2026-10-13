@@ -6,7 +6,7 @@ The admin panel includes **SLOW MOTION / Q**, a saved cheat that grants the same
 
 **Weather and survival update:** every new Surf Session, including a restart, picks a different sky and time from **First Light (06:10), High Tide (12:40), Golden Hour (19:15), Blue Hour (20:35), and Squall Line (17:50)**. The previous choice is remembered in this browser so reloading cannot immediately repeat it. Pausing does not change the weather. Storm Rider always uses Squall Line; Waterworks and race courses keep their existing settings.
 
-Surf Session and Storm Rider now award **speed boosts for cleanly landed aerial tricks and combos**. Flat hops clear the new low driftwood without awarding trick points or boosts; hold and release **Space** to hop, and use a cutback or the wave lip for trick airtime. Storm Rider adds pulling whirlpools: steer outside the spiral or jump clear of the water. Upcoming obstacles are signposted on the HUD. Prize-board and admin boost modifiers also apply to these new boosts.
+Surf Session and Storm Rider now award **speed boosts for cleanly landed aerial tricks and combos**. **Driftwood and whirlpools appear only in Storm Rider (Survival)**, including when Surf Session has stormy weather. In Survival, hold and release **Space** for a flat hop over low driftwood, or steer around it; avoid whirlpools by steering outside the spiral or jumping clear of the water. Upcoming obstacles are signposted on the HUD. Flat hops do not award trick points or boosts; use a cutback or the wave lip for trick airtime. Prize-board and admin boost modifiers also apply to these new boosts.
 
 Survival barrels now grow directly out of the wave and close on a visible countdown. Pump or land a trick boost to escape before the curling roof falls. Only contact with the actual falling water causes a wipeout; moving outside the barrel or clearing its mouth remains safe. Survival still has three lives and no time limit, with pressure increasing as you continue. `surf-lab.html` includes ordinary-control replays for weather, a clean barrel ride, a closing-wave impact, a driftwood hop and a safe whirlpool approach. It does not alter your save.
 
@@ -97,7 +97,7 @@ Official guides: [import projects](https://developer.stackblitz.com/guides/user-
 
 | Mode | How to ride | Third challenge |
 | --- | --- | --- |
-| **Surf Session — Sunset Point** | Two-minute score attack with changing weather, driftwood hops, currents and landed trick boosts. | Catch 6 sun rings. |
+| **Surf Session — Sunset Point** | Two-minute score attack with changing weather, currents and landed trick boosts. | Catch 6 sun rings. |
 | **The Waterworks — Lower Sewage Works** | Steer through a 240 × 360 metre sunken factory basin, with 18 ramps/banks, 2 hollow rust tunnels and 18 grind lines. Wave lips launch you automatically; quarter pipes turn you back into the park. | Ride 5 different ramps. |
 | **Reef Rush — Checkpoint Coast** | Start with 35 seconds. Each ring adds 8 seconds. Collect 12 rings to win. | Finish 12 checkpoints. |
 | **Storm Rider — Squall Point** | Endless storm survival with 3 lives, closing barrels, driftwood, whirlpools and trick boosts. The timer counts upward; only losing all lives ends the run. | Ride through 3 barrels. |

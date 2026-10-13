@@ -29,17 +29,20 @@ test('Closing wave preview brakes inside a real barrel until visible water hits 
   assert.ok(game.barrelClosingProgress>0);assert.ok(game.distance>190&&game.distance<232);
 });
 
-test('Driftwood hop preview drives from the normal start and clears the first branch without points',()=>{
-  const game=new SurfGame();game.start();let hopped=false,peak=0,checkpoint=false;
-  for(let step=0;step<120*5&&game.distance<80;step++){
+test('Driftwood hop preview drives from the Survival start and clears its first branch without trick points',()=>{
+  const game=new SurfGame(()=>{},'storm');game.start();let hopped=false,peak=0,checkpoint=false;
+  const branch=surfHazardsNear(0,'storm',0,0,180).find(item=>item.type==='driftwood');
+  assert.equal(branch.distance,135);
+  for(let step=0;step<120*7&&game.distance<branch.distance+20;step++){
     const input=surfLabDriftwoodControls(game);hopped||=input.jump;
     applySurfLabControls(game,input);
     peak=Math.max(peak,game.y-waveHeight(game.x,-game.distance,game.elapsed));
-    if(game.airborne&&game.distance>=70.5)checkpoint=true;
+    if(game.airborne&&game.distance>=branch.distance-1.5)checkpoint=true;
   }
   assert.ok(hopped&&checkpoint);assert.ok(peak>.25&&peak<.6);assert.equal(game.wipeouts,0);
+  assert.equal(game.airborne,false);assert.equal(game.lives,3);
   assert.equal(game.landedTricks,0);assert.equal(game.surfBoostTime,0);assert.equal(game.comboBase,0);
-  assert.ok(game.hazardProcessed.has('driftwood-0'));
+  assert.ok(game.hazardProcessed.has(branch.id));
 });
 
 test('Whirlpool preview reaches its approach checkpoint and steers outside the real funnel',()=>{

@@ -10,7 +10,8 @@ import { chooseSurfWeather,resolveWorldWeather } from './surf-weather.js';
 const $=id=>document.getElementById(id);
 const names={session:'WEATHER RIDE',grab:'INDY GRAB',tweak:'TWEAKED GRAB',cutback:'ROUNDHOUSE CUTBACK',rush:'REEF RUSH',storm:'ENDLESS STORM',barrel:'CURLING WAVE',closing:'CLOSING WAVE',driftwood:'DRIFTWOOD HOP',whirlpool:'WHIRLPOOL APPROACH'};
 let world,game,scenario=null,stage='ready',setupAt=0,checkpoint=false,passedCheckpoint=false,completed=false,input={},events=[],previousWeather=null;
-const stormScenarios=['storm','barrel','closing','whirlpool'];
+const stormScenarios=['storm','barrel','closing','driftwood','whirlpool'];
+const firstStormDriftwood=surfHazardsNear(0,'storm',0,0,180).find(item=>item.type==='driftwood');
 
 function onEvent(event) {
   world.onEvent(event,game);
@@ -24,7 +25,7 @@ function start(kind) {
   game=new SurfGame(()=>{},stormScenarios.includes(kind)?'storm':kind==='rush'?'rush':'surf');game.onEvent=onEvent;game.start();
   applyLabWeather();
   $('rate').value=['rush','storm','barrel','closing','driftwood','whirlpool'].includes(kind)?'4':'1';
-  $('status').textContent=kind==='rush'?'Following the visible race course using steering and pump controls.':kind==='closing'?'Pumping into the first barrel, then braking beneath the lip to demonstrate its real closing impact.':kind==='whirlpool'?'Riding through the first barrel toward the swirling current. The preview pauses 25 metres before the whirlpool.':stormScenarios.includes(kind)?'Pumping through the storm, hopping driftwood and steering around whirlpools toward the curling wave.':kind==='driftwood'?'Lining up the first driftwood branch, then tapping Space for a small flat hop.':kind==='session'?'A real surf run with the selected weather. This selector belongs only to the preview; the game chooses a different sky each run.':kind==='cutback'?'Building a right-hand carve, then holding Shift and turning left.':'Earning a cutback boost with Shift + turn, then charging and popping into the trick.';
+  $('status').textContent=kind==='rush'?'Following the visible race course using steering and pump controls.':kind==='closing'?'Pumping into the first barrel, then braking beneath the lip to demonstrate its real closing impact.':kind==='whirlpool'?'Riding through the first barrel toward the swirling current. The preview pauses 25 metres before the whirlpool.':kind==='driftwood'?'Riding through the storm to the first driftwood branch, then tapping Space for a small flat hop.':stormScenarios.includes(kind)?'Pumping through the storm, hopping driftwood and steering around whirlpools toward the curling wave.':kind==='session'?'A real surf run with the selected weather. This selector belongs only to the preview; the game chooses a different sky each run.':kind==='cutback'?'Building a right-hand carve, then holding Shift and turning left.':'Earning a cutback boost with Shift + turn, then charging and popping into the trick.';
   updateCounters();
 }
 
@@ -72,7 +73,10 @@ export function surfLabRouteControls(game) {
 }
 
 export function surfLabDriftwoodControls(game){
-  const item=surfHazardsNear(0,'surf',0,0,90).find(hazard=>hazard.type==='driftwood');
+  const item=firstStormDriftwood;
+  // Follow the safe storm route past the first reef before lining up the log.
+  // These remain ordinary steering buttons from the real Survival spawn.
+  if(game.rulesId!=='storm'||game.distance<item.distance-30)return surfLabRouteControls(game);
   const error=item.x-game.x-game.vx*.24,ahead=item.distance-game.distance;
   return {pump:true,left:error<-.2,right:error>.2,jump:ahead>3&&ahead<6&&game.popReady};
 }
@@ -121,8 +125,8 @@ function tick() {
     if(!passedCheckpoint&&game.barrel?.inside&&game.barrel.progress>=.27)stop('Inside the first barrel. Continue to hold the brake: the visible lip will fall onto the rider if there is no quick escape.');
     else if(passedCheckpoint&&game.bailTime>0){stop('The falling water touched the rider. One life was lost to the closing wave; the deadline itself did no damage.',true);}
   } else if(scenario==='driftwood'){
-    if(!passedCheckpoint&&game.airborne&&game.distance>=70.5)stop('Flat hop over driftwood. The board is lifted just enough to clear the branch, without generating trick points.');
-    else if(passedCheckpoint&&!game.airborne&&game.distance>75)stop(game.wipeouts?'The branch caught this attempt. Restart to retry.':'Driftwood cleared with a real Space tap. No points or speed boost were awarded for the small hop.',true);
+    if(!passedCheckpoint&&game.airborne&&game.distance>=firstStormDriftwood.distance-1.5)stop('Flat hop over Survival driftwood. The board is lifted just enough to clear the branch, without generating trick points.');
+    else if(passedCheckpoint&&!game.airborne&&game.distance>firstStormDriftwood.distance+3)stop(game.wipeouts?'The branch caught this attempt. Restart to retry.':'Survival driftwood cleared with a real Space tap. No points or speed boost were awarded for the small hop.',true);
   } else if(scenario==='whirlpool'){
     if(!passedCheckpoint&&game.distance>=275)stop('Whirlpool ahead: the funnel pulls nearby water inward. Continue to pump and steer wide around its centre.');
     else if(passedCheckpoint&&game.distance>=312)stop(game.wipeouts?'The current caught this attempt. Restart to retry.':'Whirlpool avoided by steering wide. The first barrel and the swirling current were passed with ordinary riding controls.',true);

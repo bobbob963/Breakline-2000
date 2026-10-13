@@ -15,13 +15,24 @@ function lipFlight(game,tricks=['spin']) {
   while(game.airborne)game.update(1/120);
 }
 
-test('shared adventure obstacles are deterministic and absent from Reef Rush',()=>{
-  assert.deepEqual(surfHazardsNear(100,'rush'),[]);
-  for(const mode of ['surf','storm']) {
-    const a=surfHazardsNear(200,mode,30),b=surfHazardsNear(200,mode,30);
-    assert.deepEqual(a,b);assert.ok(a.some(item=>item.type==='driftwood'));
-    assert.equal(a.some(item=>item.type==='whirlpool'),mode==='storm');
-    assert.ok(a.every(item=>item.z===-item.distance&&item.height>0));
+test('driftwood and whirlpools are deterministic Survival-only obstacles',()=>{
+  for(const mode of ['surf','rush','park'])for(const distance of [0,72,135,300,5000])
+    assert.deepEqual(surfHazardsNear(distance,mode,900),[]);
+  assert.deepEqual(surfHazardsNear(200),[]);
+  const a=surfHazardsNear(200,'storm',30),b=surfHazardsNear(200,'storm',30);
+  assert.deepEqual(a,b);assert.ok(a.some(item=>item.type==='driftwood'));
+  assert.ok(a.some(item=>item.type==='whirlpool'));
+  assert.ok(a.every(item=>item.z===-item.distance&&item.height>0));
+});
+
+test('Surf Session crosses former driftwood and Survival hazard positions without collisions or warnings',()=>{
+  const positions=[{distance:72,x:1},...surfHazardsNear(0,'storm',0,0,350)];
+  for(const item of positions){
+    const events=[],game=new SurfGame(e=>events.push(e),'surf');game.start();place(game,item.distance-4,item.x);
+    advance(game,.5,{pump:true});
+    assert.ok(game.distance>item.distance);assert.equal(game.wipeouts,0);
+    assert.equal(game.hazardWarning,'');assert.equal(game.hazardDanger,0);assert.equal(game.hazardProcessed.size,0);
+    assert.equal(events.some(e=>e.type==='surfHazardHit'),false);
   }
 });
 
@@ -34,9 +45,9 @@ test('storm driftwood leaves at least 15 metres clear around every curling wave'
 });
 
 test('a low flat hop clears visible driftwood without becoming a trick or boost farm',()=>{
-  const item=surfHazardsNear(0,'surf')[0];
+  const item=surfHazardsNear(0,'storm')[0];
   for(const hop of [false,true]) {
-    const game=new SurfGame();game.start();place(game,item.distance-4,item.x);
+    const game=new SurfGame(()=>{},'storm');game.start();place(game,item.distance-4,item.x);
     if(hop){assert.equal(game.launchSource,'flat');assert.equal(game.jump(),true);assert.equal(game.doTrick('spin'),false);}
     let peak=0;
     for(let i=0;i<100;i++){game.update(1/120);peak=Math.max(peak,game.y-waveHeight(game.x,-game.distance,game.elapsed));}
@@ -46,7 +57,7 @@ test('a low flat hop clears visible driftwood without becoming a trick or boost 
 });
 
 test('boost-speed swept driftwood contact cannot tunnel and air clears the same footprint',()=>{
-  const item=surfHazardsNear(0,'surf')[0],from={x:item.x,distance:item.distance-12,y:0},to={x:item.x,distance:item.distance+12,y:0};
+  const item=surfHazardsNear(0,'storm')[0],from={x:item.x,distance:item.distance-12,y:0},to={x:item.x,distance:item.distance+12,y:0};
   from.y=waveHeight(from.x,-from.distance,0);to.y=waveHeight(to.x,-to.distance,.05);
   assert.ok(sweepSurfHazard(item,from,to,0,.05));
   assert.equal(sweepSurfHazard(item,{...from,y:from.y+3},{...to,y:to.y+3},0,.05),null);

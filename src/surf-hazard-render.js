@@ -68,7 +68,7 @@ export function createSurfHazardRenderer({reducedMotion=false}={}){
   let disposed=false,maskCount=0;
   function update(game,time,oceanZ,{attract=false}={}){
     if(disposed)return;
-    const enabled=!attract&&game.mode==='surf'&&!game.isRace&&game.surfAdventureEnabled;
+    const enabled=!attract&&game.mode==='surf'&&game.rulesId==='storm'&&!game.isRace&&game.surfAdventureEnabled;
     group.visible=!!enabled;maskCount=0;if(!enabled)return;
     whirl.uniforms.uTime.value=reducedMotion?0:time;
     const counts={driftwood:0,whirlpool:0};
