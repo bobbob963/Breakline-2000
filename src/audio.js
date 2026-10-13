@@ -187,6 +187,8 @@ export class ArcadeAudio {
     this.raceProgress = 0; this.raceBoost = 0;
     this.rideTrack = 'surf'; this.survivalIntensity = 0;
     this._rideBeats = {surf:0,sunset:0,survival:0};
+    this._wasted = false; this._wastedRevealed = false;
+    this._wastedVoices = new Map(); this._wastedBus = null;
   }
 
   _build(context = null) {
@@ -198,9 +200,9 @@ export class ArcadeAudio {
     this.limiter = c.createDynamicsCompressor();
     this.limiter.threshold.value = -12; this.limiter.knee.value = 12;
     this.limiter.ratio.value = 5; this.limiter.attack.value = .005; this.limiter.release.value = .25;
-    this.music = c.createGain(); this.music.gain.value = this.scene === 'ride' ? .82 : 0;
-    this.menuMusic = c.createGain(); this.menuMusic.gain.value = this.scene === 'menu' ? .88 : 0;
-    this.raceMusic = c.createGain(); this.raceMusic.gain.value = this.scene === 'race' ? .84 : 0;
+    this.music = c.createGain(); this.music.gain.value = !this._wasted && this.scene === 'ride' ? .82 : 0;
+    this.menuMusic = c.createGain(); this.menuMusic.gain.value = !this._wasted && this.scene === 'menu' ? .88 : 0;
+    this.raceMusic = c.createGain(); this.raceMusic.gain.value = !this._wasted && this.scene === 'race' ? .84 : 0;
     this.effects = c.createGain(); this.effects.gain.value = .64;
     this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.raceMusic.connect(this.limiter); this.effects.connect(this.limiter);
     // A normally transparent final safety ceiling also catches the compressor's
@@ -433,6 +435,7 @@ export class ArcadeAudio {
   toggle() {
     if (!this.enabled && !this._enabling) return this.enable();
     this._token++; this.enabled = false; this._enabling = false; this.active = false;
+    this._clearWastedVoices();
     this._fade(false); this._stopVoices(); return Promise.resolve(false);
   }
 
@@ -450,11 +453,12 @@ export class ArcadeAudio {
     }
   }
 
-  _track(source, nodes) {
+  _track(source, nodes, scene = this.scene) {
     this.voices.add(source);
-    this._voiceScenes.set(source,this.scene);
+    this._voiceScenes.set(source,scene);
     source.onended = () => {
       source.disconnect(); for (const node of nodes) node.disconnect(); this.voices.delete(source);
+      this._wastedVoices.delete(source);
     };
   }
 
@@ -523,7 +527,7 @@ export class ArcadeAudio {
     if (!this.ctx) return; // Merely selecting a menu never unlocks browser audio.
     const now = this.ctx.currentTime;
     for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0],[this.raceMusic,next==='race'?.84:0]]) {
-      bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(target,now,.13);
+      bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(this._wasted ? 0 : target,now,.13);
     }
     this._stopVoices(previous,.7); this.nextBeat = now + .045;
   }
@@ -544,7 +548,7 @@ export class ArcadeAudio {
     // chord tails do not overlap a new key or tempo. SFX keep their own bus.
     this.music.gain.cancelScheduledValues(now);
     this.music.gain.setTargetAtTime(0,now,.012);
-    this.music.gain.setTargetAtTime(.82,now+.065,.055);
+    this.music.gain.setTargetAtTime(this._wasted ? 0 : .82,now+.065,.055);
     this._stopVoices('ride',.06);this.nextBeat=now+.085;
   }
 
@@ -796,8 +800,102 @@ export class ArcadeAudio {
     }
   }
 
+  _clearWastedVoices() {
+    // Disconnect synchronously as well as stopping: a muted/skipped sequence
+    // must not leave a future heartbeat or sting waiting to sound on resume.
+    for (const [source,nodes] of this._wastedVoices) {
+      try { source.stop(); } catch { /* Already ended. */ }
+      source.onended = null; source.disconnect();
+      for (const node of nodes) node.disconnect();
+      this.voices.delete(source);
+    }
+    this._wastedVoices.clear();
+    if (this._wastedBus) this._wastedBus.disconnect();
+    this._wastedBus = null;
+  }
+
+  _trackWasted(source,nodes) {
+    this._wastedVoices.set(source,nodes); this._track(source,nodes,'wasted');
+  }
+
+  _wastedTone(at,duration,startHz,endHz,volume,type='sine',pan=0) {
+    const c=this.ctx,source=c.createOscillator(),filter=c.createBiquadFilter(),gain=c.createGain(),stereo=c.createStereoPanner();
+    source.type=type;source.frequency.setValueAtTime(startHz,at);
+    source.frequency.exponentialRampToValueAtTime(endHz,at+duration);
+    filter.type='lowpass';filter.frequency.value=650;filter.Q.value=.45;
+    gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(volume,at+.012);
+    gain.gain.exponentialRampToValueAtTime(volume*.3,at+duration*.32);
+    gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
+    stereo.pan.value=pan;source.connect(filter);filter.connect(gain);gain.connect(stereo);stereo.connect(this._wastedBus);
+    this._trackWasted(source,[filter,gain,stereo]);source.start(at);source.stop(at+duration+.025);
+  }
+
+  _wastedRush(at,duration,volume,startHz,endHz,attack) {
+    const c=this.ctx,source=c.createBufferSource(),filter=c.createBiquadFilter(),gain=c.createGain();
+    source.buffer=this.noise;source.loop=true;filter.type='lowpass';filter.Q.value=.65;
+    filter.frequency.setValueAtTime(startHz,at);filter.frequency.exponentialRampToValueAtTime(endHz,at+duration);
+    gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(volume,at+attack);
+    gain.gain.exponentialRampToValueAtTime(.0001,at+duration);
+    source.connect(filter);filter.connect(gain);gain.connect(this._wastedBus);
+    this._trackWasted(source,[filter,gain]);source.start(at);source.stop(at+duration+.025);
+  }
+
+  _canPlayWasted() {
+    return this.enabled && this.ctx && (this.ctx.state==='running' || typeof this.ctx.startRendering==='function');
+  }
+
+  startWastedSequence() {
+    if (this._wasted) return false;
+    this._wasted=true;this._wastedRevealed=false;
+    if (!this.ctx) return false;
+    const at=this.ctx.currentTime;
+    for (const bus of [this.music,this.menuMusic,this.raceMusic]) {
+      bus.gain.cancelScheduledValues(at);bus.gain.setTargetAtTime(0,at,.035);
+    }
+    this._stopVoices(null,.055);
+    if (!this._canPlayWasted()) return false;
+    this.active=true;this._fade(true);
+    this._wastedBus=this.ctx.createGain();this._wastedBus.gain.value=.84;this._wastedBus.connect(this.effects);
+    // An original falling pressure rush and two slowing heartbeats. The final
+    // .2 seconds fall quiet before the title hit, following the closing eyes.
+    this._wastedRush(at,1.58,.16,2900,145,.12);
+    this._wastedTone(at+.05,.30,100,43,.19);
+    this._wastedTone(at+.49,.20,76,45,.12);
+    this._wastedTone(at+.68,.17,64,40,.075);
+    this._wastedTone(at+1.09,.25,64,34,.09);
+    return true;
+  }
+
+  _scheduleWastedReveal(at) {
+    // Heavy low impact, a filtered breath and a dissonant metallic interval
+    // that sinks away. All layers are original and share the game's limiter.
+    this._wastedTone(at,.96,91,28,.29);
+    this._wastedRush(at,.65,.12,1450,180,.014);
+    this._wastedTone(at+.012,1.37,174.61,110,.072,'triangle',-.28);
+    this._wastedTone(at+.025,1.49,246.94,138.59,.046,'triangle',.28);
+  }
+
+  revealWasted() {
+    if (!this._wasted || this._wastedRevealed) return false;
+    this._wastedRevealed=true;
+    if (!this._canPlayWasted() || !this._wastedBus) return false;
+    this._scheduleWastedReveal(this.ctx.currentTime);return true;
+  }
+
+  endWastedSequence() {
+    const wasWasted=this._wasted;this._wasted=false;this._wastedRevealed=false;
+    this._clearWastedVoices();
+    if (!wasWasted || !this.ctx) return;
+    const at=this.ctx.currentTime;
+    for (const [bus,target] of [[this.music,this.scene==='ride'?.82:0],[this.menuMusic,this.scene==='menu'?.88:0],[this.raceMusic,this.scene==='race'?.84:0]]) {
+      bus.gain.cancelScheduledValues(at);bus.gain.setTargetAtTime(target,at,.08);
+    }
+    this.active=false;this._fade(false);this.nextBeat=at+.04;
+    // The next ordinary update decides whether to resume music or stay paused.
+  }
+
   tone(freq, duration, type = 'sine', volume = .035, endFreq) {
-    if (!this.enabled || !this.ctx || !this.active) return;
+    if (!this.enabled || !this.ctx || !this.active || this._wasted) return;
     this._note(freq, this.ctx.currentTime, duration, type === 'square' || type === 'sawtooth' ? 'sine' : type,
       Math.min(.07, volume), this.effects, endFreq);
   }
@@ -817,6 +915,10 @@ export class ArcadeAudio {
     if (mode !== this.mode) this.setMode(mode);
     if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime;
+    if (this._wasted) {
+      if (!this.active) { this.active=true;this._fade(true); }
+      return; // Cinematic callbacks own the sound until the sequence ends.
+    }
     if (Boolean(active) !== this.active) {
       this.active = Boolean(active); this._fade(this.active); this.nextBeat = now + .04;
       if (!this.active) this._stopVoices();
@@ -839,6 +941,7 @@ export class ArcadeAudio {
 
   async dispose() {
     this._token++; this.enabled = false; this._enabling = false; this.active = false;
+    this._wasted=false;this._wastedRevealed=false;this._clearWastedVoices();
     this._stopVoices();
     for (const source of this._persistentSources) { try { source.stop(); } catch { /* already stopped */ } }
     for (const node of this._persistent) node.disconnect();

@@ -3,9 +3,15 @@ import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { createWastedSequence } from './wasted.js';
+import { ArcadeAudio } from './audio.js';
 
 const STEP = 1 / 120;
-const TITLE_CHECKPOINT = 1.4;
+const INSPECTION_STAGES = [
+  {time:.35,label:'First-person view'},
+  {time:1.05,label:'Eyelids closing'},
+  {time:1.65,label:'Full blackout'},
+  {time:2.4,label:'WASTED title'},
+];
 
 // Only legal controls enter the simulation. This export also allows a small
 // headless check of the real route, without a renderer or synthetic bail call.
@@ -34,7 +40,8 @@ export class WipeoutPlayback {
 async function boot() {
   const $ = id => document.getElementById(id);
   const panel = $('review-panel'), home = $('review-home');
-  let world, sequence, accumulator = 0, titleTime = 0;
+  let world, sequence, accumulator = 0, titleTime = 0, inspectionIndex = 0;
+  const audio = new ArcadeAudio();
   let inspectionReleased = false, resultsShown = false, finishPending = false;
   const playback = new WipeoutPlayback((event, game) => {
     world?.onEvent(event, game);
@@ -54,7 +61,7 @@ async function boot() {
 
   function restart() {
     sequence.reset();
-    accumulator = 0; titleTime = 0; inspectionReleased = false;
+    accumulator = 0; titleTime = 0; inspectionReleased = false; inspectionIndex = 0;
     resultsShown = false; finishPending = false; $('results').hidden = true;
     playback.start();
     $('status').textContent = 'Holding D. The rider will leave the wave naturally three times.';
@@ -68,12 +75,15 @@ async function boot() {
       stage:$('stage'),
       onStart() {
         titleTime = 0;
+        world.startWastedView(playback.game);audio.startWastedSequence();
         // Keep the local pointer controls reachable inside the production
         // modal. The title, scene effect and built-in skip remain unchanged.
         document.querySelector('.wasted-overlay').append(panel);
         $('status').textContent = 'Three natural wipeouts. The game is frozen while its WASTED presentation plays.';
       },
-      onEnd() { home.append(panel); },
+      onFrame(frame) { world.updateWastedView(frame); },
+      onReveal() { audio.revealWasted(); },
+      onEnd() { world.endWastedView();audio.endWastedSequence();home.append(panel); },
       onComplete() {
         resultsShown = true; $('results').hidden = false;
         $('result-detail').textContent = `${playback.game.wipeouts} wipeouts · ${playback.game.lives} lives · ${playback.game.elapsed.toFixed(2)} seconds`;
@@ -82,9 +92,10 @@ async function boot() {
       },
     });
     $('restart').addEventListener('click', restart);
+    $('sound').addEventListener('click',async()=>{await audio.toggle();$('sound').textContent=audio.enabled?'Sound on · mute':'Sound off · enable';});
     $('continue').addEventListener('click', () => {
-      inspectionReleased = true;
-      $('status').textContent = 'Continuing the production sequence to results…';
+      inspectionIndex++;inspectionReleased=inspectionIndex>=INSPECTION_STAGES.length;
+      $('status').textContent = inspectionReleased?'Continuing the production sequence to results…':'Continuing to the next presentation stage…';
     });
     $('pause-title').addEventListener('change', () => {
       if (!$('pause-title').checked && sequence.active) $('status').textContent = 'Continuing the production sequence to results…';
@@ -108,13 +119,14 @@ async function boot() {
         }
         if (sequence.active) {
           const inspect = $('pause-title').checked && !inspectionReleased;
-          const presentationStep = inspect ? Math.min(elapsed, Math.max(0, TITLE_CHECKPOINT - titleTime)) : elapsed;
+          const checkpoint=INSPECTION_STAGES[inspectionIndex];
+          const presentationStep = inspect ? Math.min(elapsed, Math.max(0, checkpoint.time - titleTime)) : elapsed;
           if (presentationStep > 0) {
             titleTime += presentationStep;
             sequence.update(presentationStep);
           }
-          if (sequence.active && inspect && titleTime >= TITLE_CHECKPOINT) {
-            $('status').textContent = 'Title inspection paused at 1.40 s. Continue replay to watch the remaining fade, or use the production skip button.';
+          if (sequence.active && inspect && titleTime >= checkpoint.time) {
+            $('status').textContent = `${checkpoint.label} paused at ${checkpoint.time.toFixed(2)} s. Continue to inspect the next stage.`;
           }
         }
         world.update(dt, playback.game);

@@ -87,7 +87,14 @@ let world,game,preview,menuSurfer,parkMap,adminPanel,keydownHandler,modalMode=nu
 let best=0,newBest=false,secretUnlockedThisRun=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 const timePowerScreen=new TimePowerScreen({reducedMotion:window.matchMedia('(prefers-reduced-motion: reduce)').matches});
 let portraitKey='';
-const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
+const wasted=createWastedSequence({
+  stage:$('stage'),
+  onStart:()=>{clearInput();timePowerScreen.reset();world?.startWastedView(game);audio.startWastedSequence();},
+  onFrame:frame=>world?.updateWastedView(frame),
+  onReveal:()=>audio.revealWasted(),
+  onEnd:()=>{world?.endWastedView();audio.endWastedSequence();},
+  onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();},
+});
 const modeInfo={
   trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears. Clear three to earn the Afterburner speed board.'},
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
@@ -132,7 +139,7 @@ function onEvent(e){
   // Rival actions are shown beside their name and on their rider. They must
   // never award the player special, replace player toasts or reset the camera.
   if(e.opponent)return;
-  world?.onEvent(e,game);if(!(e.type==='finish'&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
+  world?.onEvent(e,game);if(!(['bail','finish'].includes(e.type)&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
   if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000*(game.characterStats?.specialGain??1));saveBest();}
   if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
@@ -546,7 +553,8 @@ try{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     const simDt=game.updateTimePower(dt);
     if(game.phase==='running'&&!workshopMode){accumulator+=simDt;while(accumulator>=1/120){game.update(1/120,input);accumulator-=1/120;}special.update(simDt);checkSurvivalSecret();}else accumulator=0;
-    world.update(wasted.active?0:simDt,game);wasted.update(dt);if(workshopMode)preview.update(dt,workshopMode);
+    if(!document.hidden)wasted.update(dt);
+    world.update(wasted.active?0:simDt,game);if(workshopMode)preview.update(dt,workshopMode);
     timePowerScreen.update(dt,{active:game.timePowerActive,paused:game.phase==='paused',origin:world.boardScreenOrigin()});
     if(!document.hidden&&!workshopMode&&!modalMode&&!$('intro').classList.contains('hidden'))menuSurfer.update(dt);
     if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});

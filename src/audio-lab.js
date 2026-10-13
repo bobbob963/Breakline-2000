@@ -18,6 +18,7 @@ function buildProductionGraph(context,scene) {
 
 function releaseGraph(synth) {
   if(!synth)return;
+  synth._clearWastedVoices();
   for(const source of synth._persistentSources){try{source.stop();}catch{/* Rendering may already have ended. */}}
   for(const node of synth._persistent){try{node.disconnect();}catch{/* Already disconnected. */}}
   // OfflineAudioContext has no close(); dropping these retained nodes/buffers
@@ -85,17 +86,18 @@ async function renderSection() {
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     const Offline=globalThis.OfflineAudioContext||globalThis.webkitOfflineAudioContext;
     if(!Offline)throw new Error('This browser does not support OfflineAudioContext. Open the lab in Edge or Chrome.');
-    const scene=$('track').value,race=scene==='race',survival=scene==='survival';
+    const scene=$('track').value,race=scene==='race',survival=scene==='survival',wasted=scene==='wasted';
     const bpm={race:RACE_BPM,menu:MENU_BPM,sunset:SUNSET_BPM,survival:SURVIVAL_BPM}[scene];
-    const title={race:RACE_TRACK,menu:MENU_TRACK,sunset:SUNSET_TRACK,survival:SURVIVAL_TRACK}[scene];
-    const bar=Number($('section').value),musicalDuration=BARS*4*60/bpm;
+    const title={race:RACE_TRACK,menu:MENU_TRACK,sunset:SUNSET_TRACK,survival:SURVIVAL_TRACK,wasted:'Wasted / Final Wipeout'}[scene];
+    const bar=Number($('section').value),musicalDuration=wasted?3.6:BARS*4*60/bpm;
     const context=new Offline(2,Math.ceil((START+musicalDuration+TAIL)*SAMPLE_RATE),SAMPLE_RATE);
     const began=performance.now();synth=buildProductionGraph(context,scene);
     synth.enabled=true;synth.active=true;synth._fade(true);
     const intensity=$('intensity').value;
     synth.setRaceState({progress:intensity==='final'?.9:.3,boost:intensity==='boost'||intensity==='final'?1:0});
     if(survival)synth.setRideContext({mode:'surf',rulesId:'storm',elapsed:intensity==='final'?240:intensity==='boost'?150:0});
-    for(let step=0;step<BARS*16;step++){
+    if(wasted){synth.startWastedSequence();synth._scheduleWastedReveal(1.85);}
+    for(let step=0;!wasted&&step<BARS*16;step++){
       const scoreStep=(bar*16+step)%(32*16);synth.beat=scoreStep;
       if(race)synth._scheduleRaceStep(scoreStep,START+step*60/bpm/4);
       else if(scene==='sunset')synth._scheduleSunsetStep(scoreStep,START+step*60/bpm/4);
@@ -107,9 +109,9 @@ async function renderSection() {
     if(metrics.peak===0)throw new Error('The rendered mix is silent.');
     const nextBlob=wav(buffer),nextURL=URL.createObjectURL(nextBlob);
     if(audioURL)URL.revokeObjectURL(audioURL);audioURL=nextURL;wavBlob=nextBlob;
-    filename=`${title.replace(/[^a-z0-9]+/gi,'-')}-bars-${bar+1}-${bar+BARS}${race||survival?`-${intensity}`:''}.wav`;
+    filename=wasted?'Wasted-Final-Wipeout.wav':`${title.replace(/[^a-z0-9]+/gi,'-')}-bars-${bar+1}-${bar+BARS}${race||survival?`-${intensity}`:''}.wav`;
     $('player').src=audioURL;$('result').classList.add('visible');
-    $('render-label').textContent=`${title} · bars ${bar+1}–${bar+BARS} · ${bpm} BPM${race||survival?` · ${intensity} mix`:''} · ${musicalDuration.toFixed(2)} s of music + natural tail`;
+    $('render-label').textContent=wasted?`${title} · descending rush and heartbeats · title impact at 1.85 s · natural decay`:`${title} · bars ${bar+1}–${bar+BARS} · ${bpm} BPM${race||survival?` · ${intensity} mix`:''} · ${musicalDuration.toFixed(2)} s of music + natural tail`;
     $('stats').innerHTML=[['Sample peak',showDB(db(metrics.peak)),metrics.peak.toFixed(4)],['Musical RMS',showDB(db(metrics.rms)),'Unnormalised mix'],['Crest factor',`${(db(metrics.peak)-db(metrics.rms)).toFixed(1)} dB`,'Peak minus RMS'],['Full-scale samples',metrics.fullScale.toLocaleString(),'Threshold: |sample| ≥ 0.999']].map(([label,value,note])=>`<div class="stat">${label}<strong>${value}</strong><small>${note}</small></div>`).join('');
     $('verdict').textContent=metrics.fullScale===0?`No samples reached digital full scale. Measured peak headroom: ${(-db(metrics.peak)).toFixed(1)} dB. Guitar saturation is intentional; listen for mix balance and unwanted noise.`:'Full-scale samples were detected. Listen carefully for unintended clipping before accepting this mix.';
     $('channels').innerHTML=`<table><thead><tr><th>Channel</th><th>Peak</th><th>RMS</th><th>Full-scale samples</th></tr></thead><tbody>${metrics.channels.map((c,i)=>`<tr><td>${i?'Right':'Left'}</td><td>${showDB(db(c.peak))}</td><td>${showDB(db(c.rms))}</td><td>${c.nearFullScale}</td></tr>`).join('')}</tbody></table>`;
@@ -120,6 +122,8 @@ async function renderSection() {
 
 function updateLayers(){
   const survival=$('track').value==='survival';
+  $('section').disabled=$('track').value==='wasted';
+  $('render').textContent=$('track').value==='wasted'?'RENDER FINAL WIPEOUT':'RENDER 8 BARS';
   $('intensity').disabled=!['race','survival'].includes($('track').value);
   const labels=survival?['Storm opening','Two minutes / rising urgency','Four minutes / full urgency']:['Normal racing','Combo boost','Final stretch + boost'];
   [...$('intensity').options].forEach((option,index)=>{option.textContent=labels[index];});

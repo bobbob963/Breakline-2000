@@ -4,6 +4,7 @@ import { createStormBarrels, resolveBarrelCamera } from './barrel-wave.js';
 import { stormDifficulty } from './storm-waves.js';
 import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
+import { createWastedEyeAnchor, sampleWastedCamera } from './wasted-camera.js';
 import { createRaceWorld } from './race-world.js';
 import { createBoardEffects } from './board-effects.js';
 import { createSurfHazardRenderer } from './surf-hazard-render.js';
@@ -100,6 +101,8 @@ export class SurfWorld {
   }
   toggleQuality() { this.retro = !this.retro; this.resize(); return this.retro; }
   setProfile(profile) {
+    this.endWastedView();
+    this.lastLiveEye = null;
     this.profile = profile;
     this.boardEffects.setProfile(profile);
     this.raceWorld.setProfile(profile);
@@ -107,6 +110,8 @@ export class SurfWorld {
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
   }
   setMode(mode) {
+    this.endWastedView();
+    this.lastLiveEye = null;
     this.mode = mode === 'park' ? 'park' : 'surf';
     this.weatherId=null;
     this.boardEffects.reset();
@@ -344,6 +349,7 @@ export class SurfWorld {
   }
   onEvent(event, game) {
     if(event.opponent)return;
+    if(event.type==='reset'){this.endWastedView();this.lastLiveEye=null;}
     if(event.type==='trick'||event.type==='airJump'||event.type==='timePower')this.boardEffects.trigger(event);
     if(['reset','start','bail','finish'].includes(event.type))this.boardEffects.reset();
     if (event.type === 'start') {
@@ -358,6 +364,53 @@ export class SurfWorld {
     if(event.type==='bail'&&game.mode==='park')this.parkCamera=createParkCameraState();
     if (['land', 'bail', 'jump'].includes(event.type)) this.spray(game.x, game.y, game.mode==='park'?game.z:-game.distance, event.type === 'bail' ? 1.7 : 1.2, 24);
     if (event.type === 'reset') { this.raceWorld.reset();for (const p of this.particles) { p.life = 0; p.mesh.visible = false; } }
+  }
+  captureLiveEye(game) {
+    if (this.wastedView || game.phase !== 'running' || game.bailTime > 0) return;
+    const eye = this.surfer.head.localToWorld(new THREE.Vector3(0, .153, -.082));
+    const heading = game.mode === 'park' ? game.heading || 0 : 0;
+    this.lastLiveEye = createWastedEyeAnchor({ eye,
+      forward: { x: -Math.sin(heading), y: 0, z: -Math.cos(heading) },
+      up: game.pipeRide ? game.rideUp : undefined, fov: this.camera.fov });
+  }
+  startWastedView(game = {}) {
+    if (this.wastedView) return false;
+    // Normally captured one frame before the final impact. The safe fallback
+    // also handles a death triggered before the first live frame is rendered.
+    const heading = game.mode === 'park' ? game.heading || 0 : 0;
+    const anchor = this.lastLiveEye || createWastedEyeAnchor({
+      eye: { x: game.x, y: Number.isFinite(game.y) ? game.y + 1.5 : 1.5,
+        z: game.mode === 'park' ? game.z : -game.distance },
+      forward: { x: -Math.sin(heading), y: 0, z: -Math.cos(heading) }, fov: this.camera.fov });
+    this.wastedView = { anchor, frame: { phase: 'first-person', elapsed: 0 },
+      saved: { position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone(),
+        up: this.camera.up.clone(), look: this.lookAt.clone(), fov: this.camera.fov, near: this.camera.near,
+        rigVisible: this.surfer.rig.visible, riderVisible: this.surfer.rider.visible } };
+    this.applyWastedView();
+    return true;
+  }
+  updateWastedView(frame) {
+    if (this.wastedView) this.wastedView.frame = { ...frame };
+  }
+  applyWastedView() {
+    if (!this.wastedView) return;
+    const frame = sampleWastedCamera(this.wastedView.anchor, this.wastedView.frame, { reducedMotion: this.reducedMotion });
+    // The normal update still poses the rig. Hide the whole local player so
+    // neither the blinking body nor a detached board can cross the eye lens.
+    this.surfer.rig.visible = false;
+    this.camera.position.copy(frame.position); this.lookAt.copy(frame.look); this.camera.up.copy(frame.up);
+    this.camera.fov = frame.fov; this.camera.near = frame.near;
+    this.camera.updateProjectionMatrix(); this.camera.lookAt(this.lookAt);
+  }
+  endWastedView() {
+    if (!this.wastedView) return false;
+    const { saved } = this.wastedView;
+    this.camera.position.copy(saved.position); this.camera.quaternion.copy(saved.quaternion);
+    this.camera.up.copy(saved.up); this.lookAt.copy(saved.look);
+    this.camera.fov = saved.fov; this.camera.near = saved.near; this.camera.updateProjectionMatrix();
+    this.surfer.rig.visible = saved.rigVisible; this.surfer.rider.visible = saved.riderVisible;
+    this.wastedView = null;
+    return true;
   }
   update(dt, game) {
     const attract = game.phase === 'ready';
@@ -437,6 +490,7 @@ export class SurfWorld {
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
     s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,cutbackDirection:game.cutbackDirection||1});
     s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
+    this.captureLiveEye(game);
     const ground=isPark?(surface?.height??parkHeight(x,z)):contactOcean?alignSurfRiderToOcean(x,waveHeight(x,z,t),z,t,oceanZ,contactBarrel):waveHeight(x,z,t);
     this.shadow.position.set(x, ground + .055, z);
     this.shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - ground) * .07) : 1);
@@ -489,6 +543,7 @@ export class SurfWorld {
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
+    this.applyWastedView();
     this.renderer.render(this.scene, this.camera);
   }
   boardScreenOrigin() {
@@ -499,6 +554,7 @@ export class SurfWorld {
     return {x:rect.left+(point.x+1)*rect.width/2,y:rect.top+(1-point.y)*rect.height/2};
   }
   dispose() {
+    this.endWastedView();
     this.resizeObserver.disconnect();
     this.raceWorld.dispose();
     this.boardEffects.dispose();
