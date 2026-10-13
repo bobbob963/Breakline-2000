@@ -2,6 +2,7 @@
 import { surfRules } from './session-modes.js';
 import { findComboAnimation } from './combo-animations.js';
 import { getRewardBoard } from './board-rewards.js';
+import { sanitizeResolvedAdminStats } from './admin-settings.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,barrelCrossSection,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 export { SURF_RULES } from './session-modes.js';
 export { waveHeight,waveCrest } from './storm-waves.js';
@@ -56,14 +57,35 @@ export class SurfGame {
   start() { this.reset(); this.phase = 'running'; this.onEvent({ type: 'start' }); }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
+  setAdminStats(value) {
+    this.adminStats=sanitizeResolvedAdminStats(value);
+    this.refreshAdminBoard();
+    // Editing stats/equipment during a flight never refills extra jumps.
+    if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
+    return this.adminStats;
+  }
+  get characterStats() {return this.adminStats?.active?this.adminStats.character:null;}
+  get jumpPowerMultiplier() {return this.characterStats?.jumpPower??1;}
+  get accelerationMultiplier() {return this.adminStats?.active?this.adminStats.board.acceleration:1;}
+  get comboWindow() {return this.characterStats?.comboWindow??COMBO_WINDOW;}
+  refreshAdminBoard() {
+    if(!this.adminStats?.active){this._adminBoardDefinition=null;return;}
+    const board=this.adminStats.board;
+    this._adminBoardDefinition={...getRewardBoard(this.rewardBoard),
+      baseSpeedMultiplier:board.baseSpeed,trickPointsMultiplier:this.adminStats.character.scoreMultiplier,
+      boostPowerMultiplier:board.boostPower,boostDurationMultiplier:board.boostDuration,
+      popRecoveryMultiplier:board.popRecovery,airJumps:board.extraJumps,
+      glideGravityMultiplier:board.glideGravity,glideFallSpeed:board.glideFallSpeed};
+  }
   setRewardBoard(id) {
     this.rewardBoard=getRewardBoard(id)?.id||null;
+    this.refreshAdminBoard();
     // Changing equipment cannot refill an extra jump during an existing flight.
     if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
     return this.rewardBoard;
   }
-  get rewardBoardDefinition() {return getRewardBoard(this.rewardBoard);}
-  get baseSpeedMultiplier() {return this.rewardBoardDefinition?.baseSpeedMultiplier||1;}
+  get rewardBoardDefinition() {return this.adminStats?.active?this._adminBoardDefinition:getRewardBoard(this.rewardBoard);}
+  get baseSpeedMultiplier() {return this.rewardBoardDefinition?.baseSpeedMultiplier??1;}
   get glideEligible() {
     return (this.phase==='running'||this.phase==='paused')&&this.airborne&&this.bailTime<=0&&
       !this.pipeRide&&!this.grinding&&!this.lipMove&&(this.rewardBoardDefinition?.glideFallSpeed||0)>0;
@@ -72,6 +94,7 @@ export class SurfGame {
   // second jump immediately retract the wings, including between render frames.
   get gliding() {return this.glideEligible&&this.vy<0;}
   stepAirVertical(dt,gravity) {
+    gravity*=this.characterStats?.gravity??1;
     if(!this.glideEligible){this.vy-=gravity*dt;return this.vy*dt;}
     let travel=0;
     if(this.vy>0){
@@ -90,7 +113,7 @@ export class SurfGame {
     this.vy=Math.max(-terminal,velocity-fallGravity*dt);
     return travel;
   }
-  get popRecoveryDuration() {return POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);}
+  get popRecoveryDuration() {return POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier??1);}
   get popCooldown() {return this.popRecovery;}
   get airJumpReady() {
     return this.phase==='running'&&!(this.countdownRemaining>0)&&this.airborne&&this.airtime>=.12&&
@@ -102,7 +125,7 @@ export class SurfGame {
     this.airJumpsUsed++;
     // Add lift in the same flight: never erase an unfinished trick, reset its
     // combo or turn this into another race-boost award opportunity.
-    this.vy=Math.min(18,Math.max(6.2,this.vy+2.2));this.charge=0;
+    this.vy=Math.min(18*this.jumpPowerMultiplier,Math.max(6.2*this.jumpPowerMultiplier,this.vy+2.2*this.jumpPowerMultiplier));this.charge=0;
     if(this.mode==='surf'&&this.airLaunchSource==='flat')this.airLaunchSource='sky';
     this.onEvent({type:'airJump',rewardBoard:this.rewardBoard,vfx:'wind'});
     return true;
@@ -124,11 +147,11 @@ export class SurfGame {
   addCombo(name, points, isTrick = false) {
     const repeats = this.repetitions[name] || 0;
     this.repetitions[name] = repeats + 1;
-    const rewardMultiplier=isTrick?(this.rewardBoardDefinition?.trickPointsMultiplier||1):1;
+    const rewardMultiplier=isTrick?(this.rewardBoardDefinition?.trickPointsMultiplier??1):1;
     this.comboBase += Math.round(points * Math.max(0.25, 1 - repeats * 0.2)*rewardMultiplier);
     if (isTrick) { this.multiplier = Math.min(8, this.multiplier + 1); this.pendingTricks++; }
     this.comboNames.push(name);
-    this.comboTime = COMBO_WINDOW;
+    this.comboTime = this.comboWindow;
   }
   bank() {
     // Airborne points must be landed before they can be banked.
@@ -148,7 +171,7 @@ export class SurfGame {
     const lost = this.comboBase * this.multiplier;
     this.clearCombo(); this.trick = null; this.airborne = false;
     this.charge = 0; this.vy = 0; this.bailTime = 1.35; this.speed = 8;
-    this.popRecovery=POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);this.cutbackLaunchTime=0;this.airJumpsUsed=0;
+    this.popRecovery=POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier??1);this.cutbackLaunchTime=0;this.airJumpsUsed=0;
     if(this.barrelRun)this.barrelRun.bailed=true;
     if(this.barrel)this.barrel.inside=false;
     this.rotation = 0; this.flipRotation = 0; this.boardRotation = 0;this.rollRotation=0;this.cutback=0;this.cutbackActive=false; this.wipeouts++;
@@ -162,7 +185,7 @@ export class SurfGame {
     this.lastJump = this.elapsed;
     this.airLaunchSource=this.launchSource;this.launchTricks=0;this.popRecovery=this.popRecoveryDuration;this.airJumpsUsed=0;
     this.airborne = true; this.airtime = 0; this.trick = null;
-    this.vy=this.airLaunchSource==='flat'?2.2+this.charge*.4:(this.airLaunchSource==='lip'?8.2:7.6)+this.charge*2.5;
+    this.vy=(this.airLaunchSource==='flat'?2.2+this.charge*.4:(this.airLaunchSource==='lip'?8.2:7.6)+this.charge*2.5)*this.jumpPowerMultiplier;
     this.cutbackLaunchTime=0;
     this.y += 0.06; this.charge = 0; this.rotation = 0; this.flipRotation = 0; this.boardRotation = 0;this.rollRotation=0;
     this.onEvent({ type: 'jump',source:this.airLaunchSource }); return true;
@@ -171,6 +194,7 @@ export class SurfGame {
     if (!Object.hasOwn(TRICKS,type) || this.phase !== 'running' || !this.airborne || this.trick || this.bailTime > 0) return false;
     if(this.mode==='surf'&&this.airLaunchSource==='flat')return false;
     this.trick = { type, age: 0, ...TRICKS[type] };
+    this.trick.duration/=this.characterStats?.trickSpeed??1;
     const animation = this.comboBase > 0 ? findComboAnimation(this.lastCompletedTrickType, type) : null;
     const variation = animation ? { comboAnimation:animation.id, comboAnimationName:animation.name } : {};
     Object.assign(this.trick, variation);
@@ -192,7 +216,7 @@ export class SurfGame {
   resolveLandingTrick() {
     this.airJumpsUsed=0;
     if(!this.trick)return {landed:true,assisted:false};
-    const grace=Math.min(LANDING_GRACE,this.trick.duration*.2);
+    const grace=this.characterStats?this.characterStats.landingGrace:Math.min(LANDING_GRACE,this.trick.duration*.2);
     if(this.trick.duration-this.trick.age>grace+1e-8){this.bail('UNFINISHED TRICK');return {landed:false,assisted:false};}
     // Finish one nearly complete move exactly once. It is never banked in air
     // and a grossly incomplete move still loses the active combo.
@@ -241,10 +265,12 @@ export class SurfGame {
     // with a 50% stronger boost never multiplies that boost a second time.
     const baseSpeed=((input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5)*this.baseSpeedMultiplier;
     const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : baseSpeed+this.forwardSpeedBonus)*(this.cutbackActive?.72:1);
-    const previousSpeed = this.speed, decay = Math.exp(-dt * 1.7);
+    const acceleration=1.7*this.accelerationMultiplier;
+    const previousSpeed = this.speed, decay = Math.exp(-dt * acceleration);
     this.speed = targetSpeed + (previousSpeed - targetSpeed) * decay;
-    this.distance += targetSpeed * dt + (previousSpeed - targetSpeed) * (1 - decay) / 1.7;
-    const lateral=this.bailTime>0?0:this.cutbackActive?this.cutbackDirection*(6+7*this.cutback)+steering*2:this.airborne?steering*(input.brake?3.2:8)+this.current*.3:steering*10+this.current;
+    this.distance += targetSpeed * dt + (previousSpeed - targetSpeed) * (1 - decay) / acceleration;
+    const control=steering*(this.airborne?(this.characterStats?.airControl??1):(this.characterStats?.steering??1));
+    const lateral=this.bailTime>0?0:this.cutbackActive?this.cutbackDirection*(6+7*this.cutback)+control*2:this.airborne?control*(input.brake?3.2:8)+this.current*.3:control*10+this.current;
     this.vx += (lateral-this.vx)*(1-Math.exp(-dt*(this.airborne?4:7)));
     this.x += this.vx * dt;
     if (this.x < MIN_X || this.x > MAX_X) {

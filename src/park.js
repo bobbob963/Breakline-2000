@@ -421,7 +421,7 @@ export class WaveParkGame extends SurfGame {
     this.airborne = true;
     this.airtime = 0;
     this.trick = null;
-    this.vy = velocity;
+    this.vy = velocity*this.jumpPowerMultiplier;
     this.y += 0.045;
     this.charge = 0;
     this.rotation = 0;
@@ -479,15 +479,15 @@ export class WaveParkGame extends SurfGame {
       const pushing=input.pump||(!this.airborne&&!this.cutbackActive&&input.jump);
       const groundTurn=1.65+.55*(1-clamp((this.speed-3.5)/11.5,0,1));
       if(this.cutbackActive)this.updateCutback(dt);
-      else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : groundTurn) * dt;
+      else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88*(this.characterStats?.airControl??1) : groundTurn*(this.characterStats?.steering??1)) * dt;
       const targetSpeed = active ? (input.brake ? 3.5 : (pushing ? 23.5 : 15)*this.baseSpeedMultiplier+this.forwardSpeedBonus)*(this.cutbackActive?.72:1) : 3;
       // Crouching pumps the board toward the same limit as W. Let earned
       // momentum coast through a flight/landing instead of braking toward cruise.
       const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15*this.baseSpeedMultiplier+this.forwardSpeedBonus;
-      const acceleration=input.brake?3.6:coasting?(this.airborne?.10:.35):1.5;
+      const acceleration=(input.brake?3.6:coasting?(this.airborne?.10:.35):1.5)*this.accelerationMultiplier;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * acceleration));
       const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:14));
-      if(this.rampReturn)this.updateRampReturn(dt,steering);
+      if(this.rampReturn)this.updateRampReturn(dt,steering*(this.characterStats?.airControl??1));
       else {
         // A ramp pop redirects some speed upward. Keep that short climbing
         // portion controlled instead of accelerating into the face again.
@@ -674,15 +674,15 @@ export class WaveParkGame extends SurfGame {
       ride.angle-=normalized;this.applyPipeRide();this.endPipeRide();return;
     }
     const targetSpeed=input.brake?3:(input.pump?11:8.5)*this.baseSpeedMultiplier;
-    this.speed+=(targetSpeed-this.speed)*(1-Math.exp(-dt*4));
-    const angular=ride.releasePending?-Math.sign(normalized)*2.4:((input.right?1:0)-(input.left?1:0))*ride.dir*(input.pump?2.6:2.25);
+    this.speed+=(targetSpeed-this.speed)*(1-Math.exp(-dt*4*this.accelerationMultiplier));
+    const angular=ride.releasePending?-Math.sign(normalized)*2.4:((input.right?1:0)-(input.left?1:0))*ride.dir*(input.pump?2.6:2.25)*(this.characterStats?.steering??1);
     const change=ride.releasePending?Math.sign(angular)*Math.min(Math.abs(angular*dt),Math.abs(normalized)):angular*dt;
     ride.angle+=change;
     ride.local=clamp(ride.local+ride.dir*this.speed*dt,-endLimit,endLimit);
     const before={x:this.x,y:this.y,z:this.z};
     this.applyPipeRide();
     this.vx=(this.x-before.x)/dt;this.vy=(this.y-before.y)/dt;this.vz=(this.z-before.z)/dt;
-    this.comboTime=3.8;
+    this.comboTime=this.comboWindow;
     if(Math.abs(ride.angle-ride.cycleStart)>=Math.PI*2-1e-8) {
       ride.cycleStart+=Math.sign(ride.angle-ride.cycleStart)*Math.PI*2;
       this.pipeLoops++;this.addCombo('FULL PIPE LOOP',850,true);
@@ -704,7 +704,7 @@ export class WaveParkGame extends SurfGame {
 
   startLipMove(ramp) {
     this.cancelCutback();
-    this.lipMove={ramp,age:0,duration:.76,progress:0,x:this.x,y:this.y,z:this.z,heading:this.heading,speed:this.speed};
+    this.lipMove={ramp,age:0,duration:.76/(this.characterStats?.trickSpeed??1),progress:0,x:this.x,y:this.y,z:this.z,heading:this.heading,speed:this.speed};
     this.lipGrab=0;this.vx=0;this.vz=0;this.vy=0;this.speed=0;this.charge=0;
     this.onEvent({type:'lipStart',id:ramp.id});
   }
@@ -715,7 +715,7 @@ export class WaveParkGame extends SurfGame {
     this.x=move.x-Math.sin(move.ramp.rotation)*arc*.3;this.z=move.z-Math.cos(move.ramp.rotation)*arc*.3;
     this.y=parkHeight(this.x,this.z)+arc*.7;
     this.heading=move.heading+Math.PI*smooth;this.lipGrab=arc;
-    this.comboTime=3.8;
+    this.comboTime=this.comboWindow;
     if(t>=1) {
       this.lipMove=null;this.lipGrab=0;this.rampCooldown=1.1;
       this.speed=Math.max(8,move.speed*.7);this.y=parkHeight(this.x,this.z);
@@ -762,7 +762,7 @@ export class WaveParkGame extends SurfGame {
       this.faceIntoRamp(rail.rampId);this.grinding=null;this.railCooldown=1;
       this.launch(2.6,'COPING DROP-IN',160);return;
     }
-    this.speed += ((input.pump ? 17 : 11)*this.baseSpeedMultiplier - this.speed) * (1 - Math.exp(-dt * 2));
+    this.speed += ((input.pump ? 17 : 11)*this.baseSpeedMultiplier - this.speed) * (1 - Math.exp(-dt * 2*this.accelerationMultiplier));
     grind.local += grind.dir * this.speed * dt;
     grind.age += dt;
     this.heading = rail.rotation + (grind.dir < 0 ? Math.PI : 0);
@@ -771,7 +771,7 @@ export class WaveParkGame extends SurfGame {
     this.x = rail.x - Math.sin(rail.rotation) * grind.local;
     this.z = rail.z - Math.cos(rail.rotation) * grind.local;
     this.y = railTopHeight(rail,grind.local);
-    this.comboTime = 3.8;
+    this.comboTime = this.comboWindow;
     if (Math.floor(grind.age / 0.3) > grind.ticks) {
       grind.ticks++;
       this.comboBase += 60;

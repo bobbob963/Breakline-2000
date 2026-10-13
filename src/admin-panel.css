@@ -1,0 +1,54 @@
+.admin-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:#080d18dc;backdrop-filter:blur(6px);color:#e8e6d4;font-family:Arial,Helvetica,sans-serif}
+.admin-overlay[hidden],.admin-overlay [hidden]{display:none!important}
+.admin-card{width:min(1080px,100%);height:min(850px,100%);display:flex;flex-direction:column;border:2px solid #829493;box-shadow:8px 8px 0 #0009;background:#18242d;overflow:hidden}
+.admin-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-shrink:0;padding:19px 25px 17px;border-bottom:3px solid #d9bd5a;background:repeating-linear-gradient(-35deg,#243039 0 25px,#1e2933 25px 50px)}
+.admin-kicker{margin:0 0 5px;color:#d5bf78;font:bold 10px/1.5 var(--mono,'Courier New',monospace);letter-spacing:2px}
+.admin-heading h2{font:italic 36px/1.06 var(--display,Impact,sans-serif);letter-spacing:1px;margin:0;color:#f0ebd6;text-shadow:2px 2px #080d13}
+.admin-close{width:37px;height:37px;flex-shrink:0;background:#17232c;border:1px solid #829493;color:#f0ebd6;font:25px Arial,sans-serif}
+.admin-form{display:flex;flex-direction:column;min-height:0;flex:1}
+.admin-scroll{min-height:0;overflow:auto;padding:20px 25px 24px;overscroll-behavior:contain;scrollbar-color:#789794 #18252d;scrollbar-width:thin}
+.admin-intro{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:28px;margin-bottom:20px}
+.admin-intro>p:first-child{margin:0;color:#bdc9c4;font-size:13px;line-height:1.5}
+.admin-enabled{display:flex;gap:10px;align-items:center;padding:11px 14px;background:#263e3e;border:1px solid #8fbdb2;color:#d7ead2;font:bold 11px var(--mono,'Courier New',monospace);letter-spacing:.5px;cursor:pointer}
+.admin-enabled input{width:17px;height:17px;margin:0;accent-color:#eac963;cursor:pointer}
+.admin-enabled-note{grid-column:1/-1;margin:8px 0 0;font:10px/1.5 var(--mono,'Courier New',monospace);color:#93aaa8}
+.admin-columns{display:grid;grid-template-columns:1fr 1fr;gap:25px}
+.admin-stat-section{border:1px solid #617a79;background:#13232b}
+.admin-section-heading{padding:13px 16px;background:#23353b;border-bottom:1px solid #617a79}
+.admin-section-heading>span{font:bold 9px var(--mono,'Courier New',monospace);letter-spacing:1.5px;color:#b0c2b8}
+.admin-section-heading h3{font:italic 25px/1.1 var(--display,Impact,sans-serif);margin:5px 0 0;color:#e6d078;letter-spacing:.7px}
+.admin-stat{padding:12px 16px 11px;border-top:1px solid #6b88812a}
+.admin-stat:first-child{border-top:0}
+.admin-stat>label{display:flex;align-items:baseline;justify-content:space-between;font:bold 12px/1.4 var(--mono,'Courier New',monospace);color:#e0e4d8;gap:8px}
+.admin-stat>label small{font:10px var(--mono,'Courier New',monospace);color:#9cbdb5}
+.admin-stat-controls{display:flex;align-items:center;gap:17px;margin-top:8px}
+.admin-stat input[type=range]{flex:1;min-width:0;height:20px;margin:0;accent-color:#d9bf65;cursor:pointer}
+.admin-stat input[type=number]{width:84px;flex-shrink:0;border:1px solid #7caaa4;background:#0e1a23;color:#eadea6;padding:6px 5px 6px 9px;font:bold 14px var(--mono,'Courier New',monospace);border-radius:0}
+.admin-stat input[type=number]:invalid{border-color:#ec8065;color:#ffb595}
+.admin-stat p{color:#9eb3ae;font-size:11px;line-height:1.45;margin:6px 0 0;min-height:16px}
+.admin-overlay input:focus-visible,.admin-overlay button:focus-visible{outline:2px solid #f1d273;outline-offset:3px}
+.admin-tuning-off .admin-stat-section{border-color:#526466}
+.admin-tuning-off .admin-stat input[type=range]{accent-color:#809994}
+.admin-default-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:16px 0 22px}
+.admin-text-button{padding:9px 11px;border:1px solid #819991;background:#24373b;color:#dbdec7;font:bold 10px var(--mono,'Courier New',monospace);letter-spacing:.5px}
+.admin-default-row>span{font:10px/1.4 var(--mono,'Courier New',monospace);color:#a7bbb2}
+.admin-save-tools{border:1px solid #6d8580;background:#1d2b30}
+.admin-save-tools>.admin-section-heading{background:#2a3738}
+.admin-save-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:16px}
+.admin-save-grid button{display:flex;width:100%;align-items:center;justify-content:space-between;text-align:left;padding:13px 14px;font:italic 21px var(--display,Impact,sans-serif);letter-spacing:.6px}
+.admin-unlock{background:#b9c997;color:#19292b;border:1px solid #ebeed0}
+.admin-reset{background:#492d2b;color:#edc2a8;border:1px solid #b3725d}
+.admin-save-grid p{color:#b8c3b9;font-size:11px;line-height:1.5;margin:8px 1px 0}
+.admin-reset-confirm{margin:0 16px 16px;padding:16px;border:1px solid #d68968;background:#3c2927}
+.admin-reset-confirm>strong{font:italic 22px var(--display,Impact,sans-serif);color:#f2bc93}
+.admin-reset-confirm p{font-size:12px;line-height:1.5;color:#e3c0ae;margin:8px 0 14px}
+.admin-reset-confirm>div{display:flex;gap:12px;flex-wrap:wrap}
+.admin-reset-confirm button{padding:11px 13px;border:1px solid #bd795d;background:#b6503c;color:#fff0d7;font:bold 11px var(--mono,'Courier New',monospace)}
+.admin-reset-confirm button:last-child{background:#24363a;border-color:#7daba5;color:#d8e5d1}
+.admin-footer{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:14px 25px;background:#152129;border-top:2px solid #7d9690;flex-shrink:0}
+.admin-status{font:11px/1.5 var(--mono,'Courier New',monospace);color:#b2d4bb;margin:0;max-width:520px}
+.admin-status.is-error{color:#ffb393}
+.admin-footer>div{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.admin-cancel{padding:13px 11px;color:#b6c8be;background:transparent;font:bold 10px var(--mono,'Courier New',monospace)}
+.admin-apply{padding:12px 17px;background:#e8c65d;border:1px solid #fff0a0;color:#17232a;font:italic 23px var(--display,Impact,sans-serif);letter-spacing:.5px;white-space:nowrap}
+.admin-apply span{margin-left:16px;font-size:17px}

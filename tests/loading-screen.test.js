@@ -121,7 +121,7 @@ test('paint scheduling finishes even when a background tab suspends animation fr
 
 test('production global input callbacks ignore keys before game construction', () => {
   const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-  const start = source.indexOf("window.addEventListener('keydown'");
+  const start = source.indexOf('keydownHandler=createKeydownHandler(');
   const end = source.indexOf("$('start').addEventListener", start);
   assert.ok(start >= 0 && end > start, 'the production input registration block exists');
   const callbacks = new Map();
@@ -131,6 +131,7 @@ test('production global input callbacks ignore keys before game construction', (
     window: { addEventListener: register },
     document: { addEventListener: register, hidden: true },
     createKeydownHandler,
+    keydownHandler:null,wasted:{active:false},adminPanel:{isOpen:false},adminHomeScreen:()=>false,openAdmin:bootAction,
     bootReady: false, game: undefined, workshopMode: null, modalMode: null, input: {}, clearInput() {},
     toggleSound:bootAction,closeWorkshop:bootAction,cycleCharacter:bootAction,closeModal:bootAction,
     startRun:bootAction,restartRun:bootAction,pause:bootAction,tryTrick:bootAction,toast:bootAction,

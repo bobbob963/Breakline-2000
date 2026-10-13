@@ -10,6 +10,7 @@ import { createTournamentGame, sanitizeTournamentProgress, nextTournamentLadder,
 import { COMBO_ANIMATIONS } from '../src/combo-animations.js';
 import { sanitizeTimeTrialProgress,timeTrialsUnlocked } from '../src/time-trial-progress.js';
 import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
+import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const noOp = () => {};
@@ -21,6 +22,7 @@ function block(first, last) {
 function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }, trials = null) {
   const writes = [], visual = [], previews = [], menuPreviews = [], updates = [];
   const context = {
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
     trialProgress:sanitizeTimeTrialProgress(trials),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
@@ -30,6 +32,7 @@ function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 
     menuSurfer: { setProfile: profile => menuPreviews.push({ ...profile }) },
     updateCustomizationChoices: () => updates.push(true),
   };
+  vm.runInNewContext(block('function applyPlayerSettings(', 'function adminHomeScreen('), context);
   vm.runInNewContext(block('function cosmeticAvailable(', 'if(!cosmeticAvailable(OUTFITS'), context);
   vm.runInNewContext(block('function setProfile(', 'function openWorkshop('), context);
   return { context, writes, visual, previews, menuPreviews, updates };
@@ -69,7 +72,7 @@ test('boot restoration strips a locked board but restores an earned board and mi
       [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
       ['breakline99-trials-v1', JSON.stringify(scenario.trials ?? null)],
     ]);
-    const context = { validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
+    const context = { ADMIN_STORAGE_KEY,sanitizeAdminSettings,validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
     vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
     assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
     if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);
@@ -158,11 +161,12 @@ test('the real HUD shows the active perk, only prompts an eligible Skybound jump
   };
   const game = new SurfGame(); game.setRewardBoard('sky'); game.start();
   const context = {
+    adminSettings:sanitizeAdminSettings(null),
     $, game, profile: validateProfile({ rewardBoard: 'sky' }), getRewardBoard, selectedMode: 'surf', best: 0,
     clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
     COMBO_WINDOW, COMBO_ANIMATIONS, special: { value: 0, ready: false }, completedGoals: () => [false, false, false], challengeFlags: [], toast: noOp,
   };
-  vm.runInNewContext(block('function updateHud(', "window.addEventListener('keydown'"), context);
+  vm.runInNewContext(block('function updateHud(', 'adminPanel=createAdminPanel('), context);
   context.updateHud(); assert.match($('reward-ride-status').textContent, /SKYBOUND/);
   assert.doesNotMatch($('pop-label').textContent, /SECOND AIR/);
   game.jump(); for (let i = 0; i < 20; i++) game.update(1 / 120);

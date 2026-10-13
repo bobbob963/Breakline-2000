@@ -8,6 +8,7 @@ import { SpecialMeter } from '../src/special.js';
 import { createKeydownHandler } from '../src/keyboard.js';
 import { validateProfile } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked, REWARD_BOARD_ORDER } from '../src/board-rewards.js';
+import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 import {
   createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
   TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength,
@@ -36,6 +37,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     return elements.get(id);
   };
   const context = {
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,
     $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
     SurfGame, WaveParkGame, tournamentProgress: sanitizeTournamentProgress(progress),
@@ -50,7 +52,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     isParkMode: () => context.game.mode === 'park', showResults: () => { context.modalMode = 'results'; },
   };
   vm.runInNewContext([
-    'clearInput', 'onEvent', 'makeGame', 'startRun', 'goHome', 'openModal', 'closeModal',
+    'clearInput', 'applyPlayerSettings', 'onEvent', 'makeGame', 'startRun', 'goHome', 'openModal', 'closeModal',
     'pause', 'ladderRows', 'resetCurrentLadder', 'showLadder', 'closeWorkshop',
   ].map(productionFunction).join('\n'), context);
   context.makeGame();

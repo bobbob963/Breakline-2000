@@ -8,6 +8,7 @@ import { SurfGame, TRICKS, waveCrest, waveHeight } from '../src/game.js';
 import { createTournamentGame, sanitizeTournamentProgress, TOURNAMENT_RIVALS,nextTournamentLadder,selectTournamentLadder } from '../src/tournament.js';
 import { getRewardBoard } from '../src/board-rewards.js';
 import { surfRaceTrickInput } from '../src/surf-race.js';
+import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 
 function inputRoute(game) {
   const calls = [], state = { bootReady:true, workshopMode:null, modalMode:null, game, input:{} };
@@ -98,6 +99,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
   const noOp=()=>{},saved=[],calls=[];
   const element={classList:{add:noOp,remove:noOp},focus:noOp};
   const context={
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,
     game:null,tournamentProgress:sanitizeTournamentProgress(progress),createTournamentGame,sanitizeTournamentProgress,
     nextTournamentLadder,selectTournamentLadder,profile:{rewardBoard:null},
     selectedMode:'tournament',selectedParkStart:'filters',modalMode:null,workshopMode:null,bootReady:true,input:{},
@@ -107,6 +109,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
     onEvent(event){if(event.type==='finish'){context.tournamentProgress=context.game.getProgress();context.modalMode='results';}},
   };
   context.game=createTournamentGame(context.onEvent,context.tournamentProgress);
+  vm.runInNewContext(source.slice(source.indexOf('function applyPlayerSettings('),source.indexOf('function adminHomeScreen(')),context);
   vm.runInNewContext(source.slice(first,last),context);
   const handler=createKeydownHandler(()=>context,{
     startRun(){calls.push('startRun');context.startRun();},

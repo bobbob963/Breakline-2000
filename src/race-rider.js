@@ -9,7 +9,7 @@ export const RACE_POP_RECOVERY=1;
 export const RaceRider=Base=>class extends Base {
   reset(){super.reset();this.clearRaceBoost();this._boostAwardedForAir=true;this._nextRaceAir=2;}
   get forwardSpeedBonus(){return this.boostTime>0?this.boostSpeed:0;}
-  get popRecoveryDuration(){return RACE_POP_RECOVERY*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);}
+  get popRecoveryDuration(){return RACE_POP_RECOVERY*(this.rewardBoardDefinition?.popRecoveryMultiplier??1);}
   clearRaceBoost(){this.boostTime=0;this.boostDuration=0;this.boostSpeed=0;this.boostLevel=null;this.boostLabel='';this._pendingRaceBoost=null;}
   launch(...args){super.launch(...args);this.popRecovery=this.popRecoveryDuration;this._boostAwardedForAir=false;}
   jump(){
@@ -19,7 +19,7 @@ export const RaceRider=Base=>class extends Base {
       // Race water has enough lift for a basic trick from a short charged pop.
       // Ordinary Surf Session keeps its original lip/cutback requirement.
       if(this.mode==='surf'&&this.airLaunchSource==='flat'){
-        this.airLaunchSource='race-pop';this.vy=6.4+charge*2;
+        this.airLaunchSource='race-pop';this.vy=(6.4+charge*2)*this.jumpPowerMultiplier;
       }
     }
     return launched;
@@ -32,8 +32,8 @@ export const RaceRider=Base=>class extends Base {
     return landing;
   }
   awardRaceBoost({tricks}){
-    const combo=tricks>1,speed=(combo?Math.min(RACE_BOOST_MAX_SPEED,9+(tricks-2)*2):6)*(this.rewardBoardDefinition?.boostPowerMultiplier||1),
-      duration=(combo?Math.min(RACE_BOOST_MAX_DURATION,2.6+(tricks-2)*.5):2)*(this.rewardBoardDefinition?.boostDurationMultiplier||1);
+    const combo=tricks>1,speed=(combo?Math.min(RACE_BOOST_MAX_SPEED,9+(tricks-2)*2):6)*(this.rewardBoardDefinition?.boostPowerMultiplier??1),
+      duration=(combo?Math.min(RACE_BOOST_MAX_DURATION,2.6+(tricks-2)*.5):2)*(this.rewardBoardDefinition?.boostDurationMultiplier??1);
     this.boostSpeed=speed;this.boostTime=this.boostDuration=duration;
     this.boostLevel=combo?'combo':'trick';this.boostLabel=combo?'COMBO BOOST':'TRICK BOOST';this._pendingRaceBoost=null;
     this.onEvent({type:'raceBoost',tricks,combo,speed,duration});

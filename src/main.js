@@ -18,7 +18,7 @@ import { ALL_REWARD_BOARD_ORDER, TRIAL_REWARD_BOARD_ORDER, getRewardBoard, rewar
 import { createWastedSequence } from './wasted.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
-import { SurfGame, COMBO_WINDOW, MIN_X, MAX_X, waveCrest } from './game.js';
+import { SurfGame, MIN_X, MAX_X, waveCrest } from './game.js';
 import { WaveParkGame, PARK_BOUNDS } from './park.js';
 import { SpecialMeter } from './special.js';
 import { COMBO_ANIMATIONS } from './combo-animations.js';
@@ -30,6 +30,9 @@ import { MenuSurferPreview } from './menu-surfer.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { createLoadingScreen, paintLoadingStage } from './loading-screen.js';
 import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
+import { createAdminPanel } from './admin-panel.js';
+import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
+import { everythingUnlocked, persistAdminEntries, resetBreaklineSave } from './admin-save.js';
 
 const $=id=>document.getElementById(id);
 const loading=createLoadingScreen();
@@ -41,6 +44,7 @@ const clockText=n=>{const seconds=Math.max(0,Math.floor(Number.isFinite(n)?n:0))
 const read=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catch{return fallback;}};
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage is optional. */}};
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
+let adminSettings;try{adminSettings=sanitizeAdminSettings(JSON.parse(read(ADMIN_STORAGE_KEY,'null')));}catch{adminSettings=sanitizeAdminSettings(null);}
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm','tournament','trials'].includes(selectedMode))selectedMode='surf';
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v2',read('breakline99-tournament-v1','null'))));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
@@ -70,7 +74,7 @@ const audio=new ArcadeAudio();
 const input={left:false,right:false,pump:false,brake:false,jump:false,action:false,grind:false};
 const special=new SpecialMeter();
 const pressed=new Set();
-let world,game,preview,menuSurfer,parkMap,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let world,game,preview,menuSurfer,parkMap,adminPanel,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))||0),newBest=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
@@ -83,7 +87,22 @@ const modeInfo={
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread the rust tunnels and grind the old pipework.'},
 };
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
-function clearInput(){pressed.clear();for(const k in input)input[k]=false;}
+function clearInput(){pressed.clear();for(const k in input)input[k]=false;keydownHandler?.resetAdminSequence();}
+function applyPlayerSettings(){game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
+function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
+function openAdmin(){if(!adminHomeScreen())return;clearInput();adminPanel.open();}
+function applyAdminSettings(next){
+  const safe=sanitizeAdminSettings(next);
+  persistAdminEntries(localStorage,[[ADMIN_STORAGE_KEY,JSON.stringify(safe)]]);
+  adminSettings=safe;applyPlayerSettings();updateHud();
+}
+function giveEverything(){
+  const unlocked=everythingUnlocked(tournamentProgress,trialProgress);
+  persistAdminEntries(localStorage,[['breakline99-tournament-v2',JSON.stringify(unlocked.tournament)],['breakline99-trials-v1',JSON.stringify(unlocked.trials)]]);
+  tournamentProgress=unlocked.tournament;trialProgress=unlocked.trials;
+  clearInput();makeGame();updateModeMenu();updateCustomizationChoices();updateHud();
+}
+function fullReset(){resetBreaklineSave(localStorage);window.location.reload();}
 function syncInput(){for(const name in input)input[name]=[...pressed].some(code=>keyMap[code]===name);}
 function loadBest(){best=Math.max(0,Number(read(`breakline99-best-${selectedMode}`,selectedMode==='surf'?read('breakline99-best','0'):'0'))||0);}
 function saveBest(){if(!game)return;if(selectedMode==='storm'&&game.elapsed>bestSurvival){bestSurvival=game.elapsed;write('breakline99-survival-time',String(bestSurvival));}if(game.score<=best)return;best=game.score;newBest=true;write(`breakline99-best-${selectedMode}`,String(best));}
@@ -94,8 +113,8 @@ function onEvent(e){
   // never award the player special, replace player toasts or reset the camera.
   if(e.opponent)return;
   world?.onEvent(e,game);if(!(e.type==='finish'&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type);
-  if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000);saveBest();}
-  if(e.type==='trick')special.gain(.22);
+  if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000*(game.characterStats?.specialGain??1));saveBest();}
+  if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
   if(e.type==='bail'){special.bail();toast(e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
@@ -108,10 +127,10 @@ function onEvent(e){
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
   if(e.type==='barrelExit'){toast(`BARREL RIDE · +${fmt(e.points||0)}`);saveBest();}
   if(e.type==='start')toast(game?.isTimeTrial?`${game.trial.name} · BEAT ${trialTime(game.trial.timeLimit)}`:game?.isRace?`${game.rival.name} · FIRST TO THE FINISH`:isParkMode()?'THE WATERWORKS · DROP IN':'DROP IN!');
-  if(e.type==='airJump')toast('SKYBOUND · SECOND AIR!');
+  if(e.type==='airJump')toast(adminSettings.enabled?'CUSTOM AIR JUMP!':'SKYBOUND · SECOND AIR!');
   if(e.type==='finish'){saveBest();if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();showResults();}else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
 }
-function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);game.setRewardBoard(profile.rewardBoard);world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
   $('mode-trials').disabled=!timeTrialsUnlocked(tournamentProgress);
   $('trial-lock').textContent=timeTrialsUnlocked(tournamentProgress)?`${trialProgress.completedTrials}/12 cleared. Rewards every three.`:'Clear all five Rival ladders to unlock.';
@@ -158,18 +177,19 @@ function updateSoundLabel(){
 }
 async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?'on':'off';write('breakline99-sound',soundPreference);updateSoundLabel();}
 function startRun(kind='default'){
+  if(adminPanel?.isOpen)return;
   wasted.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
   if(game.isTimeTrial){
     if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game=createTimeTrialGame(onEvent,trialProgress);
-    game.setRewardBoard(profile.rewardBoard);game.retry();
+    applyPlayerSettings();game.retry();
   }else if(game.isTournament){
     if(kind!=='retry'&&game.complete&&(game.phase==='ready'||game.result==='win')){
       tournamentProgress=nextTournamentLadder(game.getProgress())||selectTournamentLadder(game.getProgress(),game.ladderIndex);
       write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));game=createTournamentGame(onEvent,tournamentProgress);
     }else if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game=createTournamentGame(onEvent,game.getProgress());
-    game.setRewardBoard(profile.rewardBoard);game.retry();
-  }else{game.setRewardBoard(profile.rewardBoard);game.start(selectedMode==='park'?selectedParkStart:undefined);}
+    applyPlayerSettings();game.retry();
+  }else{applyPlayerSettings();game.start(selectedMode==='park'?selectedParkStart:undefined);}
   world.setMode(game.mode);audio.setMode(game.mode);audio.setScene(game.isRace?'race':'ride');updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function restartRun(){startRun('retry');}
@@ -178,6 +198,7 @@ function goHome(){
   $('hud').classList.add('hidden');$('intro').classList.remove('hidden');document.body.classList.remove('playing');updateModeMenu();updateSoundLabel();$('start').focus({preventScroll:true});
 }
 function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
+  keydownHandler?.resetAdminSequence();
   $('modal').dataset.mode=mode;
   $('race-trials').classList.toggle('hidden',!game.isTimeTrial||!['pause','results'].includes(mode));
   $('race-ladders').classList.toggle('hidden',!game.isTournament||!['pause','results'].includes(mode));
@@ -200,7 +221,7 @@ function showHelp(){
   <span><kbd>B</kbd></span><span>Tweaked grab: tuck your knees, pull the surfboard to your side and raise the free arm.</span>
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
-  <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
+  <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
   ${game.isRace?`<span>SUN RINGS</span><span>Pass through each gold ring in order, then ${game.isTimeTrial?'beat the target time':'finish before your rival'}. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. ${game.isTimeTrial?'Missed ocean rings end the attempt. The timer stops while paused.':'There is no time limit.'}</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. ${game.isTimeTrial?'':'Rivals earn boosts with the same rules, so watch their tricks and boost trails. '}No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>`:''}
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
@@ -304,9 +325,10 @@ function setProfile(patch){
   const next=validateProfile({...profile,...patch});
   if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress,trialProgress))return false;
   if(!cosmeticAvailable(OUTFITS[next.outfit])||!cosmeticAvailable(BOARD_DESIGNS[next.boardDesign]))return false;
-  profile=next;write('breakline99-profile',JSON.stringify(profile));game.setRewardBoard(profile.rewardBoard);world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
+  profile=next;write('breakline99-profile',JSON.stringify(profile));applyPlayerSettings();world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
 }
 function openWorkshop(mode){
+  keydownHandler?.resetAdminSequence();
   if(game.phase==='running'){game.pause();clearInput();}
   workshopMode=mode==='board'?'board':'character';
   $('workshop').dataset.mode=workshopMode;
@@ -320,7 +342,7 @@ function openWorkshop(mode){
 }
 function closeWorkshop(){if(!workshopMode)return;$('workshop').classList.add('hidden');$('wardrobe').classList.add('hidden');workshopMode=null;$('start').focus({preventScroll:true});}
 function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast('RODEO AIR!');}}
-function tryPop(){if(game.jump())return;if(game.rewardBoard==='sky'&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE SECOND AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
+function tryPop(){if(game.jump())return;if(game.rewardBoardDefinition?.airJumps>0&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE EXTRA AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);
   $('timer').textContent=game.isTimeTrial?trialTime(game.time):clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&(!game.isRace||game.isTimeTrial)&&game.time<=20);
@@ -344,18 +366,18 @@ function updateHud(){
   $('pop-label').textContent=game.bailTime>0?'RECOVERING':game.airborne?'LAND TO RECOVER POP':game.lipMove?'FINISH LIP TURN':game.pipeRide&&!game.popReady?'RETURN TO PIPE FLOOR':popCooldown>0?`POP RECOVERY · ${popCooldown.toFixed(1)}s`:game.cutbackActive?(isParkMode()?'CUTBACK · TURNING':'CUTBACK · SETTING UP AIR'):isParkMode()?'POP READY':game.launchSource==='cutback'?`CUTBACK AIR · ${game.cutbackLaunchTime.toFixed(1)}s`:game.launchSource==='lip'?'LIP LAUNCH READY':'FIND LIP / CUT BACK';
   if(game.isRace&&game.countdownRemaining>0)$('pop-label').textContent='WAIT FOR GO · HOLD SPACE TO POP';
   else if(game.isRace&&game.popReady&&!game.airborne&&!game.pipeRide&&!game.lipMove&&!game.cutbackActive)$('pop-label').textContent='POP READY · LAND A TRICK TO BOOST';
-  $('pop-ready-bar').style.width=`${Math.max(0,1-popCooldown/game.popRecoveryDuration)*100}%`;
+  $('pop-ready-bar').style.width=`${game.popRecoveryDuration>0?Math.max(0,1-popCooldown/game.popRecoveryDuration)*100:100}%`;
   $('pop-status').classList.toggle('cooling',popCooldown>0);$('pop-status').classList.toggle('powered',powered&&game.popReady);
-  if(game.airJumpReady)$('pop-label').textContent='SKYBOUND · SPACE FOR SECOND AIR';
+  if(game.airJumpReady)$('pop-label').textContent=adminSettings.enabled?'SPACE FOR EXTRA AIR JUMP':'SKYBOUND · SPACE FOR SECOND AIR';
   const reward=getRewardBoard(profile.rewardBoard);
-  $('reward-ride-status').textContent=reward?`${reward.name} · ${reward.buffLabel}`:'';
-  $('reward-ride-status').classList.toggle('hidden',!reward);
+  $('reward-ride-status').textContent=adminSettings.enabled?`${reward?.name||'STANDARD BOARD'} · CUSTOM STATS`:reward?`${reward.name} · ${reward.buffLabel}`:'';
+  $('reward-ride-status').classList.toggle('hidden',!reward&&!adminSettings.enabled);
   $('charge-label').textContent=isParkMode()?'LOAD THE POP':game.launchSource==='cutback'?'LOAD CUTBACK AIR':game.launchSource==='lip'?'LOAD LIP LAUNCH':'FLAT HOP · FIND THE LIP';
   if(game.isRace)$('charge-label').textContent='LOAD THE POP · J THEN L FOR COMBO';
   $('charge-wrap').classList.toggle('hidden',game.charge<=.01||game.airborne||game.bailTime>0||popCooldown>0);$('charge-bar').style.width=`${game.charge*100}%`;
   $('combo').classList.toggle('hidden',!game.comboBase);$('combo-base').textContent=fmt(game.comboBase);$('multiplier').textContent=`×${game.multiplier}`;
   $('tricks').textContent=game.comboNames.slice(-4).join(' + ')+(game.trick?` + ${game.trick.name}…`:'');
-  $('combo-time').style.width=`${game.airborne||game.grinding||game.pipeRide||game.lipMove?100:Math.max(0,game.comboTime/COMBO_WINDOW*100)}%`;
+  $('combo-time').style.width=`${game.airborne||game.grinding||game.pipeRide||game.lipMove?100:Math.max(0,game.comboTime/game.comboWindow*100)}%`;
   $('combo-caption').textContent=game.pipeRide?'A / D TO LOOP · RELEASE E TO EXIT':game.lipMove?'GRAB · TURN · DROP BACK IN':game.airborne?'LAND IT!':game.grinding?'SPACE TO POP OUT':'SPACE TO LINK · ENTER TO BANK';
   const followups=COMBO_ANIMATIONS.filter(combo=>combo.sequence[0]===game.lastCompletedTrickType);
   if(game.trick?.comboAnimationName)$('combo-caption').textContent=`${game.trick.comboAnimationName} · LAND IT!`;
@@ -405,15 +427,17 @@ function updateHud(){
   }
 }
 
-window.addEventListener('keydown',createKeydownHandler(
-  ()=>({bootReady:bootReady&&!wasted.active,workshopMode,modalMode,game,input}),
-  {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,
+adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onClose:clearInput});
+keydownHandler=createKeydownHandler(
+  ()=>({bootReady:bootReady&&!wasted.active,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen}),
+  {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,openAdmin,
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
     hideWardrobe:()=>$('wardrobe').classList.add('hidden'),
     rotatePreview:delta=>preview?.rotate(delta),
     pressControl:code=>{pressed.add(code);syncInput();}}
-));
-window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
+);
+window.addEventListener('keydown',keydownHandler);
+window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||adminPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
 window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')pause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
 document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
@@ -478,5 +502,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}
