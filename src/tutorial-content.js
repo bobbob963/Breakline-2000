@@ -19,7 +19,7 @@ export const TUTORIAL_STEPS = Object.freeze([
       { keys: ['W'], label: 'Pump for speed', detail: 'The up arrow also pumps. Carry speed into your next move.' },
       { keys: ['S'], label: 'Brake / settle', detail: 'The down arrow also slows you. Use it to control a rough approach.' },
     ],
-    note: 'P or Esc pauses. R restarts your run. M switches sound on or off. The Controls button brings back the full key guide.',
+    note: 'P or Esc pauses. R restarts your run. M switches sound on or off. Hover over the top edge for the radio: choose any song, Shuffle, or Auto for session music. Its ? knob opens the full key guide.',
   },
   {
     id: 'air', chapter: 'AIR + CUTBACKS', title: 'EARN YOUR AIR.',

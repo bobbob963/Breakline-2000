@@ -175,7 +175,7 @@ test('the real HUD shows the active perk, only prompts an eligible Skybound jump
     clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
     COMBO_WINDOW, COMBO_ANIMATIONS, special: { value: 0, ready: false }, completedGoals: () => [false, false, false], challengeFlags: [], toast: noOp,
   };
-  vm.runInNewContext(block('function updateHud(', 'tutorial=createTutorial('), context);
+  vm.runInNewContext(block('function updateHud(', 'radio=createRadio('), context);
   context.updateHud(); assert.match($('reward-ride-status').textContent, /SKYBOUND/);
   assert.doesNotMatch($('pop-label').textContent, /SECOND AIR/);
   game.jump(); for (let i = 0; i < 20; i++) game.update(1 / 120);

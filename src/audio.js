@@ -12,6 +12,15 @@ export const MENU_BPM = 138;
 export const RACE_BPM = 152;
 export const SUNSET_BPM = 84;
 export const SURVIVAL_BPM = 164;
+export const RADIO_TRACKS = Object.freeze([
+  {id:'surf',title:SURF_TRACK,bpm:MUSIC_BPM},
+  {id:'menu',title:MENU_TRACK,bpm:MENU_BPM},
+  {id:'race',title:RACE_TRACK,bpm:RACE_BPM},
+  {id:'sunset',title:SUNSET_TRACK,bpm:SUNSET_BPM},
+  {id:'survival',title:SURVIVAL_TRACK,bpm:SURVIVAL_BPM},
+].map(Object.freeze));
+const radioTrack = id => RADIO_TRACKS.find(track => track.id === id);
+const musicScene = track => track === 'menu' || track === 'race' ? track : 'ride';
 const STEP = 60 / MUSIC_BPM / 4;
 const TOTAL_STEPS = 64 * 16;
 const MENU_STEP = 60 / MENU_BPM / 4;
@@ -28,7 +37,6 @@ export function resolveRideTrack({mode = 'surf', rulesId = 'surf', weatherId, is
   if (rulesId === 'storm') return 'survival';
   return rulesId === 'surf' && weatherId === 'sunset' ? 'sunset' : 'surf';
 }
-const rideTitle = track => track === 'survival' ? SURVIVAL_TRACK : track === 'sunset' ? SUNSET_TRACK : SURF_TRACK;
 
 // Soft ninth/seventh voicings and a spacious melody, written for this score.
 const SUNSET_CHORDS = [
@@ -180,15 +188,53 @@ const CHORUS = [
 export class ArcadeAudio {
   constructor() {
     this.enabled = false; this.ctx = null; this.mode = 'surf'; this.scene = 'ride';
-    this.trackName = SURF_TRACK; this.beat = 0; this.nextBeat = 0;
+    this.beat = 0; this.nextBeat = 0; this._selection = 'auto';
     this.active = false; this.voices = new Set(); this._token = 0; this._enabling = false;
     this._strings = new Map(); this._persistent = []; this._persistentSources = [];
-    this._sceneBeats = { ride: 0, menu: 0, race: 0 }; this._voiceScenes = new WeakMap();
+    this._trackBeats = {surf:0,menu:0,race:0,sunset:0,survival:0}; this._voiceScenes = new WeakMap();
     this.raceProgress = 0; this.raceBoost = 0;
     this.rideTrack = 'surf'; this.survivalIntensity = 0;
-    this._rideBeats = {surf:0,sunset:0,survival:0};
     this._wasted = false; this._wastedRevealed = false;
     this._wastedVoices = new Map(); this._wastedBus = null;
+  }
+
+  get selection() { return this._selection; }
+  get currentTrackId() { return this._selection === 'auto' ? this.scene === 'ride' ? this.rideTrack : this.scene : this._selection; }
+  get trackName() { return radioTrack(this.currentTrackId).title; }
+  get _musicScene() { return musicScene(this.currentTrackId); }
+
+  selectTrack(id = 'auto') {
+    if (id !== 'auto' && !radioTrack(id)) return false;
+    const previous = this.currentTrackId;
+    this._selection = id;
+    this._changeTrack(previous);
+    return true;
+  }
+
+  shuffleTrack(random = Math.random) {
+    const choices = RADIO_TRACKS.filter(track => track.id !== this.currentTrackId);
+    const value = random(), fraction = Number.isFinite(value) ? Math.max(0,Math.min(.999999999,value)) : 0;
+    const chosen = choices[Math.floor(fraction * choices.length)].id;
+    this.selectTrack(chosen);
+    return chosen;
+  }
+
+  _changeTrack(previous) {
+    const next = this.currentTrackId;
+    if (previous === next) return;
+    this._trackBeats[previous] = this.beat;
+    // Every song retains its own phrase, even when chosen outside its home mode.
+    this.beat = Math.floor(this._trackBeats[next] / 16) * 16;
+    if (!this.ctx) return; // Station selection never grants audio permission.
+    const now = this.ctx.currentTime, nextScene = musicScene(next);
+    for (const [bus,target] of [[this.music,nextScene==='ride'?.82:0],[this.menuMusic,nextScene==='menu'?.88:0],[this.raceMusic,nextScene==='race'?.84:0]]) {
+      bus.gain.cancelScheduledValues(now);
+      bus.gain.setTargetAtTime(0,now,.012);
+      if (target && !this._wasted) bus.gain.setTargetAtTime(target,now+.065,.055);
+    }
+    // The old arrangement stops before the new one begins. Effects keep playing.
+    this._stopVoices(musicScene(previous),.06);
+    this.nextBeat = now + .085;
   }
 
   _build(context = null) {
@@ -200,9 +246,9 @@ export class ArcadeAudio {
     this.limiter = c.createDynamicsCompressor();
     this.limiter.threshold.value = -12; this.limiter.knee.value = 12;
     this.limiter.ratio.value = 5; this.limiter.attack.value = .005; this.limiter.release.value = .25;
-    this.music = c.createGain(); this.music.gain.value = !this._wasted && this.scene === 'ride' ? .82 : 0;
-    this.menuMusic = c.createGain(); this.menuMusic.gain.value = !this._wasted && this.scene === 'menu' ? .88 : 0;
-    this.raceMusic = c.createGain(); this.raceMusic.gain.value = !this._wasted && this.scene === 'race' ? .84 : 0;
+    this.music = c.createGain(); this.music.gain.value = !this._wasted && this._musicScene === 'ride' ? .82 : 0;
+    this.menuMusic = c.createGain(); this.menuMusic.gain.value = !this._wasted && this._musicScene === 'menu' ? .88 : 0;
+    this.raceMusic = c.createGain(); this.raceMusic.gain.value = !this._wasted && this._musicScene === 'race' ? .84 : 0;
     this.effects = c.createGain(); this.effects.gain.value = .64;
     this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.raceMusic.connect(this.limiter); this.effects.connect(this.limiter);
     // A normally transparent final safety ceiling also catches the compressor's
@@ -453,7 +499,7 @@ export class ArcadeAudio {
     }
   }
 
-  _track(source, nodes, scene = this.scene) {
+  _track(source, nodes, scene = this._musicScene) {
     this.voices.add(source);
     this._voiceScenes.set(source,scene);
     source.onended = () => {
@@ -462,7 +508,7 @@ export class ArcadeAudio {
     };
   }
 
-  _note(freq, at, duration, type, volume, output, endFreq) {
+  _note(freq, at, duration, type, volume, output, endFreq, scene = this._musicScene) {
     const c = this.ctx, oscillator = c.createOscillator(), envelope = c.createGain();
     oscillator.type = type; oscillator.frequency.setValueAtTime(freq, at);
     if (endFreq) oscillator.frequency.exponentialRampToValueAtTime(endFreq, at + duration);
@@ -471,7 +517,7 @@ export class ArcadeAudio {
     envelope.gain.exponentialRampToValueAtTime(volume * .48, at + duration * .5);
     envelope.gain.exponentialRampToValueAtTime(.0001, at + duration);
     oscillator.connect(envelope); envelope.connect(output);
-    this._track(oscillator, [envelope]); oscillator.start(at); oscillator.stop(at + duration + .035);
+    this._track(oscillator, [envelope], scene); oscillator.start(at); oscillator.stop(at + duration + .035);
   }
 
   _guitar(midi, at, duration, volume, rhythm = false, pan = rhythm ? -.32 : .12) {
@@ -517,19 +563,10 @@ export class ArcadeAudio {
   setScene(scene = 'ride') {
     const next = scene === 'menu' || scene === 'race' ? scene : 'ride';
     if (next === this.scene) return;
-    const previous = this.scene;
-    this._sceneBeats[previous] = this.beat;
-    if(previous==='ride')this._rideBeats[this.rideTrack]=this.beat;
-    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : next === 'race' ? RACE_TRACK : rideTitle(this.rideTrack);
+    const previous = this.currentTrackId;
+    this.scene = next;
     this.setRaceState({progress:0,boost:0});
-    // Start the retained phrase at its bar boundary; do not resume mid-chug.
-    this.beat = Math.floor((next==='ride'?this._rideBeats[this.rideTrack]:this._sceneBeats[next]) / 16) * 16;
-    if (!this.ctx) return; // Merely selecting a menu never unlocks browser audio.
-    const now = this.ctx.currentTime;
-    for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0],[this.raceMusic,next==='race'?.84:0]]) {
-      bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(this._wasted ? 0 : target,now,.13);
-    }
-    this._stopVoices(previous,.7); this.nextBeat = now + .045;
+    this._changeTrack(previous);
   }
 
   setRideContext(context = {}) {
@@ -537,19 +574,9 @@ export class ArcadeAudio {
       isRace:context.isRace,isTimeTrial:context.isTimeTrial});
     this.survivalIntensity=unit((Number.isFinite(context.elapsed)?context.elapsed:0)/240);
     if(next===this.rideTrack)return;
-    if(this.scene==='ride')this._rideBeats[this.rideTrack]=this.beat;
+    const previous=this.currentTrackId;
     this.rideTrack=next;
-    if(this.scene!=='ride')return;
-    this.trackName=rideTitle(next);
-    this.beat=Math.floor(this._rideBeats[next]/16)*16;
-    if(!this.ctx)return; // Selecting a track never grants browser audio permission.
-    const now=this.ctx.currentTime;
-    // Briefly fade the shared ride bus before changing the arrangement so old
-    // chord tails do not overlap a new key or tempo. SFX keep their own bus.
-    this.music.gain.cancelScheduledValues(now);
-    this.music.gain.setTargetAtTime(0,now,.012);
-    this.music.gain.setTargetAtTime(this._wasted ? 0 : .82,now+.065,.055);
-    this._stopVoices('ride',.06);this.nextBeat=now+.085;
+    this._changeTrack(previous);
   }
 
   setRaceState({progress = 0, boost = 0} = {}) {
@@ -887,7 +914,7 @@ export class ArcadeAudio {
     this._clearWastedVoices();
     if (!wasWasted || !this.ctx) return;
     const at=this.ctx.currentTime;
-    for (const [bus,target] of [[this.music,this.scene==='ride'?.82:0],[this.menuMusic,this.scene==='menu'?.88:0],[this.raceMusic,this.scene==='race'?.84:0]]) {
+    for (const [bus,target] of [[this.music,this._musicScene==='ride'?.82:0],[this.menuMusic,this._musicScene==='menu'?.88:0],[this.raceMusic,this._musicScene==='race'?.84:0]]) {
       bus.gain.cancelScheduledValues(at);bus.gain.setTargetAtTime(target,at,.08);
     }
     this.active=false;this._fade(false);this.nextBeat=at+.04;
@@ -897,7 +924,7 @@ export class ArcadeAudio {
   tone(freq, duration, type = 'sine', volume = .035, endFreq) {
     if (!this.enabled || !this.ctx || !this.active || this._wasted) return;
     this._note(freq, this.ctx.currentTime, duration, type === 'square' || type === 'sawtooth' ? 'sine' : type,
-      Math.min(.07, volume), this.effects, endFreq);
+      Math.min(.07, volume), this.effects, endFreq, 'effects');
   }
 
   event(type) {
@@ -925,15 +952,15 @@ export class ArcadeAudio {
     }
     if (!this.active) return;
     if (this.nextBeat < now - .2) this.nextBeat = now + .04;
-    const menu = this.scene === 'menu', race = this.scene === 'race';
-    const weatherRide=!menu&&!race&&this.rideTrack!=='surf';
+    const track = this.currentTrackId, menu = track === 'menu', race = track === 'race';
+    const weatherRide=track==='sunset'||track==='survival';
     const total = menu ? MENU_STEPS : race ? RACE_STEPS : weatherRide ? WEATHER_STEPS : TOTAL_STEPS;
-    const interval = menu ? MENU_STEP : race ? RACE_STEP : this.rideTrack==='sunset'?SUNSET_STEP:this.rideTrack==='survival'?SURVIVAL_STEP:STEP;
+    const interval = menu ? MENU_STEP : race ? RACE_STEP : track==='sunset'?SUNSET_STEP:track==='survival'?SURVIVAL_STEP:STEP;
     while (this.nextBeat < now + .18) {
       if(menu)this._scheduleMenuStep(this.beat % total,this.nextBeat);
       else if(race)this._scheduleRaceStep(this.beat % total,this.nextBeat);
-      else if(this.rideTrack==='sunset')this._scheduleSunsetStep(this.beat % total,this.nextBeat);
-      else if(this.rideTrack==='survival')this._scheduleSurvivalStep(this.beat % total,this.nextBeat);
+      else if(track==='sunset')this._scheduleSunsetStep(this.beat % total,this.nextBeat);
+      else if(track==='survival')this._scheduleSurvivalStep(this.beat % total,this.nextBeat);
       else this._scheduleStep(this.beat % total,this.nextBeat);
       this.beat = (this.beat + 1) % total; this.nextBeat += interval;
     }

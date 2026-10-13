@@ -35,10 +35,17 @@
   </head>
   <body>
     <div id="app" inert aria-busy="true">
-      <header class="masthead">
-        <a class="brand" href="#" aria-label="Breakline 99 home"><img data-brand-art alt="Breakline 99" width="210" height="70"></a>
-        <span id="music-track" class="edition">RIPTIDE RADIO 99 / SURF ROCK &amp; REVERB</span>
-        <div class="header-actions"><button id="sound" class="icon-button" aria-label="Enable audio" title="Sound (M)">SOUND OFF</button><button id="help" class="icon-button" aria-label="Show controls">? <span>CONTROLS</span></button></div>
+      <header class="masthead" aria-label="Riptide car stereo">
+        <div class="radio-console">
+          <div class="radio-grille radio-grille-left"><a class="brand" href="#" aria-label="Breakline 99 home"><img data-brand-art alt="Breakline 99" width="210" height="70"></a><span class="radio-brand-caption">STEREO / SOLID STATE</span></div>
+          <div class="radio-tuner"><button id="sound" class="radio-knob" aria-label="Enable audio" title="Sound (M)"><span id="radio-sound-label">OFF</span></button><span class="radio-knob-caption">POWER / M</span></div>
+          <div class="radio-station">
+            <div class="radio-display"><div class="radio-display-meta"><span>RIPTIDE <b>99</b> FM</span><span id="radio-status">OFF · AUTO</span></div><span id="music-track" class="edition" aria-live="polite">RIPTIDE RADIO '99</span><span class="radio-frequency" aria-hidden="true"><i></i><b>88</b><b>92</b><b>96</b><b>100</b><b>104</b><b>108</b></span></div>
+            <div class="radio-presets"><button id="radio-auto" class="radio-preset" aria-label="Choose music automatically" aria-pressed="true">AUTO</button><label class="radio-song-control"><span class="radio-visually-hidden">Choose song</span><select id="radio-track" aria-label="Choose song"><option value="auto">AUTO TUNE</option></select></label><button id="radio-shuffle" class="radio-preset" aria-label="Shuffle song"><span aria-hidden="true">↝</span> SHUFFLE</button></div>
+          </div>
+          <div class="radio-tuner"><button id="help" class="radio-knob radio-help-knob" aria-label="Show controls" title="Show controls"><span aria-hidden="true">?</span></button><span class="radio-knob-caption">CONTROLS</span></div>
+          <div class="radio-grille radio-grille-right" aria-hidden="true"><span>HI-FIDELITY</span><b>AM / FM</b></div>
+        </div>
       </header>
 
       <main id="stage" tabindex="-1" aria-label="3D surfing game">

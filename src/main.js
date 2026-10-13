@@ -25,6 +25,7 @@ import { COMBO_ANIMATIONS } from './combo-animations.js';
 import { ParkMap } from './park-map.js';
 import { SurfWorld } from './world.js';
 import { ArcadeAudio } from './audio.js';
+import { createRadio } from './radio.js';
 import { CHARACTERS, OUTFITS, BOARD_DESIGNS, validateProfile, CustomizationPreview } from './appearance.js';
 import { MenuSurferPreview } from './menu-surfer.js';
 import { loadCharacterTextures } from './character-textures.js';
@@ -40,6 +41,7 @@ import { SECRET_STORAGE_KEY, sanitizeSecretProgress, awardSurvivalSecret } from 
 import { TimePowerScreen } from './time-power-screen.js';
 import './time-power-screen.css';
 import './time-power-hud.css';
+import './radio.css';
 
 const $=id=>document.getElementById(id);
 const loading=createLoadingScreen();
@@ -83,10 +85,11 @@ let selectedParkStart=read('breakline99-park-start','basin');
 if(!['basin','west','east','filters'].includes(selectedParkStart))selectedParkStart='basin';
 $('park-start').value=selectedParkStart;
 const audio=new ArcadeAudio();
+audio.selectTrack(read('breakline99-radio','auto'));
 const input={left:false,right:false,pump:false,brake:false,jump:false,action:false,grind:false};
 const special=new SpecialMeter();
 const pressed=new Set();
-let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,radio,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,newBest=false,secretUnlockedThisRun=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 const timePowerScreen=new TimePowerScreen({reducedMotion:window.matchMedia('(prefers-reduced-motion: reduce)').matches});
 let portraitKey='';
@@ -218,8 +221,7 @@ function updateModeMenu(){
 }
 function selectMode(mode){if(!modeInfo[mode]||(mode==='trials'&&!timeTrialsUnlocked(tournamentProgress)))return;selectedMode=mode;write('breakline99-mode',mode);clearInput();makeGame();updateModeMenu();updateSoundLabel();}
 function updateSoundLabel(){
-  $('sound').textContent=audio.enabled?'SOUND ON':'SOUND OFF';$('sound').setAttribute('aria-label',audio.enabled?'Mute audio':'Enable audio');
-  if($('music-track'))$('music-track').textContent=audio.enabled?`♫ ${audio.trackName.toUpperCase()}`:'M · TURN UP THE RADIO';
+  radio?.sync();
 }
 async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?'on':'off';write('breakline99-sound',soundPreference);updateSoundLabel();}
 function startRun(kind='default'){
@@ -275,7 +277,7 @@ function showHelp(){
   ${game.surfAdventureEnabled?`<span>TRICK BOOST</span><span>Land a completed trick from the lip or a cutback for an automatic speed burst. Link tricks in an unbanked combo for more speed and a longer boost. Flat hops do not earn a boost.</span>${selectedMode==='storm'?'<span>DRIFTWOOD</span><span>Tap and release Space before a low branch to hop over it. You can also steer around it. Watch the water ahead.</span><span>WHIRLPOOLS</span><span>The foam spiral pulls you toward its dark centre. Steer clear, or cross above it with enough air. The storm becomes harder the longer you survive.</span><span>CLOSING BARRELS</span><span>A countdown starts as you approach. Line up with the hollow wave, pump with W and use earned trick boosts to get out before the lip crashes down. Later reef banks funnel you into the opening. The escape window shrinks toward 1.3 seconds, so land tricks on the approach and carry the boost through. Only the visible water and obstacles can hit you.</span>':'<span>WEATHER + TIME</span><span>Each new Surf Session rolls a calm sky and time of day: dawn, midday, sunset or dusk. Choose a fixed sky in Admin on the home screen with Left, Left, Right, Up. Sunset has its own chilled soundtrack. Pausing keeps the current conditions. Storm Rider always stays stormy.</span>'}`:''}
   ${game.isRace?`<span>SUN RINGS</span><span>Pass through each gold ring in order, then ${game.isTimeTrial?'beat the target time':'finish before your rival'}. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. ${game.isTimeTrial?'Missed ocean rings end the attempt. The timer stops while paused.':'There is no time limit.'}</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. ${game.isTimeTrial?'':'Rivals earn boosts with the same rules, so watch their tricks and boost trails. '}No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>`:''}
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
-  <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
+  <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / sound. ESC also pauses.</span><span>RIPTIDE RADIO</span><span>Hover over the top edge to reveal the stereo during a ride. Choose any song or press SHUFFLE for a different track. AUTO follows the session and weather. Your choice is saved.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding, reef corridors and quicker-closing barrels build as you survive.'}</p>
 `,'GOT IT','CONTROLS');
@@ -496,6 +498,7 @@ function updateHud(){
   }
 }
 
+radio=createRadio({element:document.querySelector('.masthead'),audio,onSelection:id=>write('breakline99-radio',id),onInteract:clearInput,onExit:()=>{$('stage').focus({preventScroll:true});clearInput();},onToggleSound:toggleSound});
 tutorial=createTutorial({getName:()=>riderIdentity.name,onComplete:completeTutorial,onClose:()=>{clearInput();$('start').focus({preventScroll:true});}});
 adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onTutorial:()=>openTutorial(true),onClose:clearInput});
 keydownHandler=createKeydownHandler(
@@ -510,7 +513,7 @@ window.addEventListener('keydown',keydownHandler);
 window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||tutorial.isOpen||adminPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
 window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')pause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
-document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
+document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||event.target.closest('.masthead'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
 $('race-ladders').addEventListener('click',showLadder);
@@ -573,10 +576,10 @@ try{
     if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});
     audio.setRideContext(game);
     audio.update(!document.hidden&&(game.phase==='running'||game.phase==='ready'),game.mode);
-    hudTime+=dt;if(hudTime>=.05){updateHud();hudTime=0;}
+    hudTime+=dt;if(hudTime>=.05){updateHud();radio.sync();hudTime=0;}
     if(toastTime>0&&game.phase==='running'){toastTime-=dt;if(toastTime<=0)$('toast').classList.remove('visible');}
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();radio.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}

@@ -205,7 +205,9 @@ The **? Controls** panel pauses an active session. This version focuses on keybo
 
 **“Afterhours / Yard Circuit”** is the original menu track: a 32-bar, 138 BPM arrangement of distorted picked guitar, bass and breakbeats, including a half-time section and final hook. It evokes the energy of 2000s racing menus without reusing a recording or melody. Menu/ride tracks crossfade. **Golden Hour / Last Light** is a separate 84 BPM sunset arrangement with warm guitar, spacious chords and a relaxed rhythm. **Undertow / Storm Run** gives Survival a fast 164 BPM groove with increasing percussion and melodic urgency as the run progresses.
 
-Sound begins on your first menu click or **DROP IN**, unless you previously switched it off. Use **SOUND** or M to toggle it. Music stops while gameplay is paused. Browsers require a user interaction before audio can start.
+The chrome **Riptide Radio** has a song selector, **SHUFFLE** for a different random track, and **AUTO** to match the session and weather again. All five original songs are available in every mode: Riptide Radio, Afterhours, Overdrive, Golden Hour and Undertow. Manual choices survive mode changes and are saved in this browser. During a run the entire stereo retracts; hover over the top edge to reveal it. Keyboard focus also reveals the controls, and Escape returns focus to the game.
+
+Sound begins on your first menu click outside the radio or **DROP IN**, unless you previously switched it off. Use the radio's **POWER** knob or M to toggle music and effects. Choosing or shuffling a song while muted keeps it muted. Music stops while gameplay is paused. Browsers require a user interaction before audio can start.
 
 Open **Pause** to find **PIXELS / VIDEO**, which switches between the 640-pixel retro view and a cleaner resolution. Both retain the low-poly models and textures. Restart and Main Menu are also in Pause; use **P / Esc** to open it or **R** to restart directly.
 
