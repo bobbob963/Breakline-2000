@@ -5,11 +5,13 @@ import vm from 'node:vm';
 import { TUTORIAL_STEPS } from '../src/tutorial-content.js';
 import { sanitizeRiderName } from '../src/rider-identity.js';
 import { TRICK_KEYS } from '../src/keyboard.js';
+import { remapControlText, remapKeyLabel } from '../src/control-labels.js';
+import { DEFAULT_KEYBINDS, rebindKey } from '../src/key-bindings.js';
 
 const source = readFileSync(new URL('../src/tutorial.js', import.meta.url), 'utf8');
 const noOp = () => {};
 
-function tutorialFixture({ name = '', save = noOp, initiallyInert = false } = {}) {
+function tutorialFixture({ name = '', save = noOp, initiallyInert = false, getKeybinds } = {}) {
   const calls = { saved: [], closed: 0 }, events = new Map();
   let overlay;
   const document = {
@@ -64,10 +66,11 @@ function tutorialFixture({ name = '', save = noOp, initiallyInert = false } = {}
   const chapters = TUTORIAL_STEPS.map((_, i) => { const element = new Element(`chapter:${i}`); element.dataset.tutorialStep = String(i); return element; });
   const app = new Element('app'); if (initiallyInert) app.setAttribute('inert', '');
   const previousFocus = new Element('old-focus'); previousFocus.focus();
-  const context = { document, TUTORIAL_STEPS, sanitizeRiderName };
+  const context = { document, TUTORIAL_STEPS, sanitizeRiderName, remapControlText, remapKeyLabel };
   vm.runInNewContext(source.replace(/^import .*;\r?\n/gm, '').replace('export function createTutorial', 'function createTutorial'), context);
   const tutorial = context.createTutorial({
     getName: () => name,
+    getKeybinds,
     onComplete: async (value, options) => { calls.saved.push({ value, ...options }); return save(value, options); },
     onClose: () => calls.closed++,
   });
@@ -180,4 +183,16 @@ test('guide keys cover the actual aerial trick router and all requested modes an
   assert.equal(chapters.size, TUTORIAL_STEPS.length);
   const text = JSON.stringify(TUTORIAL_STEPS);
   for (const term of ['Q toggles', 'wardrobe', 'Customise Board', 'Three lives', 'No time limit', 'five rival ladders', 'twelve seconds']) assert.ok(text.includes(term), term);
+});
+
+test('tutorial badges and instructions follow current bindings, including removed arrow aliases',async()=>{
+  let bindings=rebindKey(DEFAULT_KEYBINDS,'jump','KeyZ');
+  bindings=rebindKey(bindings,'special','Digit1');bindings=rebindKey(bindings,'timePower','Digit2');
+  bindings=rebindKey(bindings,'grab','ArrowLeft');bindings=rebindKey(bindings,'grind','KeyG');
+  const f=tutorialFixture({getKeybinds:()=>bindings});f.tutorial.open({replay:true});
+  await f.chapter(1);assert.match(f.query('#tutorial-body').innerHTML,/The right arrow also turns right/);assert.doesNotMatch(f.query('#tutorial-body').innerHTML,/Left and right arrows work too/);
+  await f.chapter(2);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>Z<\/kbd>/);assert.match(f.query('#tutorial-body').innerHTML,/holding G/);
+  await f.chapter(3);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>1<\/kbd>/);assert.match(f.query('#tutorial-note').textContent,/use 1 in the air/);
+  await f.chapter(5);assert.match(f.query('#tutorial-body').innerHTML,/2 toggles slow motion/);assert.match(f.query('#tutorial-body').innerHTML,/release Z to hop/);
+  bindings=rebindKey(bindings,'jump','Digit3');await f.chapter(2);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>3<\/kbd>/);
 });

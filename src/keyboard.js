@@ -1,5 +1,6 @@
-export const CONTROL_KEYS = Object.freeze({ KeyA:'left', ArrowLeft:'left', KeyD:'right', ArrowRight:'right', KeyW:'pump', ArrowUp:'pump', KeyS:'brake', ArrowDown:'brake', Space:'jump', KeyE:'action', ShiftLeft:'grind', ShiftRight:'grind' });
-export const TRICK_KEYS = Object.freeze({ KeyJ:'spin', KeyK:'flip', KeyL:'grab', KeyU:'shuvit', KeyO:'heelflip', KeyH:'method', KeyF:'spin360', KeyI:'special', KeyB:'tweak' });
+import { getControlMap, getTrickMap, keyLabel, sanitizeKeybinds } from './key-bindings.js';
+export const CONTROL_KEYS = Object.freeze(getControlMap());
+export const TRICK_KEYS = Object.freeze(getTrickMap());
 
 const ADMIN_SEQUENCE = Object.freeze(['ArrowLeft','ArrowLeft','ArrowRight','ArrowUp']);
 const EDITABLE_TARGETS = 'input,textarea,select,[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]';
@@ -10,11 +11,11 @@ export function createKeydownHandler(getState, actions) {
   let adminSequence = [], lastAdminPress = null;
   const resetAdminSequence = () => { adminSequence = []; lastAdminPress = null; };
   const handler = e => {
-    const { bootReady, workshopMode, modalMode, game, input, homeScreen, adminOpen } = getState();
-    const home = homeScreen === true && !workshopMode && !modalMode && !adminOpen;
+    const { bootReady, workshopMode, modalMode, game, input, homeScreen, adminOpen, settingsOpen, keybinds } = getState();
+    const home = homeScreen === true && !workshopMode && !modalMode && !adminOpen && !settingsOpen;
     // Native form editing must never steer a rider, start a session or open a
     // secret menu. Escape in the admin panel belongs to that panel's listener.
-    if (!bootReady || adminOpen || e.target?.isContentEditable || e.target?.closest?.(EDITABLE_TARGETS)) {
+    if (!bootReady || adminOpen || settingsOpen || e.ctrlKey || e.altKey || e.metaKey || e.target?.isContentEditable || e.target?.closest?.(EDITABLE_TARGETS)) {
       resetAdminSequence();
       return;
     }
@@ -38,13 +39,12 @@ export function createKeydownHandler(getState, actions) {
       e.preventDefault();
       return;
     }
-    // Focused buttons own Enter, and workshop buttons also own Space. Outfit
-    // choices must receive their native click instead of closing the workshop
-    // or charging a pop. Background focus keeps the usual session shortcuts.
-    if ((e.code === 'Enter' || (workshopMode && e.code === 'Space')) && e.target?.closest?.('button')) return;
-    if (CONTROL_KEYS[e.code] || TRICK_KEYS[e.code] || ['Enter','Escape','KeyP','KeyR','KeyM','KeyC','KeyQ'].includes(e.code)) e.preventDefault();
+    // Focused buttons own native Enter/Space activation. Settings, pause and
+    // outfit buttons must never charge a pop instead of receiving a click.
+    if (['Enter','Space'].includes(e.code) && e.target?.closest?.('button')) return;
+    const bindings=sanitizeKeybinds(keybinds),controls=getControlMap(bindings),tricks=getTrickMap(bindings);
+    if (controls[e.code] || tricks[e.code] || Object.values(bindings).includes(e.code) || ['Enter','Escape'].includes(e.code) || (workshopMode&&['KeyA','KeyB','KeyX','KeyC'].includes(e.code))) e.preventDefault();
     if (e.repeat) return;
-    if (e.code === 'KeyM') { actions.toggleSound(); return; }
     if (workshopMode) {
       if (e.code === 'Escape' && actions.isWardrobeOpen()) actions.hideWardrobe();
       else if (['Escape','Enter','KeyA','KeyB'].includes(e.code)) actions.closeWorkshop();
@@ -52,25 +52,26 @@ export function createKeydownHandler(getState, actions) {
       else if (e.code === 'ArrowRight' && workshopMode === 'character') actions.cycleCharacter(1);
       else if (e.code === 'KeyX') actions.rotatePreview(-.5);
       else if (e.code === 'KeyC') actions.rotatePreview(.5);
+      else if (e.code === bindings.sound) actions.toggleSound();
       return;
     }
     if (e.code === 'Enter') {
-      if (['results','ladder','trials'].includes(modalMode)) actions.startRun();
-      else if (modalMode) actions.closeModal();
-      else if (game.phase === 'ready' || game.phase === 'finished') actions.startRun();
-      else game.bank();
-      return;
+      if (['results','ladder','trials'].includes(modalMode)) {actions.startRun();return;}
+      if (modalMode) {actions.closeModal();return;}
+      if (game.phase === 'ready' || game.phase === 'finished') {actions.startRun();return;}
     }
-    if (e.code === 'Escape' || e.code === 'KeyP') { actions.pause(); return; }
-    if (e.code === 'KeyR' && game.phase !== 'ready') { (actions.restartRun || actions.startRun)(); return; }
+    if(e.code===bindings.sound){actions.toggleSound();return;}
+    if (e.code === 'Escape' || e.code === bindings.pause) { actions.pause(); return; }
+    if (e.code === bindings.restart && game.phase !== 'ready') { (actions.restartRun || actions.startRun)(); return; }
     if (game.phase !== 'running' || modalMode) return;
-    if (e.code === 'KeyQ') { if(!home) game.toggleTimePower?.(); return; }
-    if (e.code === 'KeyC' && game.doCutback) {
-      if (!game.doCutback(input.left ? -1 : input.right ? 1 : 0)) actions.toast(game.airborne ? 'LAND BEFORE CUTTING BACK' : 'BUILD SPEED · C TO CUTBACK');
+    if(e.code===bindings.bank){game.bank();return;}
+    if (e.code === bindings.timePower) { if(!home) game.toggleTimePower?.(); return; }
+    if (e.code === bindings.cutback && game.doCutback) {
+      if (!game.doCutback(input.left ? -1 : input.right ? 1 : 0)) actions.toast(game.airborne ? 'LAND BEFORE CUTTING BACK' : `BUILD SPEED · ${keyLabel(bindings.cutback)} TO CUTBACK`);
       return;
     }
-    if (CONTROL_KEYS[e.code]) actions.pressControl(e.code);
-    if (TRICK_KEYS[e.code]) actions.tryTrick(TRICK_KEYS[e.code]);
+    if (controls[e.code]) actions.pressControl(e.code);
+    if (tricks[e.code]) actions.tryTrick(tricks[e.code]);
   };
   handler.resetAdminSequence = resetAdminSequence;
   return handler;

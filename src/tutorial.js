@@ -1,11 +1,12 @@
 import './tutorial.css';
 import { TUTORIAL_STEPS } from './tutorial-content.js';
 import { sanitizeRiderName } from './rider-identity.js';
+import { remapControlText, remapKeyLabel } from './control-labels.js';
 
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const LAST_STEP = TUTORIAL_STEPS.length - 1;
 
-export function createTutorial({ getName = () => '', onComplete, onClose = () => {} }) {
+export function createTutorial({ getName = () => '', getKeybinds = () => undefined, onComplete, onClose = () => {} }) {
   const overlay = document.createElement('div');
   overlay.id = 'ride-tutorial';
   overlay.className = 'tutorial-overlay';
@@ -42,12 +43,13 @@ export function createTutorial({ getName = () => '', onComplete, onClose = () =>
     query('#tutorial-status').classList.toggle('is-error', error);
   }
   function render(focus = true) {
-    const page = TUTORIAL_STEPS[step], naming = step === LAST_STEP;
+    const page = TUTORIAL_STEPS[step], naming = step === LAST_STEP, bindings=getKeybinds();
+    const prose=text=>remapControlText(text,bindings),badge=text=>remapKeyLabel(text,bindings);
     query('#tutorial-progress').textContent = `${String(step + 1).padStart(2, '0')} / ${TUTORIAL_STEPS.length} — ${page.chapter}`;
     query('#tutorial-title').textContent = page.title;
-    query('#tutorial-lead').textContent = page.lead;
-    query('#tutorial-note').textContent = page.note;
-    query('#tutorial-body').innerHTML = `${page.controls ? `<div class="tutorial-controls ${page.id === 'tricks' ? 'tutorial-tricks' : ''}">${page.controls.map(control => `<div><span>${control.keys.map(key => `<kbd>${escapeHTML(key)}</kbd>`).join('<b>+</b>')}</span><section><strong>${escapeHTML(control.label)}</strong>${control.detail ? `<p>${escapeHTML(control.detail)}</p>` : ''}</section></div>`).join('')}</div>` : ''}${page.cards ? `<div class="tutorial-cards">${page.cards.map(card => `<article><h3>${escapeHTML(card.title)}</h3><p>${escapeHTML(card.text)}</p></article>`).join('')}</div>` : ''}`;
+    query('#tutorial-lead').textContent = prose(page.lead);
+    query('#tutorial-note').textContent = prose(page.note);
+    query('#tutorial-body').innerHTML = `${page.controls ? `<div class="tutorial-controls ${page.id === 'tricks' ? 'tutorial-tricks' : ''}">${page.controls.map(control => `<div><span>${control.keys.map(key => `<kbd>${escapeHTML(badge(key))}</kbd>`).join('<b>+</b>')}</span><section><strong>${escapeHTML(control.label)}</strong>${control.detail ? `<p>${escapeHTML(prose(control.detail))}</p>` : ''}</section></div>`).join('')}</div>` : ''}${page.cards ? `<div class="tutorial-cards">${page.cards.map(card => `<article><h3>${escapeHTML(card.title)}</h3><p>${escapeHTML(prose(card.text))}</p></article>`).join('')}</div>` : ''}`;
     form.hidden = !naming;
     query('[data-tutorial-action="back"]').disabled = step === 0;
     query('[data-tutorial-action="next"]').hidden = naming;

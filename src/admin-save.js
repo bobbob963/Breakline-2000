@@ -25,11 +25,20 @@ export function persistAdminEntries(storage, entries) {
   }
 }
 
+export function resetBreaklineProgress(storage) {
+  const progressKeys=new Set(['breakline99-tournament-v1','breakline99-tournament-v2','breakline99-trials-v1','breakline99-secrets-v1','breakline99-survival-time','breakline99-best']);
+  return removeSaveEntries(storage,key=>progressKeys.has(key)||key?.startsWith('breakline99-best-'));
+}
+
 export function resetBreaklineSave(storage) {
+  return removeSaveEntries(storage,key=>key?.startsWith('breakline99-'));
+}
+
+function removeSaveEntries(storage, matches) {
   const previous = [];
   for (let index = 0; index < storage.length; index++) {
     const key = storage.key(index);
-    if (key?.startsWith('breakline99-')) previous.push([key, storage.getItem(key)]);
+    if (matches(key)) previous.push([key, storage.getItem(key)]);
   }
   try {
     for (const [key] of previous) storage.removeItem(key);

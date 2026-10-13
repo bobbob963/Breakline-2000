@@ -38,7 +38,7 @@
       <header class="masthead" aria-label="Riptide car stereo">
         <div class="radio-console">
           <div class="radio-grille radio-grille-left"><a class="brand" href="#" aria-label="Breakline 99 home"><img data-brand-art alt="Breakline 99" width="210" height="70"></a><span class="radio-brand-caption">STEREO / SOLID STATE</span></div>
-          <div class="radio-tuner"><button id="sound" class="radio-knob" aria-label="Enable audio" title="Sound (M)"><span id="radio-sound-label">OFF</span></button><span class="radio-knob-caption">POWER / M</span></div>
+          <div class="radio-tuner"><button id="sound" class="radio-knob" aria-label="Enable audio" title="Sound (M)"><span id="radio-sound-label">OFF</span></button><span id="radio-power-caption" class="radio-knob-caption">POWER / M</span></div>
           <div class="radio-station">
             <div class="radio-display"><div class="radio-display-meta"><span>RIPTIDE <b>99</b> FM</span><span id="radio-status">OFF · AUTO</span></div><span id="music-track" class="edition" aria-live="polite">RIPTIDE RADIO '99</span><span class="radio-frequency" aria-hidden="true"><i></i><b>88</b><b>92</b><b>96</b><b>100</b><b>104</b><b>108</b></span></div>
             <div class="radio-presets"><button id="radio-auto" class="radio-preset" aria-label="Choose music automatically" aria-pressed="true">AUTO</button><label class="radio-song-control"><span class="radio-visually-hidden">Choose song</span><select id="radio-track" aria-label="Choose song"><option value="auto">AUTO TUNE</option></select></label><button id="radio-shuffle" class="radio-preset" aria-label="Shuffle song"><span aria-hidden="true">↝</span> SHUFFLE</button></div>
@@ -94,6 +94,7 @@
               </div>
             </div>
             <div class="home-menu">
+              <button id="menu-settings" class="secondary-button menu-settings" type="button">SETTINGS <span>GRAPHICS / CAMERA / CONTROLS</span></button>
               <div class="menu-heading"><span>01 / SELECT YOUR SESSION</span><b id="session-badge">2 MIN. / SCORE ATTACK</b></div>
               <div class="mode-options" role="group" aria-label="Game mode">
                 <button id="mode-surf" class="mode-card mode-surf is-selected" data-mode="surf" aria-pressed="true">
@@ -153,7 +154,7 @@
         </section>
 
         <section id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div class="modal-card"><img class="modal-classic-logo" data-classic-logo alt="Breakline 99 Extreme Surfing" width="230" height="92"><p class="kicker" id="modal-kicker">THE LINEUP</p><h2 id="modal-title">Make some waves.</h2><div id="modal-content"></div><button id="modal-action" class="primary-button">BACK TO THE BREAK <span>▶</span></button><div class="pause-tools" role="group" aria-label="Session tools"><button id="restart" class="secondary-button" type="button">R ↻ RESTART SESSION</button><button id="quality" class="secondary-button" type="button">PIXELS: RETRO</button></div><button id="race-ladders" class="secondary-button hidden" type="button">RIVAL LADDERS / RESET</button><button id="race-trials" class="secondary-button trial-menu-button hidden" type="button">TIME TRIALS / REWARDS</button><button id="modal-home" class="secondary-button">RETURN TO MAIN MENU</button></div>
+          <div class="modal-card"><img class="modal-classic-logo" data-classic-logo alt="Breakline 99 Extreme Surfing" width="230" height="92"><p class="kicker" id="modal-kicker">THE LINEUP</p><h2 id="modal-title">Make some waves.</h2><div id="modal-content"></div><button id="modal-action" class="primary-button">BACK TO THE BREAK <span>▶</span></button><div class="pause-tools" role="group" aria-label="Session tools"><button id="restart" class="secondary-button" type="button">R ↻ RESTART SESSION</button><button id="pause-settings" class="secondary-button" type="button">SETTINGS</button><button id="quality" class="secondary-button" type="button">PIXELS: RETRO</button></div><button id="race-ladders" class="secondary-button hidden" type="button">RIVAL LADDERS / RESET</button><button id="race-trials" class="secondary-button trial-menu-button hidden" type="button">TIME TRIALS / REWARDS</button><button id="modal-home" class="secondary-button">RETURN TO MAIN MENU</button></div>
         </section>
       </main>
       <footer class="control-strip"><div><kbd>A</kbd><kbd>D</kbd><span>CARVE</span></div><div><kbd>W</kbd><span>PUMP</span></div><div><kbd>SPACE</kbd><span>HOLD + RELEASE TO POP</span></div><div><kbd>J</kbd><span>SPIN</span><kbd>K</kbd><span>FLIP</span><kbd>L</kbd><span>GRAB</span><kbd>I</kbd><span>SPECIAL</span></div><div><kbd>ENTER</kbd><span>BANK COMBO</span></div><div><kbd>B</kbd><span>TWEAKED GRAB</span></div><div class="ocean-controls"><kbd>SHIFT + A/D</kbd><span>CUTBACK</span></div><div class="factory-controls"><kbd>E</kbd><span>PIPE / LIP</span><kbd>SHIFT+A/D</kbd><span>CUTBACK</span><kbd>SHIFT</kbd><span>COPING</span></div></footer>

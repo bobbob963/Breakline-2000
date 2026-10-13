@@ -4,6 +4,7 @@ import { createStormBarrels, resolveBarrelCamera } from './barrel-wave.js';
 import { stormDifficulty } from './storm-waves.js';
 import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
+import { normalizeViewSettings, viewCameraTarget, viewFieldOfView, viewRenderSize } from './camera-settings.js';
 import { createWastedEyeAnchor, sampleWastedCamera } from './wasted-camera.js';
 import { createRaceWorld } from './race-world.js';
 import { createBoardEffects } from './board-effects.js';
@@ -55,6 +56,7 @@ function palm() {
 export class SurfWorld {
   constructor(container, profile = DEFAULT_PROFILE) {
     this.container = container; this.time = 0; this.retro = true; this.mode = 'surf'; this.profile = profile;
+    this.viewSettings = normalizeViewSettings();
     this.oceanRaceView = false;
     this.reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0xe7c48d);
@@ -94,12 +96,18 @@ export class SurfWorld {
     if (!width || !height) return;
     // Wider race framing needs more source pixels to retain the same rider
     // detail as the closer freestyle camera. Keep the original texture style.
-    const retroWidth = this.oceanRaceView ? 960 : 640;
-    const scale = this.retro ? Math.min(1, retroWidth / width) : Math.min(1.5, window.devicePixelRatio || 1);
-    this.renderer.setSize(Math.round(width * scale), Math.round(height * scale), false);
+    const size = viewRenderSize(width,height,{quality:this.retro?'retro':'clean',oceanRaceView:this.oceanRaceView,pixelRatio:window.devicePixelRatio||1});
+    this.renderer.domElement.style.imageRendering = this.retro ? 'pixelated' : 'auto';
+    this.renderer.setSize(size.width,size.height,false);
     this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
   }
-  toggleQuality() { this.retro = !this.retro; this.resize(); return this.retro; }
+  applyViewSettings(settings) {
+    this.viewSettings = normalizeViewSettings({...this.viewSettings,...settings});
+    this.retro = this.viewSettings.quality === 'retro';
+    this.resize();
+    return {...this.viewSettings};
+  }
+  toggleQuality() { this.applyViewSettings({quality:this.retro?'clean':'retro'}); return this.retro; }
   setProfile(profile) {
     this.endWastedView();
     this.lastLiveEye = null;
@@ -394,7 +402,7 @@ export class SurfWorld {
   }
   applyWastedView() {
     if (!this.wastedView) return;
-    const frame = sampleWastedCamera(this.wastedView.anchor, this.wastedView.frame, { reducedMotion: this.reducedMotion });
+    const frame = sampleWastedCamera(this.wastedView.anchor, this.wastedView.frame, { reducedMotion: this.reducedMotion || this.viewSettings?.cameraShake === false });
     // The normal update still poses the rig. Hide the whole local player so
     // neither the blinking body nor a detached board can cross the eye lens.
     this.surfer.rig.visible = false;
@@ -414,6 +422,7 @@ export class SurfWorld {
   }
   update(dt, game) {
     const attract = game.phase === 'ready';
+    const cameraMotion = this.viewSettings.cameraShake && !this.reducedMotion;
     const isPark=game.mode==='park';
     const oceanRaceView=!!game.isRace&&!isPark&&!attract;
     if(this.oceanRaceView!==oceanRaceView){this.oceanRaceView=oceanRaceView;this.resize();}
@@ -512,7 +521,7 @@ export class SurfWorld {
         const up=game.pipeRide?new THREE.Vector3(game.rideUp.x,game.rideUp.y,game.rideUp.z):new THREE.Vector3(0,1,0);
         const focus=new THREE.Vector3(x,y,z).addScaledVector(up,.85);
         if(!game.pipeRide){const headPosition=new THREE.Vector3();s.head.getWorldPosition(headPosition);focus.copy(s.rig.position).lerp(headPosition,.57);}
-        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:game.speed,rideUp:game.pipeRide?game.rideUp:null,focus},dt);
+        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:cameraMotion?game.speed:12,rideUp:game.pipeRide?game.rideUp:null,focus},dt);
         target=parkFrame.position;look=parkFrame.look;
       }
     }else{
@@ -527,19 +536,21 @@ export class SurfWorld {
         target.set(x+.7+midpoint,y+3.3,z+6.5);
         look.set(x+midpoint,y+1.05,z-2.6);
       }
-      if(!attract&&grab>0){target.x+=grab*1.8;target.y-=grab*.65;target.z-=grab*.9;look.set(x,y+.55,z);}
+      if(!attract&&grab>0&&cameraMotion){target.x+=grab*1.8;target.y-=grab*.65;target.z-=grab*.9;look.set(x,y+.55,z);}
       if(storm&&!attract&&game.barrel?.inside){
         // A slightly lower, central view shows the opening and the moving roof.
         target.x=x+.65;target.y=y+2.15;target.z=z+4.4;
         resolveBarrelCamera(target,d,t,game.barrelTimings);look.set(x,y+1.05,z-1.4);
       }
     }
-    if(parkFrame)this.camera.position.copy(parkFrame.position);
+    target = new THREE.Vector3().copy(viewCameraTarget(this.viewSettings,{anchor:{x,y,z},target,focus:look,rideUp:game.pipeRide?game.rideUp:null,park:isPark,active:!attract,firstPerson:!!this.wastedView}));
+    if(parkFrame)this.camera.position.copy(target);
     else this.camera.position.lerp(target, 1 - Math.exp(-dt * (attract ? 1.5 : 4)));
     if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t,game.barrelTimings);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
     else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
-    const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50+(surfBoost&&!this.reducedMotion?2.5:0);
+    const contextualFov=parkFrame?parkFrame.fov:oceanRaceView?54:50+(surfBoost&&cameraMotion?2.5:0);
+    const fieldOfView=viewFieldOfView(contextualFov,this.viewSettings,{active:!attract,firstPerson:!!this.wastedView});
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});

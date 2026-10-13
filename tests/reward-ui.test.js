@@ -24,7 +24,7 @@ function block(first, last) {
 function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }, trials = null) {
   const writes = [], visual = [], previews = [], menuPreviews = [], updates = [];
   const context = {
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,settingsPanel:{isOpen:false},
     secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
@@ -172,7 +172,7 @@ test('the real HUD shows the active perk, only prompts an eligible Skybound jump
   const context = {
     adminSettings:sanitizeAdminSettings(null),
     $, game, profile: validateProfile({ rewardBoard: 'sky' }), getRewardBoard, getSurfWeather, selectedMode: 'surf', best: 0,
-    clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
+    controlHint:value=>value,clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
     COMBO_WINDOW, COMBO_ANIMATIONS, special: { value: 0, ready: false }, completedGoals: () => [false, false, false], challengeFlags: [], toast: noOp,
   };
   vm.runInNewContext(block('function updateHud(', 'radio=createRadio('), context);

@@ -25,7 +25,7 @@ function fixture(saved=storage()) {
   const context={
     localStorage:saved,riderIdentity:loadRiderIdentity(saved),sanitizeRiderName,saveRiderIdentity,resetBreaklineSave,
     menuSurfer:{setName:name=>calls.names.push(name)},tutorial:{isOpen:false,open:options=>calls.opens.push(options)},
-    adminPanel:{isOpen:false,open:()=>calls.admin++},game:new SurfGame(noOp,'storm'),bootReady:true,modalMode:null,workshopMode:null,
+    settingsPanel:{isOpen:false},playerSettings:{keybinds:{}},adminPanel:{isOpen:false,open:()=>calls.admin++},game:new SurfGame(noOp,'storm'),bootReady:true,modalMode:null,workshopMode:null,
     clearInput:()=>calls.clear++,$:()=>element,document:{body:element},window:{location:{reload:()=>calls.reloads++}},
     selectedMode:'storm',wasted:{active:false,reset:noOp},timePowerScreen:{reset:noOp},closeWorkshop:noOp,closeModal:noOp,
     special:{reset:noOp},soundPreference:'off',audio:{setMode:noOp,setRideContext:noOp,setScene:noOp},applyPlayerSettings:noOp,

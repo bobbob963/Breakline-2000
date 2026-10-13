@@ -6,6 +6,7 @@ import { SurfGame } from '../src/game.js';
 import { WaveParkGame } from '../src/park.js';
 import { SpecialMeter } from '../src/special.js';
 import { createKeydownHandler } from '../src/keyboard.js';
+import { remapKeyLabel } from '../src/control-labels.js';
 import { validateProfile } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked, REWARD_BOARD_ORDER } from '../src/board-rewards.js';
 import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
@@ -41,8 +42,8 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
   const context = {
     secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     SECRET_STORAGE_KEY,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),updateCustomizationChoices:noOp,
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
-    $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,settingsPanel:{isOpen:false},keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
+    controlHint:value=>value,remapKeyLabel,playerSettings:{keybinds:{}},$, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
     SurfGame, WaveParkGame, tournamentProgress: sanitizeTournamentProgress(progress),
     selectedMode: 'tournament', selectedParkStart: 'basin', game: null,

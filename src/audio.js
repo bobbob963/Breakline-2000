@@ -196,6 +196,17 @@ export class ArcadeAudio {
     this.rideTrack = 'surf'; this.survivalIntensity = 0;
     this._wasted = false; this._wastedRevealed = false;
     this._wastedVoices = new Map(); this._wastedBus = null;
+    this.musicVolume = 100; this.effectsVolume = 100;
+  }
+
+  setVolumes(music = 100, effects = 100) {
+    const percent = value => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 100;
+    this.musicVolume = percent(music); this.effectsVolume = percent(effects);
+    for (const [bus,value] of [[this.musicVolumeBus,this.musicVolume],[this.effectsVolumeBus,this.effectsVolume]]) {
+      if (!bus || !this.ctx) continue;
+      bus.gain.cancelScheduledValues(this.ctx.currentTime);
+      bus.gain.setTargetAtTime(value / 100, this.ctx.currentTime, .02);
+    }
   }
 
   get selection() { return this._selection; }
@@ -250,7 +261,13 @@ export class ArcadeAudio {
     this.menuMusic = c.createGain(); this.menuMusic.gain.value = !this._wasted && this._musicScene === 'menu' ? .88 : 0;
     this.raceMusic = c.createGain(); this.raceMusic.gain.value = !this._wasted && this._musicScene === 'race' ? .84 : 0;
     this.effects = c.createGain(); this.effects.gain.value = .64;
-    this.music.connect(this.limiter); this.menuMusic.connect(this.limiter); this.raceMusic.connect(this.limiter); this.effects.connect(this.limiter);
+    // User levels sit after scene fades, so tuning the radio or a cinematic
+    // cannot overwrite the saved music/effects volume.
+    this.musicVolumeBus = c.createGain(); this.musicVolumeBus.gain.value = this.musicVolume / 100;
+    this.effectsVolumeBus = c.createGain(); this.effectsVolumeBus.gain.value = this.effectsVolume / 100;
+    this.music.connect(this.musicVolumeBus); this.menuMusic.connect(this.musicVolumeBus); this.raceMusic.connect(this.musicVolumeBus);
+    this.effects.connect(this.effectsVolumeBus);
+    this.musicVolumeBus.connect(this.limiter); this.effectsVolumeBus.connect(this.limiter);
     // A normally transparent final safety ceiling also catches the compressor's
     // attack transient. The master leaves further headroom below digital full scale.
     const ceiling = c.createWaveShaper(), ceilingCurve = new Float32Array(2048);
@@ -302,7 +319,7 @@ export class ArcadeAudio {
     const roomSend = c.createGain(); roomSend.gain.value = .28;
     const roomTone = c.createBiquadFilter(); roomTone.type = 'lowpass'; roomTone.frequency.value = 2600;
     this.guitarAmp.connect(roomSend); roomSend.connect(room); room.connect(roomTone); roomTone.connect(this.music);
-    this._persistent = [this.music, this.menuMusic, this.raceMusic, this.effects, this.limiter, ceiling, this.master, this.guitarAmp, this.slap,
+    this._persistent = [this.music, this.menuMusic, this.raceMusic, this.effects, this.musicVolumeBus, this.effectsVolumeBus, this.limiter, ceiling, this.master, this.guitarAmp, this.slap,
       this.slapSend, this.slapFeedback, echoTone, chorus, chorusSend, chorusPan, lfo, depth, roomSend, room, roomTone];
     this._buildMenu(random);
     this._buildRace();

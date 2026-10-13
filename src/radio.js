@@ -1,7 +1,7 @@
 import { RADIO_TRACKS } from './audio.js';
 
 /** A keyboard-safe radio: tuning never sends a pop, trick or restart to the game. */
-export function createRadio({element,audio,onSelection=()=>{},onInteract=()=>{},onExit=()=>{},onToggleSound=()=>{}}) {
+export function createRadio({element,audio,onSelection=()=>{},onInteract=()=>{},onExit=()=>{},onToggleSound=()=>{},getSoundKey=()=> 'KeyM'}) {
   const query=selector=>element.querySelector(selector);
   const select=query('#radio-track'),shuffle=query('#radio-shuffle'),auto=query('#radio-auto');
   const title=query('#music-track'),status=query('#radio-status'),sound=query('#sound'),soundLabel=query('#radio-sound-label');
@@ -37,7 +37,7 @@ export function createRadio({element,audio,onSelection=()=>{},onInteract=()=>{},
     if(event.type!=='keydown')return;
     pointerInput=false;
     if(event.key==='Escape'){event.preventDefault();onExit();}
-    else if(event.code==='KeyM'&&!event.target?.closest?.('select,input')){
+    else if(event.code===getSoundKey()&&!event.target?.closest?.('select,input')){
       event.preventDefault();if(!event.repeat)onToggleSound();
     }
     // Native Enter/Space clicks, Tab focus and song-list arrow keys still work.

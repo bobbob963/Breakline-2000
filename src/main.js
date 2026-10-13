@@ -30,12 +30,16 @@ import { CHARACTERS, OUTFITS, BOARD_DESIGNS, validateProfile, CustomizationPrevi
 import { MenuSurferPreview } from './menu-surfer.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { createLoadingScreen, paintLoadingStage } from './loading-screen.js';
-import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
+import { createKeydownHandler } from './keyboard.js';
+import { getControlMap } from './key-bindings.js';
+import { PLAYER_SETTINGS_KEY, loadPlayerSettings, sanitizePlayerSettings } from './player-settings.js';
+import { createSettingsPanel } from './settings-panel.js';
+import { remapControlText, remapKeyLabel, remapControlsElement } from './control-labels.js';
 import { createAdminPanel } from './admin-panel.js';
 import { createTutorial } from './tutorial.js';
-import { loadRiderIdentity, saveRiderIdentity, sanitizeRiderName } from './rider-identity.js';
+import { IDENTITY_KEY, loadRiderIdentity, saveRiderIdentity, sanitizeRiderName } from './rider-identity.js';
 import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
-import { everythingUnlocked, persistAdminEntries, resetBreaklineSave } from './admin-save.js';
+import { everythingUnlocked, persistAdminEntries, resetBreaklineSave, resetBreaklineProgress } from './admin-save.js';
 import { chooseSurfWeather, getSurfWeather, getSurfSessionWeather } from './surf-weather.js';
 import { SECRET_STORAGE_KEY, sanitizeSecretProgress, awardSurvivalSecret } from './secret-progress.js';
 import { TimePowerScreen } from './time-power-screen.js';
@@ -52,6 +56,10 @@ const pad=n=>Math.round(n).toString().padStart(6,'0');
 const clockText=n=>{const seconds=Math.max(0,Math.floor(Number.isFinite(n)?n:0));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
 const read=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catch{return fallback;}};
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage is optional. */}};
+let playerSettings=loadPlayerSettings({getItem:key=>read(key,null)});
+let keyMap=getControlMap(playerSettings.keybinds);
+let settingsResume=false;
+const controlHint=text=>remapControlText(text,playerSettings.keybinds);
 let riderIdentity=loadRiderIdentity({getItem:key=>read(key,null)});
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
 let adminSettings;try{adminSettings=sanitizeAdminSettings(JSON.parse(read(ADMIN_STORAGE_KEY,'null')));}catch{adminSettings=sanitizeAdminSettings(null);}
@@ -89,7 +97,7 @@ audio.selectTrack(read('breakline99-radio','auto'));
 const input={left:false,right:false,pump:false,brake:false,jump:false,action:false,grind:false};
 const special=new SpecialMeter();
 const pressed=new Set();
-let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,radio,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,radio,settingsPanel,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,newBest=false,secretUnlockedThisRun=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 const timePowerScreen=new TimePowerScreen({reducedMotion:window.matchMedia('(prefers-reduced-motion: reduce)').matches});
 let portraitKey='';
@@ -109,10 +117,10 @@ const modeInfo={
   surf:{name:'SURF SESSION',level:'OPEN COAST',description:'A new sky every run: dawn, midday, vibrant sunset or dusk. Carve for air and land trick combos for a higher score.'},
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread rust tunnels and land trick combos for speed boosts.'},
 };
-function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
+function toast(text,bail=false){$('toast').textContent=controlHint(text);$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
 function clearInput(){pressed.clear();for(const k in input)input[k]=false;keydownHandler?.resetAdminSequence();}
 function applyPlayerSettings(){game.setCharacter(profile.character);game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
-function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!tutorial?.isOpen&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
+function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!tutorial?.isOpen&&!settingsPanel?.isOpen&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
 function openAdmin(){if(!adminHomeScreen())return;clearInput();adminPanel.open();}
 function openTutorial(replay=true){if(!adminHomeScreen())return;clearInput();tutorial.open({replay});}
 function completeTutorial(name,{persist=true}={}){
@@ -135,6 +143,33 @@ function giveEverything(){
   clearInput();makeGame();updateModeMenu();updateCustomizationChoices();updateHud();
 }
 function fullReset(){resetBreaklineSave(localStorage);window.location.reload();}
+function openSettings(){
+  if(!bootReady||wasted.active||tutorial?.isOpen||adminPanel?.isOpen||workshopMode||settingsPanel.isOpen)return;
+  clearInput();settingsResume=game.phase==='running';if(settingsResume)game.pause();settingsPanel.open();
+}
+function closeSettings(){clearInput();if(settingsResume&&game.phase==='paused')game.resume();settingsResume=false;}
+function applyGamePreferences(){
+  keyMap=getControlMap(playerSettings.keybinds);world?.applyViewSettings(playerSettings);
+  audio.setVolumes(playerSettings.musicVolume,playerSettings.effectsVolume);
+  $('quality').textContent=playerSettings.quality==='retro'?'VIDEO: 1999':'VIDEO: CLEAN';
+  document.body.classList.toggle('clean-graphics',playerSettings.quality==='clean');
+  document.querySelectorAll('.control-strip kbd').forEach(node=>{node.dataset.defaultKey??=node.textContent;node.textContent=remapKeyLabel(node.dataset.defaultKey,playerSettings.keybinds);});
+  $('restart').textContent=controlHint('R ↻ RESTART SESSION');
+  $('sound').title=`Sound (${remapKeyLabel('M',playerSettings.keybinds)})`;
+  $('radio-power-caption').textContent=`POWER / ${remapKeyLabel('M',playerSettings.keybinds)}`;
+}
+function applySettings(next,{name}){
+  const safe=sanitizePlayerSettings(next),cleanName=sanitizeRiderName(name);
+  if(!cleanName)throw new Error('Enter a name for your rider.');
+  const identity={...riderIdentity,name:cleanName};
+  persistAdminEntries(localStorage,[[PLAYER_SETTINGS_KEY,JSON.stringify(safe)],[IDENTITY_KEY,JSON.stringify(identity)]]);
+  clearInput();playerSettings=safe;riderIdentity=identity;menuSurfer?.setName(identity.name);applyGamePreferences();
+  if(modalMode==='help'){const resume=resumeAfterModal;closeModal(false);showHelp();resumeAfterModal=resume;}
+  if(modalMode==='pause')$('modal-content').innerHTML=`<p>The clock is stopped. Your line is waiting.</p><p>${remapKeyLabel('P',playerSettings.keybinds)} / ESC resume · ${remapKeyLabel('R',playerSettings.keybinds)} restart</p>`;
+  updateHud();
+}
+function resetProgress(){resetBreaklineProgress(localStorage);window.location.reload();}
+
 function syncInput(){for(const name in input)input[name]=[...pressed].some(code=>keyMap[code]===name);}
 function loadBest(){best=Math.max(0,Number(read(`breakline99-best-${selectedMode}`,selectedMode==='surf'?read('breakline99-best','0'):'0'))||0);}
 function saveBest(){if(!game)return;if(selectedMode==='storm'&&game.elapsed>bestSurvival){bestSurvival=game.elapsed;write('breakline99-survival-time',String(bestSurvival));}if(game.score<=best)return;best=game.score;newBest=true;write(`breakline99-best-${selectedMode}`,String(best));}
@@ -225,7 +260,7 @@ function updateSoundLabel(){
 }
 async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?'on':'off';write('breakline99-sound',soundPreference);updateSoundLabel();}
 function startRun(kind='default'){
-  if(adminPanel?.isOpen||tutorial?.isOpen)return;
+  if(adminPanel?.isOpen||tutorial?.isOpen||settingsPanel?.isOpen)return;
   wasted.reset();timePowerScreen.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;secretUnlockedThisRun=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
   if(game.isTimeTrial){
@@ -257,7 +292,7 @@ function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
   $('modal').classList.remove('hidden');$('modal-action').focus({preventScroll:true});
 }
 function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;$('stage').focus({preventScroll:true});}
-function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'||modalMode==='trials'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
+function pause(){if(settingsPanel?.isOpen)return;if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'||modalMode==='trials'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED',`<p>The clock is stopped. Your line is waiting.</p><p><kbd>${remapKeyLabel('P',playerSettings.keybinds)}</kbd> / <kbd>ESC</kbd> resume · <kbd>${remapKeyLabel('R',playerSettings.keybinds)}</kbd> restart</p>`,'KEEP RIDING','TIME OUT');}
 function showHelp(){
   if(modalMode==='help'){closeModal();return;}
   openModal('help','HOW TO RIDE',`<div class="controls-grid">
@@ -282,6 +317,7 @@ function showHelp(){
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
   <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding, reef corridors and quicker-closing barrels build as you survive.'}</p>
 `,'GOT IT','CONTROLS');
+  remapControlsElement($('modal-content'),playerSettings.keybinds);
 }
 function showResults(){
   if(game.isTimeTrial){showTrialResults();return;}
@@ -508,13 +544,15 @@ function updateHud(){
     $('risk-fill').style.width=`${(game.danger||0)*100}%`;
     $('surf-condition').classList.toggle('danger',(game.danger||0)>.65);
   }
+  for(const id of ['combo-caption','special-label','pop-label','time-power-detail','reward-ride-status','race-boost-detail','charge-label','surf-warning']){const el=$(id);if(el)el.textContent=controlHint(el.textContent);}
 }
 
-radio=createRadio({element:document.querySelector('.masthead'),audio,onSelection:id=>write('breakline99-radio',id),onInteract:clearInput,onExit:()=>{$('stage').focus({preventScroll:true});clearInput();},onToggleSound:toggleSound});
-tutorial=createTutorial({getName:()=>riderIdentity.name,onComplete:completeTutorial,onClose:()=>{clearInput();$('start').focus({preventScroll:true});}});
+radio=createRadio({element:document.querySelector('.masthead'),audio,onSelection:id=>write('breakline99-radio',id),onInteract:clearInput,onExit:()=>{$('stage').focus({preventScroll:true});clearInput();},onToggleSound:toggleSound,getSoundKey:()=>playerSettings.keybinds.sound});
+settingsPanel=createSettingsPanel({getState:()=>({settings:playerSettings,name:riderIdentity.name}),onApply:applySettings,onResetProgress:resetProgress,onClose:closeSettings});
+tutorial=createTutorial({getKeybinds:()=>playerSettings.keybinds,getName:()=>riderIdentity.name,onComplete:completeTutorial,onClose:()=>{clearInput();$('start').focus({preventScroll:true});}});
 adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onTutorial:()=>openTutorial(true),onClose:clearInput});
 keydownHandler=createKeydownHandler(
-  ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen}),
+  ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen,settingsOpen:settingsPanel.isOpen,keybinds:playerSettings.keybinds}),
   {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,openAdmin,
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
     hideWardrobe:closeWardrobe,
@@ -522,10 +560,10 @@ keydownHandler=createKeydownHandler(
     pressControl:code=>{pressed.add(code);syncInput();}}
 );
 window.addEventListener('keydown',keydownHandler);
-window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||tutorial.isOpen||adminPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
+window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||tutorial.isOpen||adminPanel.isOpen||settingsPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(keyMap[e.code]==='jump'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
 window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')pause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
-document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||event.target.closest('.masthead'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
+document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||settingsPanel.isOpen||event.target.closest('.masthead'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
 $('race-ladders').addEventListener('click',showLadder);
@@ -546,7 +584,8 @@ $('modal-content').addEventListener('click',event=>{
 });
 $('modal-home').addEventListener('click',goHome);
 $('modal-action').addEventListener('click',()=>['results','ladder','trials'].includes(modalMode)?startRun():modalMode==='graphics'?location.reload():closeModal());
-$('quality').addEventListener('click',()=>{$('quality').textContent=world.toggleQuality()?'VIDEO: 1999':'VIDEO: CLEAN';});
+$('quality').addEventListener('click',()=>{try{applySettings({...playerSettings,quality:playerSettings.quality==='retro'?'clean':'retro'},{name:riderIdentity.name});}catch(error){toast(error.message,true);}});
+$('menu-settings').addEventListener('click',openSettings);$('pause-settings').addEventListener('click',openSettings);
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();goHome();});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>selectMode(b.dataset.mode)));
 $('park-start').addEventListener('change',e=>{selectedParkStart=e.target.value;write('breakline99-park-start',selectedParkStart);});
@@ -563,7 +602,7 @@ try{
   await loadCharacterTextures();
   loading.set(40,'BUILDING YOUR SESSION','Preparing the coast, wave ramps and Waterworks.');
   await paintLoadingStage();
-  world=new SurfWorld($('viewport'),profile);
+  world=new SurfWorld($('viewport'),profile);applyGamePreferences();
   menuSurfer=new MenuSurferPreview($('home-surfer-preview'),profile);
   menuSurfer.setName(riderIdentity.name);
   loading.set(78,'SETTING YOUR LINE','Getting your surfer, board and session ready.');
@@ -593,5 +632,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();radio.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();radio.dispose();settingsPanel.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}
