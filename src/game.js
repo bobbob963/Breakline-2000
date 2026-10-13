@@ -3,7 +3,8 @@ import { surfRules } from './session-modes.js';
 import { findComboAnimation } from './combo-animations.js';
 import { getRewardBoard } from './board-rewards.js';
 import { sanitizeResolvedAdminStats } from './admin-settings.js';
-import { waveHeight,waveCrest,stormDifficulty,stormBarrel,barrelCrossSection,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
+import { waveHeight,waveCrest,stormDifficulty,stormBarrel,stormBarrelsNear,barrelCrossSection,barrelClosureProgress,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
+import { surfHazardsNear,whirlpoolPull,sweepSurfHazard } from './surf-hazards.js';
 export { SURF_RULES } from './session-modes.js';
 export { waveHeight,waveCrest } from './storm-waves.js';
 export const RUN_SECONDS = 120;
@@ -50,6 +51,9 @@ export class SurfGame {
       cutbackChord:0,cutbackChordArmed:true,
       popRecovery:0,cutbackLaunchTime:0,airLaunchSource:'flat',launchTricks:0,airJumpsUsed:0,
       stormStage:1,stormDifficulty:0,barrel:null,barrelTime:0,barrelsSurvived:0,barrelRun:null,lastBarrelAward:-1,lastPrunedCourse:-1,nextBarrelDistance:STORM_BARREL_FIRST,
+      barrelTimings:new Map(),barrelWarning:'',barrelRemaining:0,barrelClosingProgress:0,
+      surfBoostTime:0,surfBoostDuration:0,surfBoostSpeed:0,surfBoostCombo:false,surfBoostLabel:'',surfBoostAwarded:true,
+      hazardProcessed:new Set(),hazardWarning:'',hazardDanger:0,flatHopOffset:0,flatHopActive:false,
     });
     this.updateObjective();
     this.onEvent({ type: 'reset' });
@@ -123,6 +127,7 @@ export class SurfGame {
   tryAirJump() {
     if(!this.airJumpReady)return false;
     this.airJumpsUsed++;
+    this.flatHopActive=false;
     // Add lift in the same flight: never erase an unfinished trick, reset its
     // combo or turn this into another race-boost award opportunity.
     this.vy=Math.min(18*this.jumpPowerMultiplier,Math.max(6.2*this.jumpPowerMultiplier,this.vy+2.2*this.jumpPowerMultiplier));this.charge=0;
@@ -130,8 +135,20 @@ export class SurfGame {
     this.onEvent({type:'airJump',rewardBoard:this.rewardBoard,vfx:'wind'});
     return true;
   }
-  // Race subclasses can reward a landed trick without changing ordinary surf speeds.
-  get forwardSpeedBonus() {return 0;}
+  // Race mixins own their own boosts and courses, including their AI riders.
+  get surfAdventureEnabled() {return this.mode==='surf'&&(this.rulesId==='surf'||this.rulesId==='storm')&&typeof this.clearRaceBoost!=='function';}
+  get forwardSpeedBonus() {return this.surfAdventureEnabled&&this.surfBoostTime>0?this.surfBoostSpeed:0;}
+  clearSurfBoost() {this.surfBoostTime=0;this.surfBoostDuration=0;this.surfBoostSpeed=0;this.surfBoostCombo=false;this.surfBoostLabel='';}
+  awardSurfBoost() {
+    if(!this.surfAdventureEnabled||this.surfBoostAwarded||this.launchTricks<1||this.bailTime>0)return false;
+    this.surfBoostAwarded=true;
+    const tricks=this.pendingTricks,combo=tricks>1;
+    const speed=(combo?Math.min(14,10+(tricks-2)*2):7)*(this.rewardBoardDefinition?.boostPowerMultiplier??1);
+    const duration=(combo?Math.min(4.4,3.2+(tricks-2)*.4):2.6)*(this.rewardBoardDefinition?.boostDurationMultiplier??1);
+    this.surfBoostSpeed=speed;this.surfBoostTime=this.surfBoostDuration=duration;this.surfBoostCombo=combo;
+    this.surfBoostLabel=combo?'COMBO BOOST':'TRICK BOOST';
+    this.onEvent({type:'surfBoost',tricks,combo,speed,duration});return true;
+  }
   get popReady() {
     const pipeFloor=!this.pipeRide||Math.abs(Math.atan2(Math.sin(this.pipeRide.angle),Math.cos(this.pipeRide.angle)))<.12;
     return this.phase==='running'&&!this.airborne&&this.bailTime<=0&&!this.cutbackActive&&!this.lipMove&&pipeFloor&&this.popCooldown===0;
@@ -169,6 +186,7 @@ export class SurfGame {
   bail(reason = 'WIPEOUT') {
     if (this.bailTime > 0 || this.phase !== 'running') return;
     const lost = this.comboBase * this.multiplier;
+    this.clearSurfBoost();this.surfBoostAwarded=true;this.flatHopActive=false;
     this.clearCombo(); this.trick = null; this.airborne = false;
     this.charge = 0; this.vy = 0; this.bailTime = 1.35; this.speed = 8;
     this.popRecovery=POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier??1);this.cutbackLaunchTime=0;this.airJumpsUsed=0;
@@ -183,9 +201,10 @@ export class SurfGame {
     if(this.airborne)return this.tryAirJump();
     if(!this.popReady)return false;
     this.lastJump = this.elapsed;
-    this.airLaunchSource=this.launchSource;this.launchTricks=0;this.popRecovery=this.popRecoveryDuration;this.airJumpsUsed=0;
+    this.airLaunchSource=this.launchSource;this.launchTricks=0;this.popRecovery=this.popRecoveryDuration;this.airJumpsUsed=0;this.surfBoostAwarded=false;
     this.airborne = true; this.airtime = 0; this.trick = null;
-    this.vy=(this.airLaunchSource==='flat'?2.2+this.charge*.4:(this.airLaunchSource==='lip'?8.2:7.6)+this.charge*2.5)*this.jumpPowerMultiplier;
+    this.vy=(this.airLaunchSource==='flat'?(this.surfAdventureEnabled?2.9+this.charge*.3:2.2+this.charge*.4):(this.airLaunchSource==='lip'?8.2:7.6)+this.charge*2.5)*this.jumpPowerMultiplier;
+    this.flatHopOffset=.06;this.flatHopActive=this.surfAdventureEnabled&&this.airLaunchSource==='flat';
     this.cutbackLaunchTime=0;
     this.y += 0.06; this.charge = 0; this.rotation = 0; this.flipRotation = 0; this.boardRotation = 0;this.rollRotation=0;
     this.onEvent({ type: 'jump',source:this.airLaunchSource }); return true;
@@ -229,7 +248,7 @@ export class SurfGame {
     this.charge=0;this.onEvent({type:'cutbackStart',direction:this.cutbackDirection});return true;
   }
   updateObjective() {
-    this.objectiveText=this.rulesId==='rush'?`CATCH 12 CHECKPOINTS · ${this.gates}/12 · +8s PER RING`:this.rulesId==='storm'?`ENDLESS STORM · STAGE ${this.stormStage} · ${this.lives} ${this.lives===1?'LIFE':'LIVES'} · RIDE THE BARRELS`:'LAND CLEAN · LINK TRICKS · SCORE BIG';
+    this.objectiveText=this.rulesId==='rush'?`CATCH 12 CHECKPOINTS · ${this.gates}/12 · +8s PER RING`:this.rulesId==='storm'?`ENDLESS STORM · STAGE ${this.stormStage} · ${this.lives} ${this.lives===1?'LIFE':'LIVES'} · BOOST THROUGH THE CURL`:'LAND TRICKS TO BOOST · HOP DRIFTWOOD · LINK COMBOS';
   }
   finish(reason) {
     if(this.phase!=='running')return;
@@ -246,6 +265,7 @@ export class SurfGame {
   stepSurf(dt,input) {
     const previousDistance=this.distance,previousX=this.x,previousY=this.y;
     this.elapsed += dt; this.time = this.rules.endless?this.elapsed:Math.max(0,this.time-dt);
+    if(this.surfBoostTime>0){this.surfBoostTime=Math.max(0,this.surfBoostTime-dt);if(this.surfBoostTime<1e-9)this.clearSurfBoost();}
     if(this.rulesId==='storm') {
       this.stormDifficulty=stormDifficulty(this.elapsed);
       const stage=1+Math.floor(this.elapsed/30);
@@ -259,7 +279,9 @@ export class SurfGame {
     // Consume only a successful chord. A held airborne/cooldown attempt can
     // start when it becomes legal, but continued holding cannot repeat it.
     if(chord&&this.cutbackChordArmed&&this.doCutback(chord))this.cutbackChordArmed=false;
-    this.current=(1.35*Math.sin(this.distance*.022+this.elapsed*.5)+.7*Math.sin(this.elapsed*1.1))*this.rules.currentStrength*(1+this.stormDifficulty*.8);
+    const hazards=this.surfAdventureEnabled?surfHazardsNear(this.distance,this.rulesId,this.elapsed):[];
+    const poolPull=this.bailTime<=0?whirlpoolPull(hazards,this.x,this.distance,this.airborne):0;
+    this.current=(1.35*Math.sin(this.distance*.022+this.elapsed*.5)+.7*Math.sin(this.elapsed*1.1))*this.rules.currentStrength*(1+this.stormDifficulty*.8)+poolPull;
     if(this.cutbackActive){this.cutbackAge+=dt;this.cutbackProgress=clamp(this.cutbackAge/.72,0,1);this.cutback=Math.sin(this.cutbackProgress*Math.PI);}
     // Board cruise speed and earned bursts are separate: a 25% faster deck
     // with a 50% stronger boost never multiplies that boost a second time.
@@ -283,10 +305,16 @@ export class SurfGame {
       this.bailTime = Math.max(0, this.bailTime - dt); this.y = ground;
       if (this.bailTime === 0) { this.x = clamp(this.x, -12, 13); this.onEvent({ type: 'recover' }); }
     } else if (this.airborne) {
-      this.airtime += dt; this.y += this.stepAirVertical(dt,10.5);
+      this.airtime += dt;
+      const verticalTravel=this.stepAirVertical(dt,10.5);
+      if(this.flatHopActive) {
+        // A small ollie follows the changing water underneath it. A wave bump
+        // cannot swallow the hop before it clears a low floating branch.
+        this.flatHopOffset+=verticalTravel;this.y=ground+this.flatHopOffset;
+      }else this.y+=verticalTravel;
       this.updateAirTrick(dt);
       if (this.y <= ground && this.vy < 0 && this.airtime > 0.12) {
-        this.y = ground; this.airborne = false; this.vy = 0;
+        this.y = ground; this.airborne = false; this.vy = 0;this.flatHopActive=false;
         if(Math.abs(this.vx)>this.rules.landingTolerance)this.bail('SIDEWAYS LANDING — RELEASE STEER OR BRAKE');
         else {
           const landing=this.resolveLandingTrick();
@@ -313,6 +341,8 @@ export class SurfGame {
     }
     if(this.phase!=='running')return;
     if(this.rulesId==='storm')this.updateStormBarrel(dt,{x:previousX,y:previousY,z:-previousDistance});
+    if(this.phase!=='running')return;
+    if(this.surfAdventureEnabled)this.updateSurfHazards(hazards,{x:previousX,y:previousY,distance:previousDistance},dt);
     if(this.phase!=='running')return;
     // Course objects are generated deterministically; each can trigger once.
     const current = Math.floor((this.distance-this.rules.firstGate)/this.rules.spacing);
@@ -345,7 +375,7 @@ export class SurfGame {
     }
     this.landingControl=clamp(Math.abs(this.vx)/this.rules.landingTolerance,0,1);
     this.landingWarning=this.airborne&&this.vy<0&&this.y-ground<3&&this.landingControl>.8?'RELEASE STEER / BRAKE TO LAND':'';
-    this.danger=Math.max(clamp((Math.abs(this.x)-11)/5,0,1),this.landingWarning?this.landingControl:0,this.bailTime>0?1:0);
+    this.danger=Math.max(clamp((Math.abs(this.x)-11)/5,0,1),this.landingWarning?this.landingControl:0,this.bailTime>0?1:0,this.hazardDanger,this.barrelClosingProgress);
     for(let i=Math.max(0,current);i<=current+2;i++) {
       const item=courseItem(i,this.rulesId),ahead=item.hazardDistance-this.distance;
       if(ahead>=0&&ahead<48&&Math.abs(this.x-item.hazardX)<item.hazardRadius+1)this.danger=Math.max(this.danger,1-ahead/48);
@@ -354,15 +384,57 @@ export class SurfGame {
       this.lastPrunedCourse=current;
       for(const key of this.processed)if(Number(key.slice(1))<current-8)this.processed.delete(key);
     }
+    // Award after all same-step collisions, so landing on a branch or reef
+    // never produces a boost before the wipeout clears the flight.
+    if(this.surfAdventureEnabled&&!this.airborne&&this.bailTime<=0)this.awardSurfBoost();
     if (!this.rules.endless&&this.time <= 0) {
       this.finish(this.rulesId==='rush'?'TIME EXPIRED':'SESSION COMPLETE');
     }
   }
+  updateSurfHazards(hazards,previous,dt) {
+    this.hazardWarning='';this.hazardDanger=0;
+    for(const item of hazards) {
+      const ahead=item.distance-this.distance;
+      if(ahead>=-item.radiusZ&&ahead<65&&!this.hazardProcessed.has(item.id)) {
+        const inPath=Math.abs(this.x-item.x)<item.radiusX+(item.type==='whirlpool'?4:1);
+        if(inPath&&!this.hazardWarning)this.hazardWarning=item.type==='whirlpool'?'WHIRLPOOL · STEER WIDE OR GET AIR':'DRIFTWOOD · TAP SPACE TO HOP';
+        if(inPath)this.hazardDanger=Math.max(this.hazardDanger,clamp(1-ahead/65,0,1)*.8);
+      }
+      if(!this.hazardProcessed.has(item.id)&&this.bailTime<=0&&sweepSurfHazard(item,previous,this,this.elapsed-dt,this.elapsed)) {
+        this.hazardProcessed.add(item.id);
+        this.bail(item.type==='whirlpool'?'PULLED INTO A WHIRLPOOL':'CAUGHT ON DRIFTWOOD');
+        this.onEvent({type:'surfHazardHit',hazard:item.type,id:item.id});
+        if(this.phase!=='running')return;
+      }
+      if(this.distance>item.distance+item.radiusZ)this.hazardProcessed.add(item.id);
+    }
+    // The endless run stores only nearby recovery markers.
+    if(this.hazardProcessed.size>24) {
+      const nearby=new Set(surfHazardsNear(this.distance,this.rulesId,this.elapsed,350,100).map(item=>item.id));
+      for(const id of this.hazardProcessed)if(!nearby.has(id))this.hazardProcessed.delete(id);
+    }
+  }
   updateStormBarrel(dt,previous) {
-    const contact=this.bailTime<=0?sweepStormBarrel(previous,{x:this.x,y:this.y,z:-this.distance},this.elapsed-dt,this.elapsed):null;
-    if(contact)this.bail('CAUGHT BY THE WAVE LIP');
+    this.barrelWarning='';this.barrelRemaining=0;this.barrelClosingProgress=0;
+    for(const tube of stormBarrelsNear(this.distance,20,70)) {
+      if(this.distance<tube.approachDistance||this.distance>tube.endDistance)continue;
+      if(!this.barrelTimings.has(tube.index)) {
+        const crossingFraction=clamp((tube.approachDistance+previous.z)/(this.distance+previous.z||1),0,1);
+        const triggerTime=this.elapsed-dt+dt*crossingFraction;
+        const run={index:tube.index,triggerTime,deadline:triggerTime+4.45-this.stormDifficulty*.55,closeDuration:1.2};
+        this.barrelTimings.set(tube.index,run);
+        this.onEvent({type:'barrelWarning',index:tube.index,seconds:run.deadline-this.elapsed});
+      }
+      const timing=this.barrelTimings.get(tube.index);
+      this.barrelRemaining=Math.max(0,timing.deadline-this.elapsed);
+      this.barrelClosingProgress=barrelClosureProgress(tube,this.elapsed,this.barrelTimings);
+      this.barrelWarning=this.barrelClosingProgress>0?'WAVE CLOSING · BOOST OUT':'CLOSING BARREL · PUMP / LAND TRICKS TO BOOST';
+    }
+    for(const index of this.barrelTimings.keys())if(stormBarrel(index).endDistance<this.distance-80)this.barrelTimings.delete(index);
+    const contact=this.bailTime<=0?sweepStormBarrel(previous,{x:this.x,y:this.y,z:-this.distance},this.elapsed-dt,this.elapsed,this.barrelTimings):null;
+    if(contact)this.bail(contact.section.closingProgress>0?'CAUGHT BY THE CLOSING WAVE':'CAUGHT BY THE WAVE LIP');
     if(this.phase!=='running')return;
-    const sample=sampleStormBarrel(this.x,this.y,-this.distance,this.elapsed);
+    const sample=sampleStormBarrel(this.x,this.y,-this.distance,this.elapsed,this.barrelTimings);
     if(sample) {
       const {barrel,section}=sample;
       if(this.barrelRun?.id!==barrel.id)this.barrelRun={id:barrel.id,index:barrel.index,time:0,insideDistance:0,bailed:this.bailTime>0,entered:false};
@@ -371,7 +443,7 @@ export class SurfGame {
         if(!run.entered){run.entered=true;this.onEvent({type:'barrelEnter',index:barrel.index});}
         run.time+=dt;run.insideDistance+=Math.max(0,this.distance+previous.z);this.barrelTime+=dt;
       }
-      this.barrel={id:barrel.id,index:barrel.index,inside,time:run.time,progress:section.progress,x:section.centerX,startDistance:barrel.startDistance,endDistance:barrel.endDistance};
+      this.barrel={id:barrel.id,index:barrel.index,inside,time:run.time,progress:section.progress,x:section.centerX,startDistance:barrel.startDistance,endDistance:barrel.endDistance,closingProgress:section.closingProgress,timeRemaining:this.barrelRemaining};
     } else {
       this.barrel=null;
       const run=this.barrelRun;
@@ -388,8 +460,8 @@ export class SurfGame {
     const next=stormBarrel(nextIndex);
     this.nextBarrelDistance=sample?0:next.startDistance-this.distance;
     if(!sample&&this.nextBarrelDistance<=90) {
-      const section=barrelCrossSection(next,-next.centerDistance,this.elapsed);
-      this.barrel={id:next.id,index:next.index,inside:false,time:0,progress:0,x:section.centerX,startDistance:next.startDistance,endDistance:next.endDistance};
+      const section=barrelCrossSection(next,-next.centerDistance,this.elapsed,this.barrelTimings);
+      this.barrel={id:next.id,index:next.index,inside:false,time:0,progress:0,x:section.centerX,startDistance:next.startDistance,endDistance:next.endDistance,closingProgress:section.closingProgress,timeRemaining:this.barrelRemaining};
     }
   }
 }

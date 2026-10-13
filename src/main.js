@@ -33,6 +33,7 @@ import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
 import { createAdminPanel } from './admin-panel.js';
 import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
 import { everythingUnlocked, persistAdminEntries, resetBreaklineSave } from './admin-save.js';
+import { chooseSurfWeather, getSurfWeather } from './surf-weather.js';
 
 const $=id=>document.getElementById(id);
 const loading=createLoadingScreen();
@@ -45,6 +46,7 @@ const read=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catc
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage is optional. */}};
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
 let adminSettings;try{adminSettings=sanitizeAdminSettings(JSON.parse(read(ADMIN_STORAGE_KEY,'null')));}catch{adminSettings=sanitizeAdminSettings(null);}
+let lastSurfWeather=read('breakline99-weather','');
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm','tournament','trials'].includes(selectedMode))selectedMode='surf';
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v2',read('breakline99-tournament-v1','null'))));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
@@ -56,12 +58,12 @@ if(!cosmeticAvailable(OUTFITS[profile.outfit]))profile.outfit='riptide';
 if(!cosmeticAvailable(BOARD_DESIGNS[profile.boardDesign]))profile.boardDesign='bolt';
 const isParkMode=()=>game?.mode==='park';
 $('loading-tip').textContent={
-  surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
+  surf:'A different sky every session. Hop driftwood with Space; land lip or cutback tricks for a speed boost.',
   park:'Hold SHIFT while turning for a sharp cutback. At a ramp lip, SHIFT catches the coping. E rides pipe walls.',
   rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
   tournament:'Five ladders. Five prize boards. Beat every rival in a ladder to unlock its board and perk.',
   trials:'Beat the clock through every sun ring. Three new clears unlock a matching outfit and board graphic.',
-  storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
+  storm:'Escape before the barrel closes. Land tricks to boost, hop driftwood and steer clear of whirlpools.',
 }[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
 const classicLogo=createClassicLogoCanvas().toDataURL('image/png');
@@ -82,8 +84,8 @@ const modeInfo={
   trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears. Clear three to earn the Afterburner speed board.'},
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
-  storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
-  surf:{name:'SURF SESSION',level:'SUNSET POINT',description:'Two minutes on the swell. Carve, launch off the lip and link tricks with more forgiving landings.'},
+  storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Always a storm. Three lives, no time limit. Escape closing barrels, dodge whirlpools and hop driftwood. Land tricks for the boost you need to get clear.'},
+  surf:{name:'SURF SESSION',level:'OPEN COAST',description:'A new sky every run: dawn, midday, sunset, dusk or storm. Hop driftwood, carve for air and land trick combos for a burst of speed.'},
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread the rust tunnels and grind the old pipework.'},
 };
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
@@ -112,7 +114,7 @@ function onEvent(e){
   // Rival actions are shown beside their name and on their rider. They must
   // never award the player special, replace player toasts or reset the camera.
   if(e.opponent)return;
-  world?.onEvent(e,game);if(!(e.type==='finish'&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type);
+  world?.onEvent(e,game);if(!(e.type==='finish'&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
   if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000*(game.characterStats?.specialGain??1));saveBest();}
   if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
@@ -122,6 +124,7 @@ function onEvent(e){
   if(e.type==='raceMiss'&&!e.opponent)toast(isParkMode()?'MISSED SUN RING · TURN BACK AND PASS THROUGH':'MISSED SUN RING · LINE UP WITH THE OPENING',true);
   if(e.type==='raceGo')toast('GO! · W TO PUMP');
   if(e.type==='raceBoost')toast(`${e.combo?'COMBO':'TRICK'} BOOST! · +${Math.round(e.speed*3.6)} KM/H`);
+  if(e.type==='surfBoost')toast(`${e.combo?'COMBO':'TRICK'} BOOST! · +${Math.round(e.speed*3.6)} KM/H`);
   if(e.type==='cutback')toast(isParkMode()?'SHARP CUTBACK':'CUTBACK SET · POP FOR AIR!');
   if(e.type==='grind')toast('WATER SLIDE!');
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
@@ -130,7 +133,7 @@ function onEvent(e){
   if(e.type==='airJump')toast(adminSettings.enabled?'CUSTOM AIR JUMP!':'SKYBOUND · SECOND AIR!');
   if(e.type==='finish'){saveBest();if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();showResults();}else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
 }
-function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfWeather(lastSurfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
   $('mode-trials').disabled=!timeTrialsUnlocked(tournamentProgress);
   $('trial-lock').textContent=timeTrialsUnlocked(tournamentProgress)?`${trialProgress.completedTrials}/12 cleared. Rewards every three.`:'Clear all five Rival ladders to unlock.';
@@ -156,7 +159,7 @@ function updateModeMenu(){
   $('rival-hud').querySelector('small').textContent=game.isTimeTrial?'TIME TRIAL / SOLO AGAINST THE CLOCK':game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
   $('race-progress').classList.toggle('hidden',!game.isRace);
   $('rival-action').classList.toggle('hidden',!game.isRace||game.isTimeTrial);
-  $('race-boost').classList.toggle('hidden',!game.isRace);
+  $('race-boost').classList.toggle('hidden',!game.isRace&&!game.surfAdventureEnabled);
   if(game.isTimeTrial){
     $('session-badge').textContent=`TRIAL ${game.trialIndex+1}/12 · ${trialProgress.completedTrials} CLEARED`;
     $('level-name').textContent=isParkMode()?`WATERWORKS / ${game.course.name}`:'CHAMPION COAST / TIME TRIAL';
@@ -190,6 +193,8 @@ function startRun(kind='default'){
     }else if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game=createTournamentGame(onEvent,game.getProgress());
     applyPlayerSettings();game.retry();
   }else{applyPlayerSettings();game.start(selectedMode==='park'?selectedParkStart:undefined);}
+  if(selectedMode==='surf'){lastSurfWeather=chooseSurfWeather(lastSurfWeather);game.weatherId=lastSurfWeather;write('breakline99-weather',lastSurfWeather);}
+  else if(selectedMode==='storm')game.weatherId='storm';
   world.setMode(game.mode);audio.setMode(game.mode);audio.setScene(game.isRace?'race':'ride');updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function restartRun(){startRun('retry');}
@@ -222,6 +227,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
+  ${game.surfAdventureEnabled?`<span>TRICK BOOST</span><span>Land a completed trick from the lip or a cutback for an automatic speed burst. Link tricks in an unbanked combo for more speed and a longer boost. Flat hops are for clearing driftwood; they do not earn a boost.</span><span>DRIFTWOOD</span><span>Tap and release Space before a low branch to hop over it. You can also steer around it. Watch the water ahead.</span>${selectedMode==='storm'?'<span>WHIRLPOOLS</span><span>The foam spiral pulls you toward its dark centre. Steer clear, or cross above it with enough air. The storm becomes harder the longer you survive.</span><span>CLOSING BARRELS</span><span>A countdown starts as you approach. Line up with the hollow wave, pump with W and use earned trick boosts to get out before the lip crashes down. The collapsing water can hit you; you can also stay outside the barrel.</span>':'<span>WEATHER + TIME</span><span>Each new Surf Session rolls a different sky and time of day. Pausing keeps the current conditions. Storm Rider always stays stormy.</span>'}`:''}
   ${game.isRace?`<span>SUN RINGS</span><span>Pass through each gold ring in order, then ${game.isTimeTrial?'beat the target time':'finish before your rival'}. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. ${game.isTimeTrial?'Missed ocean rings end the attempt. The timer stops while paused.':'There is no time limit.'}</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. ${game.isTimeTrial?'':'Rivals earn boosts with the same rules, so watch their tricks and boost trails. '}No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>`:''}
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
@@ -350,14 +356,21 @@ function updateHud(){
   $('race-countdown').classList.toggle('hidden',!counting);
   if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
   $('speed').textContent=Math.round(game.speed*3.6);$('speed-bar').style.width=`${Math.min(100,game.speed/25*100)}%`;
-  if(game.isRace){
-    const boosting=game.boostTime>0;
+  if(game.isRace||game.surfAdventureEnabled){
+    const boostTime=game.isRace?game.boostTime:game.surfBoostTime,boostSpeed=game.isRace?game.boostSpeed:game.surfBoostSpeed,boostDuration=game.isRace?game.boostDuration:game.surfBoostDuration;
+    const boosting=boostTime>0,comboBoost=game.isRace?game.boostLevel==='combo':game.surfBoostCombo;
     $('race-boost').classList.toggle('active',boosting);
-    $('race-boost').classList.toggle('combo-boost',boosting&&game.boostLevel==='combo');
-    $('race-boost-label').textContent=boosting?game.boostLabel:'TRICK BOOST';
-    $('race-boost-detail').textContent=boosting?`${input.brake?'BRAKING':`+${Math.round(game.boostSpeed*3.6)} KM/H`} · ${game.boostTime.toFixed(1)}s`:'HOLD SPACE · RELEASE · J · LAND';
-    $('race-boost-fill').style.width=`${boosting?Math.min(100,game.boostTime/game.boostDuration*100):0}%`;
+    $('race-boost').classList.toggle('combo-boost',boosting&&comboBoost);
+    $('race-boost-label').textContent=boosting?(comboBoost?'COMBO BOOST':'TRICK BOOST'):'TRICK BOOST';
+    $('race-boost-detail').textContent=boosting?`${input.brake?'BRAKING':`+${Math.round(boostSpeed*3.6)} KM/H`} · ${boostTime.toFixed(1)}s`:game.isRace?'HOLD SPACE · RELEASE · J · LAND':'LIP / CUTBACK · TRICK · LAND';
+    $('race-boost-fill').style.width=`${boosting?Math.min(100,boostTime/boostDuration*100):0}%`;
   }
+  const weatherVisible=game.mode==='surf'&&!game.isRace&&['surf','storm'].includes(selectedMode);
+  $('surf-weather').classList.toggle('hidden',!weatherVisible);
+  if(weatherVisible){const weather=getSurfWeather(selectedMode==='storm'?'storm':game.weatherId);$('surf-weather').textContent=`${weather.label} / ${weather.timeLabel}`;}
+  const barrelEvent=selectedMode==='storm'&&!!game.barrelWarning;
+  $('barrel-event').classList.toggle('hidden',!barrelEvent);
+  if(barrelEvent){$('barrel-countdown').textContent=game.barrelRemaining>0?`BARREL CLOSES IN ${game.barrelRemaining.toFixed(1)}s`:'WAVE CRASHING · GET CLEAR';$('barrel-event-fill').style.width=`${Math.max(0,Math.min(1,game.barrelClosingProgress||0))*100}%`;}
   $('wave-dot').style.left=`${isParkMode()?(game.x-PARK_BOUNDS.minX)/(PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*96:(game.x-MIN_X)/(MAX_X-MIN_X)*96}%`;
   $('wave-dot').parentElement.style.setProperty('--crest-position',`${(waveCrest(-game.distance,game.elapsed)-MIN_X)/(MAX_X-MIN_X)*96}%`);
   const surface=isParkMode()?(game.surface?.pipe?.name||game.surface?.ramp?.name):null;
@@ -421,7 +434,7 @@ function updateHud(){
       const turn=Math.atan2(Math.sin(angle),Math.cos(angle));
       raceHint=`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.hypot(dx,dz))}m · ${Math.abs(turn)>2?'TURN BACK':turn>.2?'LEFT ◀':turn<-.2?'RIGHT ▶':'STRAIGHT AHEAD'}`;
     }
-    $('surf-warning').textContent=game.bailTime>0?'RECOVERING…':game.landingWarning||barrelHint||((game.danger||0)>.6?(Math.abs(game.x)>13?'WAVE EDGE · STEER BACK IN':'REEF AHEAD · CHANGE YOUR LINE'):raceHint||'SHIFT + A / D · CUTBACK');
+    $('surf-warning').textContent=game.bailTime>0?'RECOVERING…':game.hazardWarning||game.landingWarning||game.barrelWarning||barrelHint||((game.danger||0)>.6?(Math.abs(game.x)>13?'WAVE EDGE · STEER BACK IN':'REEF AHEAD · CHANGE YOUR LINE'):raceHint||'SHIFT + A / D · CUTBACK');
     $('risk-fill').style.width=`${(game.danger||0)*100}%`;
     $('surf-condition').classList.toggle('danger',(game.danger||0)>.65);
   }

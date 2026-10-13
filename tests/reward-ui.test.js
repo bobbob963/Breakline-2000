@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { getSurfWeather } from '../src/surf-weather.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -162,7 +163,7 @@ test('the real HUD shows the active perk, only prompts an eligible Skybound jump
   const game = new SurfGame(); game.setRewardBoard('sky'); game.start();
   const context = {
     adminSettings:sanitizeAdminSettings(null),
-    $, game, profile: validateProfile({ rewardBoard: 'sky' }), getRewardBoard, selectedMode: 'surf', best: 0,
+    $, game, profile: validateProfile({ rewardBoard: 'sky' }), getRewardBoard, getSurfWeather, selectedMode: 'surf', best: 0,
     clockText: String, fmt: String, pad: String, input: {}, isParkMode: () => false, waveCrest, MIN_X, MAX_X, PARK_BOUNDS,
     COMBO_WINDOW, COMBO_ANIMATIONS, special: { value: 0, ready: false }, completedGoals: () => [false, false, false], challengeFlags: [], toast: noOp,
   };

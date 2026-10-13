@@ -50,7 +50,9 @@ test('Skybound descends more gently without hovering and the extra jump closes t
     const sky = ready(make), stock = ready(make, null);
     for (const game of [sky, stock]) {
       assert.ok(game.jump());
-      Object.assign(game, { y: 35, vy: -1, airtime: .5 });
+      // This fixture represents a high lip launch, not the new low hop that
+      // follows the water surface to clear driftwood.
+      Object.assign(game, { y: 35, vy: -1, airtime: .5, airLaunchSource:'lip',flatHopActive:false });
     }
     advance(sky, .5); advance(stock, .5);
     assert.ok(sky.y < 35 && sky.y > stock.y, `${mode}: falls slower than the standard board`);

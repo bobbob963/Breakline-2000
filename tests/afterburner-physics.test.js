@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SurfGame } from '../src/game.js';
+import { SurfGame,waveHeight } from '../src/game.js';
 import { WaveParkGame,parkHeight,parkRideSurface,PARK_PIPES,PARK_RAILS } from '../src/park.js';
-import { SurfRaceGame,createRaceCourse,raceOpponentInput,surfRaceTrickInput } from '../src/surf-race.js';
+import { SurfRaceGame,surfRaceTrickInput } from '../src/surf-race.js';
 import { ParkRaceGame,parkRaceOpponentInput,parkRaceTrickInput } from '../src/park-race.js';
 import { TIME_TRIALS,createTimeTrialGame } from '../src/time-trials.js';
 
@@ -33,10 +33,12 @@ const route=game=>game.mode==='surf'?surfRaceTrickInput(game,game.course,1):park
 
 test('Afterburner reaches exactly 25 percent higher cruise and pump speeds in ocean and Waterworks',()=>{
   for(const pump of [false,true]) {
-    const course=createRaceCourse(2000),stock=fixture(SurfGame,null).game,fast=fixture().game;
+    const stock=fixture(SurfGame,null).game,fast=fixture().game;
     for(const game of [stock,fast]) {
-      game.nextCheckpoint=0;
-      advance(game,8,rider=>({...raceOpponentInput(rider,course,1),pump}));
+      // Isolate cruise acceleration along the clear shoulder. Adventure
+      // driftwood and whirlpool avoidance have their own control tests.
+      game.x=14.8;game.y=waveHeight(game.x,0,0);
+      advance(game,8,rider=>{const error=14.8-rider.x-rider.vx*.22;return {left:error<-.2,right:error>.2,pump};});
       assert.equal(game.wipeouts,0);assert.equal(game.phase,'running');
       close(game.speed,(pump?26:19)*(game===fast?1.25:1),.0001);
     }

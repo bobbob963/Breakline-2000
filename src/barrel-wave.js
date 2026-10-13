@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { barrelCrossSection, stormBarrelsNear } from './storm-waves.js';
+import { barrelCrossSection, barrelSectionPoint, stormBarrelsNear, waveHeight, STORM_BARREL_ARC_SEGMENTS } from './storm-waves.js';
+import { renderedWaveHeight } from './ocean-surface.js';
 
 // A breaking wave is an open sheet: the left foot joins the existing face,
 // the crest curls overhead, and the foamy right lip falls into open water.
 // Both radii come from the simulation; there are no bottom or end caps.
-export const BARREL_ARC_SEGMENTS = 24;
+export const BARREL_ARC_SEGMENTS = STORM_BARREL_ARC_SEGMENTS;
 export const BARREL_LENGTH_SEGMENTS = 32;
 
 export function createBarrelGeometry() {
@@ -36,17 +37,22 @@ export function createBarrelGeometry() {
   return geometry;
 }
 
-export function updateBarrelGeometry(geometry, descriptor, time) {
+export function updateBarrelGeometry(geometry, descriptor, time, timings, oceanZ) {
   const p = geometry.attributes.position, columns = BARREL_ARC_SEGMENTS + 1;
   const layerSize = (BARREL_LENGTH_SEGMENTS + 1) * columns;
   for (let row = 0; row <= BARREL_LENGTH_SEGMENTS; row++) {
     const z = -(descriptor.startDistance + descriptor.length * row / BARREL_LENGTH_SEGMENTS);
-    const section = barrelCrossSection(descriptor, z, time);
+    const section = barrelCrossSection(descriptor, z, time, timings);
     for (let column = 0; column <= BARREL_ARC_SEGMENTS; column++) {
-      const angle = THREE.MathUtils.lerp(section.startAngle, section.endAngle, column / BARREL_ARC_SEGMENTS);
-      const cos = Math.cos(angle), sin = Math.sin(angle), index = row * columns + column;
-      p.setXYZ(index, section.centerX + cos * section.innerRadius, section.centerY + sin * section.innerRadius, z);
-      p.setXYZ(index + layerSize, section.centerX + cos * section.outerRadius, section.centerY + sin * section.outerRadius, z);
+      const arc=column/BARREL_ARC_SEGMENTS,index=row*columns+column;
+      const inner=barrelSectionPoint(section,arc),outer=barrelSectionPoint(section,arc,true);
+      // The ocean is drawn as a coarse triangular grid. The foot vertices use
+      // that exact drawn height too, removing gaps above its individual facets.
+      if(Number.isFinite(oceanZ))for(const point of [inner,outer]) {
+        const blend=THREE.MathUtils.smoothstep(arc,.84,1);
+        point.y+=(renderedWaveHeight(point.x,z,time,oceanZ)-waveHeight(point.x,z,time))*blend;
+      }
+      p.setXYZ(index,inner.x,inner.y,z);p.setXYZ(index+layerSize,outer.x,outer.y,z);
     }
   }
   p.needsUpdate = true;
@@ -98,12 +104,12 @@ function createLipGeometry() {
   return geometry;
 }
 
-function updateLip(geometry, descriptor, time) {
+function updateLip(geometry, descriptor, time, timings) {
   const p = geometry.attributes.position;
   for (let row=0;row<=BARREL_LENGTH_SEGMENTS;row++) {
     const z=-(descriptor.startDistance+descriptor.length*row/BARREL_LENGTH_SEGMENTS);
-    const s=barrelCrossSection(descriptor,z,time), a=s.startAngle;
-    const x=s.centerX+Math.cos(a)*s.innerRadius,y=s.centerY+Math.sin(a)*s.innerRadius;
+    const s=barrelCrossSection(descriptor,z,time,timings),point=barrelSectionPoint(s,0);
+    const {x,y}=point;
     // A ragged, falling fringe, not a sealed side wall. It dissolves below
     // the physical lip and never blocks the view down the hollow barrel.
     const fall=s.envelope*(.48+.36*(.5+.5*Math.sin(z*1.9+time*5.2)));
@@ -124,7 +130,7 @@ export function createStormBarrels() {
       gl_FragColor=vec4(.79,.9,.84,alpha);}`,
   });
   const active=new Map();
-  function update(distance,time,intensity=0,enabled=true) {
+  function update(distance,time,intensity=0,enabled=true,timings,oceanZ) {
     group.visible=enabled;if(!enabled)return;
     water.uniforms.uTime.value=time;water.uniforms.uIntensity.value=intensity;mist.uniforms.uTime.value=time;
     const nearby=stormBarrelsNear(distance,75,340), ids=new Set(nearby.map(b=>b.id));
@@ -138,22 +144,33 @@ export function createStormBarrels() {
         sheet.name=`barrel-water-${descriptor.index}`;lip.name=`barrel-spindrift-${descriptor.index}`;
         sheet.frustumCulled=lip.frustumCulled=false;group.add(sheet,lip);entry={sheet,lip};active.set(descriptor.id,entry);
       }
-      updateBarrelGeometry(entry.sheet.geometry,descriptor,time);updateLip(entry.lip.geometry,descriptor,time);
+      updateBarrelGeometry(entry.sheet.geometry,descriptor,time,timings,oceanZ);updateLip(entry.lip.geometry,descriptor,time,timings);
     }
   }
-  return {group,update};
+  function dispose(){
+    for(const entry of active.values()){entry.sheet.geometry.dispose();entry.lip.geometry.dispose();}
+    active.clear();group.clear();water.dispose();mist.dispose();
+  }
+  return {group,update,dispose};
 }
 
 // Keep the chase camera in the same clear tube as the surfer, rather than
 // allowing a spring arm to pass through the roof and hide the rider in water.
-export function resolveBarrelCamera(candidate,distance,time) {
+export function resolveBarrelCamera(candidate,distance,time,timings) {
   for(const barrel of stormBarrelsNear(distance,12,12)) {
-    const section=barrelCrossSection(barrel,candidate.z,time);
+    const section=barrelCrossSection(barrel,candidate.z,time,timings);
     if(!section.active||section.envelope<.75)continue;
     const dx=candidate.x-section.centerX,dy=candidate.y-section.centerY;
     if(Math.abs(dx)>section.innerRadius+1||dy<-.8*section.innerRadius)continue;
     const radius=Math.hypot(dx,dy),limit=section.innerRadius-.55;
     if(radius>limit){candidate.x=section.centerX+dx/radius*limit;candidate.y=section.centerY+dy/radius*limit;}
+    if(section.closingProgress>0){
+      const floor=waveHeight(candidate.x,candidate.z,time);
+      const openRoof=section.centerY+Math.sqrt(Math.max(0,section.innerRadius**2-(candidate.x-section.centerX)**2));
+      const progress=THREE.MathUtils.smoothstep(section.closingProgress,0,1);
+      const roof=THREE.MathUtils.lerp(openRoof,floor,progress*.985);
+      candidate.y=Math.max(floor+.65,Math.min(candidate.y,roof-.5));
+    }
   }
   return candidate;
 }

@@ -13,6 +13,7 @@ import { getRewardBoard,rewardBoardUnlocked,ALL_REWARD_BOARD_ORDER } from '../sr
 import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,updateAdminScope } from '../src/admin-settings.js';
 import { everythingUnlocked,persistAdminEntries,resetBreaklineSave } from '../src/admin-save.js';
+import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const noOp=()=>{};
@@ -28,7 +29,7 @@ function fixture() {
     SurfGame,WaveParkGame,createTournamentGame,createTimeTrialGame,nextTournamentLadder,selectTournamentLadder,
     ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,everythingUnlocked,persistAdminEntries,resetBreaklineSave,
     validateProfile,rewardBoardUnlocked,OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
-    profile:validateProfile(),adminSettings:sanitizeAdminSettings(null),
+    profile:validateProfile(),adminSettings:sanitizeAdminSettings(null),lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
     tournamentProgress:sanitizeTournamentProgress(null),trialProgress:sanitizeTimeTrialProgress(null),
     selectedMode:'surf',selectedParkStart:'basin',localStorage:saved,
     window:{location:{reload:()=>calls.reloads++}},world:{setMode:noOp,setProfile:noOp,onEvent:noOp},

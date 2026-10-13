@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SurfGame,courseItem,waveHeight} from '../src/game.js';
-import {stormBarrel,stormBarrelsNear,barrelCrossSection,barrelSurfacePoint,barrelShellDistance,sampleStormBarrel,sweepStormBarrel,stormDifficulty} from '../src/storm-waves.js';
+import {stormBarrel,stormBarrelsNear,barrelCrossSection,barrelSurfacePoint,barrelShellDistance,sampleStormBarrel,sweepStormBarrel,stormDifficulty,waveCrest} from '../src/storm-waves.js';
+import {surfHazardsNear} from '../src/surf-hazards.js';
+import {resolveAdminStats} from '../src/admin-settings.js';
 
 function routeInput(game) {
+  let pop=false;
   const tube=game.barrel;
   let target=tube?barrelCrossSection(stormBarrel(tube.index),-Math.max(game.distance,tube.startDistance+8),game.elapsed).centerX:0;
   const index=Math.max(0,Math.floor((game.distance-game.rules.firstGate)/game.rules.spacing));
@@ -15,8 +18,14 @@ function routeInput(game) {
       if(choices.length)target=choices.sort((a,b)=>Math.abs(a-game.x)-Math.abs(b-game.x))[0];
     }
   }
+  for(const item of surfHazardsNear(game.distance,'storm',game.elapsed,8,40)) {
+    const ahead=item.distance-game.distance;
+    if(item.type==='driftwood'&&ahead>3&&ahead<6&&Math.abs(game.x-item.x)<item.radiusX+.5&&game.popReady)pop=game.jump();
+    if(item.type==='whirlpool'&&ahead>-4&&ahead<28&&Math.abs(target-item.x)<5.5)
+      target=item.x+(game.x<item.x?-6:6);
+  }
   const error=target-game.x-game.vx*.24;
-  return {left:error<-.22,right:error>.22};
+  return {left:error<-.22,right:error>.22,pump:true,pop};
 }
 
 test('barrel descriptors repeat along the real course and taper into the existing wave at open mouths',()=>{
@@ -92,14 +101,14 @@ test('a real Storm update collides with the visible roof and consumes only one l
   assert.equal(game.barrelRun.bailed,true,'a hit on first entry cannot later masquerade as a clean ride');
 });
 
-test('ordinary steering traverses two barrels from the normal start and rewards each clean exit once',()=>{
+test('steering, pumping and a driftwood hop traverse two timed barrels from the normal start',()=>{
   const events=[],game=new SurfGame(event=>events.push(event),'storm');game.start();let approached=false;
-  for(let tick=0;tick<22*120;tick++) {
+  for(let tick=0;tick<22*120&&game.barrelsSurvived<2;tick++) {
     if(game.barrel&&game.distance<game.barrel.startDistance){approached=true;assert.equal(game.barrel.inside,false);}
     game.update(1/120,routeInput(game));
   }
   assert.equal(approached,true,'the rider gets a usable advance lineup target');
-  assert.equal(game.lives,3);assert.equal(game.wipeouts,0);assert.equal(game.barrelsSurvived,2);assert.ok(game.barrelTime>3.5);
+  assert.equal(game.lives,3);assert.equal(game.wipeouts,0);assert.equal(game.barrelsSurvived,2);assert.ok(game.barrelTime>2.5);
   const exits=events.filter(event=>event.type==='barrelExit');assert.equal(exits.length,2);
   assert.deepEqual(exits.map(event=>event.index),[0,1]);assert.ok(exits.every(event=>event.points>=600&&event.rideTime>=.7));
   assert.ok(game.score>=exits.reduce((sum,event)=>sum+event.points,0));
@@ -119,8 +128,39 @@ test('a wipeout inside a barrel loses its clean-exit reward and pause cannot adv
 test('barrel collisions and progress agree at 30 and 120 Hz',()=>{
   const a=new SurfGame(()=>{},'storm'),b=new SurfGame(()=>{},'storm');a.start();b.start();
   for(let tick=0;tick<22*30;tick++) {
-    const input=routeInput(a);a.update(1/30,input);for(let sub=0;sub<4;sub++)b.update(1/120,input);
+    const input=routeInput(a);if(input.pop)b.jump();a.update(1/30,input);for(let sub=0;sub<4;sub++)b.update(1/120,input);
   }
   assert.ok(Math.abs(a.x-b.x)<1e-8);assert.ok(Math.abs(a.distance-b.distance)<1e-8);
   assert.ok(Math.abs(a.barrelTime-b.barrelTime)<1e-8);assert.equal(a.score,b.score);assert.equal(a.lives,b.lives);assert.equal(a.barrelsSurvived,b.barrelsSurvived);
+});
+
+test('the approach warning starts a real deadline: pumping escapes while a slow approach meets the closing water',()=>{
+  for(const slow of [false,true]) {
+    const events=[],game=new SurfGame(event=>events.push(event),'storm');game.start();
+    for(let tick=0;tick<30*120&&game.distance<235&&game.wipeouts===0;tick++) {
+      const input=routeInput(game);game.update(1/120,{...input,brake:slow&&game.distance>=110});
+    }
+    assert.equal(events.filter(event=>event.type==='barrelWarning').length,1);
+    assert.equal(game.wipeouts,slow?1:0);assert.equal(game.barrelsSurvived,slow?0:1);
+    if(slow)assert.equal(events.find(event=>event.type==='bail').reason,'CAUGHT BY THE CLOSING WAVE');
+  }
+});
+
+test('a genuinely landed two-trick combo provides enough speed to escape a curl that otherwise closes on the rider',()=>{
+  for(const boostPower of [0,1]) {
+    const events=[],game=new SurfGame(event=>events.push(event),'storm');
+    game.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower}}},{}));game.start();
+    // Begin before the warning at the lip, then use only public jump/trick/
+    // steering controls. The comparison disables the burst through admin stats.
+    game.distance=75;game.x=waveCrest(-75,0);game.y=waveHeight(game.x,-75,0);game.charge=1;
+    assert.equal(game.jump(),true);assert.equal(game.doTrick('spin'),true);
+    for(let tick=0;tick<14*120&&game.distance<235&&game.wipeouts===0;tick++) {
+      const input=routeInput(game);
+      if(!game.trick&&game.launchTricks===1&&game.airborne)game.doTrick('grab');
+      game.update(1/120,{...input,pump:false});
+    }
+    const boost=events.find(event=>event.type==='surfBoost');assert.equal(boost.tricks,2);
+    assert.equal(game.barrelsSurvived,boostPower);assert.equal(game.wipeouts,1-boostPower);
+    if(boostPower===0)assert.equal(events.find(event=>event.type==='bail').reason,'CAUGHT BY THE CLOSING WAVE');
+  }
 });

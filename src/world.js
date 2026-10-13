@@ -6,7 +6,9 @@ import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
 import { createRaceWorld } from './race-world.js';
 import { createBoardEffects } from './board-effects.js';
-import { OCEAN_MESH, renderedWaveHeight, alignRiderToOcean } from './ocean-surface.js';
+import { createSurfHazardRenderer } from './surf-hazard-render.js';
+import { resolveWorldWeather, weatherLightning } from './surf-weather.js';
+import { OCEAN_MESH, alignSurfRiderToOcean } from './ocean-surface.js';
 import { waveHeight, courseItem, clamp } from './game.js';
 import { createSurfer, disposeSurfer, retroMaterial, pixelTexture, DEFAULT_PROFILE } from './appearance.js';
 import { PARK_RAMPS, PARK_RAILS, PARK_BOUNDS, parkHeight, parkSurface, rampHeight } from './park.js';
@@ -53,6 +55,7 @@ export class SurfWorld {
   constructor(container, profile = DEFAULT_PROFILE) {
     this.container = container; this.time = 0; this.retro = true; this.mode = 'surf'; this.profile = profile;
     this.oceanRaceView = false;
+    this.reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0xe7c48d);
     this.scene.fog = new THREE.Fog(0x91a7b0, 85, 265);
     this.camera = new THREE.PerspectiveCamera(50, 1, .18, 750);
@@ -69,6 +72,7 @@ export class SurfWorld {
     mat.rock.map = pixelTexture('#8a9495','#bdc8bf',32,2);
     this.createOcean(); this.createCoast(); this.createCourse();
     this.stormBarrels=createStormBarrels();this.scene.add(this.stormBarrels.group);
+    this.surfHazards=createSurfHazardRenderer({reducedMotion:this.reducedMotion});this.scene.add(this.surfHazards.group);
     this.surfStage = new THREE.Group();
     for (const child of [...this.scene.children]) if (!shared.has(child)) this.surfStage.add(child);
     this.scene.add(this.surfStage);
@@ -76,7 +80,7 @@ export class SurfWorld {
     this.createPark();
     this.surfer = createSurfer(profile); this.scene.add(this.surfer.rig);
     this.boardEffects=createBoardEffects();this.boardEffects.setProfile(profile);this.scene.add(this.boardEffects.group);
-    this.createParticles();this.createRain();
+    this.createParticles();this.createRain();this.createSurfBoost();
     this.shadow = mesh(new THREE.CircleGeometry(.75, 12), new THREE.MeshBasicMaterial({ color: 0x154f58, transparent: true, opacity: .28, depthWrite: false }), this.scene);
     this.shadow.rotation.x = -Math.PI / 2;
     this.camera.position.set(14, 10, 20); this.lookAt = new THREE.Vector3(0, 2, -9);
@@ -104,6 +108,7 @@ export class SurfWorld {
   }
   setMode(mode) {
     this.mode = mode === 'park' ? 'park' : 'surf';
+    this.weatherId=null;
     this.boardEffects.reset();
     this.raceWorld.reset();
     this.surfStage.visible = this.mode === 'surf'; this.parkStage.visible = this.mode === 'park';
@@ -129,11 +134,26 @@ export class SurfWorld {
   createSky() {
     this.sky = new THREE.Group(); this.scene.add(this.sky);
     const skyGeo = new THREE.SphereGeometry(500, 24, 16);
-    const skyMat = new THREE.ShaderMaterial({ uniforms:{uStorm:{value:0}}, side: THREE.BackSide, depthWrite: false,
+    const skyMat = new THREE.ShaderMaterial({ uniforms:{uTop:{value:new THREE.Color(0x38578c)},uHorizon:{value:new THREE.Color(0xa1babe)},uLow:{value:new THREE.Color(0x85abbb)},uLightning:{value:0}}, side: THREE.BackSide, depthWrite: false,
       vertexShader: 'varying vec3 vPos; void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-      fragmentShader: `uniform float uStorm;varying vec3 vPos; void main(){float h=normalize(vPos).y; vec3 horizon=vec3(.63,.73,.75); vec3 top=vec3(.22,.34,.55); vec3 col=mix(horizon,top,smoothstep(.0,.6,h)); col=mix(vec3(.52,.67,.73),col,smoothstep(-.04,.10,h));col=mix(col,vec3(.18,.23,.29)+h*.09,uStorm);gl_FragColor=vec4(col,1.);}` });
+      fragmentShader: `uniform vec3 uTop;uniform vec3 uHorizon;uniform vec3 uLow;uniform float uLightning;varying vec3 vPos; void main(){float h=normalize(vPos).y; vec3 col=mix(uHorizon,uTop,smoothstep(.0,.6,h));col=mix(uLow,col,smoothstep(-.04,.10,h));float distant=max(0.,-normalize(vPos).z)*smoothstep(.04,.22,h);col+=vec3(.38,.47,.54)*uLightning*distant;gl_FragColor=vec4(col,1.);}` });
     mesh(skyGeo, skyMat, this.sky);this.skyMat=skyMat;
-    this.sun = mesh(new THREE.CircleGeometry(17, 16), new THREE.MeshBasicMaterial({ color: 0xf3dac0, fog: false }), this.sky, -95, 42, -280);
+    this.sun = mesh(new THREE.CircleGeometry(17, 16), new THREE.MeshBasicMaterial({ color: 0xf3dac0, fog: false,transparent:true,depthWrite:false }), this.sky, -95, 42, -280);
+    this.weatherClouds=[];
+    this.cloudMaterial=new THREE.MeshBasicMaterial({color:0x7f8998,transparent:true,opacity:.45,fog:false,depthWrite:false});
+    const cloudGeometry=new THREE.IcosahedronGeometry(1,0);
+    for(let i=0;i<16;i++){
+      const cloud=new THREE.Group();this.sky.add(cloud);
+      for(let j=0;j<3;j++){
+        const part=mesh(cloudGeometry,this.cloudMaterial,cloud,(j-1)*19,j%2*2,(j%2)*3);
+        part.scale.set(27+(i%3)*7,3.2+(i%4)*1.5,10+(j%2)*4);
+      }
+      cloud.userData={x:-205+(i%5)*90,y:48+Math.floor(i/5)*20,z:-200-(i%3)*35,phase:i*1.7};
+      this.weatherClouds.push(cloud);
+    }
+    const boltPoints=[[-81,86,-246],[-87,74,-246],[-79,75,-246],[-89,58,-246],[-85,59,-246],[-96,39,-246]].map(p=>new THREE.Vector3(...p));
+    this.lightning=new THREE.Line(new THREE.BufferGeometry().setFromPoints(boltPoints),new THREE.LineBasicMaterial({color:0xd5e4ed,transparent:true,opacity:0,fog:false,depthWrite:false}));
+    this.lightning.visible=false;this.sky.add(this.lightning);
     this.birds = [];
     const birdMat = new THREE.LineBasicMaterial({ color: 0x365960 });
     for (let i = 0; i < 8; i++) {
@@ -144,7 +164,7 @@ export class SurfWorld {
   createOcean() {
     const {width,length,columns,rows}=OCEAN_MESH;
     const geo = new THREE.PlaneGeometry(width, length, columns, rows); geo.rotateX(-Math.PI / 2);
-    this.waterMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 },uStorm:{value:0} }, side: THREE.DoubleSide,
+    this.waterMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 },uStorm:{value:0},uDeep:{value:new THREE.Color(0x0b2447)},uLight:{value:new THREE.Color(0x298a9c)},uFoam:{value:new THREE.Color(0xe3e8c4)},uFog:{value:new THREE.Color(0x91a7b0)},uSun:{value:new THREE.Color(0xf3dac0)},uFogFar:{value:265},uWhirlpoolCount:{value:0},uWhirlpools:{value:Array.from({length:4},()=>new THREE.Vector3())} }, side: THREE.DoubleSide,
       vertexShader: `uniform float uTime; varying vec3 vWorld; varying float vRidge;
         void main(){vec3 p=position;vec3 w=(modelMatrix*vec4(p,1.)).xyz;
         float crest=-9.+sin(w.z*.026+uTime*.38)*1.1;
@@ -152,19 +172,18 @@ export class SurfWorld {
         p.y=3.9*ridge+sin(w.z*.07+uTime*1.2)*.32+sin(w.z*.34+w.x*.45+uTime*2.)*.1;
         vWorld=(modelMatrix*vec4(p,1.)).xyz;vRidge=ridge;
         gl_Position=projectionMatrix*viewMatrix*vec4(vWorld,1.);gl_Position.xy=floor(gl_Position.xy/gl_Position.w*vec2(256.,192.)+.5)/vec2(256.,192.)*gl_Position.w;}`,
-      fragmentShader: `uniform float uTime;uniform float uStorm;varying vec3 vWorld;varying float vRidge;
+      fragmentShader: `uniform float uTime;uniform float uStorm;uniform vec3 uDeep;uniform vec3 uLight;uniform vec3 uFoam;uniform vec3 uFog;uniform vec3 uSun;uniform float uFogFar;uniform int uWhirlpoolCount;uniform vec3 uWhirlpools[4];varying vec3 vWorld;varying float vRidge;
         float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-        void main(){vec3 n=normalize(cross(dFdx(vWorld),dFdy(vWorld))); if(n.y<0.) n=-n;
+        void main(){for(int i=0;i<4;i++){if(i>=uWhirlpoolCount)break;if(distance(vWorld.xz,uWhirlpools[i].xy)<uWhirlpools[i].z)discard;}vec3 n=normalize(cross(dFdx(vWorld),dFdy(vWorld))); if(n.y<0.) n=-n;
         float diffuse=max(dot(n,normalize(vec3(-.4,1.,-.6))),0.);
-        vec3 deep=vec3(.045,.14,.28),light=vec3(.16,.54,.61);
-        vec3 col=mix(deep,light,.18+floor(diffuse*5.)/5.*.70+vRidge*.13);col=mix(col,col*vec3(.62,.73,.78),uStorm);
+        vec3 col=mix(uDeep,uLight,.18+floor(diffuse*5.)/5.*.70+vRidge*.13);
         float streak=sin(vWorld.z*.88+vWorld.x*2.2+uTime*2.8);
         float foam=smoothstep(.89,.98,vRidge)*(.55+.45*step(.1,streak));
         float lace=step(.975,hash(floor(vWorld.xz*1.8+vec2(uTime*.8,0.))));
-        col=mix(col,vec3(.89,.91,.77),foam*.94+lace*.32);
+        col=mix(col,uFoam,foam*.94+lace*.32);
         float sparkle=pow(max(0.,sin(vWorld.x*.28+vWorld.z*.35+uTime)),20.)*smoothstep(-80.,-20.,vWorld.x)*.13;
-        col+=vec3(.7,.62,.32)*sparkle;
-        float fog=smoothstep(90.,300.-uStorm*100.,length(vWorld-cameraPosition));col=mix(col,mix(vec3(.52,.67,.73),vec3(.27,.35,.41),uStorm),fog);
+        col+=uSun*sparkle*(1.-uStorm*.6);
+        float fog=smoothstep(80.,uFogFar,length(vWorld-cameraPosition));col=mix(col,uFog,fog);
         float dither=(mod(gl_FragCoord.x+mod(gl_FragCoord.y,2.),2.)-.5)*.032;
         col=floor((col+dither)*24.)/24.;gl_FragColor=vec4(col,1.);}` });
     this.ocean = mesh(geo, this.waterMat, this.scene); this.ocean.frustumCulled = false;
@@ -257,6 +276,55 @@ export class SurfWorld {
     this.rain=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x9fb2bb,transparent:true,opacity:.45}));
     this.rain.frustumCulled=false;this.rain.visible=false;this.scene.add(this.rain);
   }
+  createSurfBoost() {
+    const vertices=[];
+    for(let i=0;i<14;i++){
+      const side=i%2?-1:1,x=side*(.9+(i%4)*.25),y=.1+(i%3)*.11,z=.5+(i%5)*.36;
+      vertices.push(x,y,z,x*1.08,y-.04,z+1.3+(i%3)*.5);
+    }
+    this.surfBoost=new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3)),new THREE.LineBasicMaterial({color:0xbfe8d7,transparent:true,opacity:.58,depthWrite:false}));
+    this.surfBoost.name='surf-trick-boost-wake';this.surfBoost.visible=false;this.scene.add(this.surfBoost);
+  }
+  updateWeather(game,time,x,y,z,intensity) {
+    const weather=resolveWorldWeather(game);
+    if(!weather){this.rain.visible=false;this.lightning.visible=false;return;}
+    if(this.weatherId!==weather.id){
+      this.weatherId=weather.id;
+      this.scene.background.set(weather.background);
+      this.scene.fog.color.set(weather.fog);
+      this.ambientLight.color.set(weather.ambient);this.ambientLight.groundColor.set(weather.ground);this.ambientLight.intensity=weather.ambientPower;
+      this.keyLight.color.set(weather.light);this.keyLight.intensity=weather.lightPower;
+      this.keyLight.position.set(weather.sunX*.4,Math.max(18,weather.sunY),-80);
+      // These authored shader palettes are display values, like the original
+      // shader's vec3 literals; do not silently linearize only some presets.
+      for(const[key,color]of [['uTop',weather.skyTop],['uHorizon',weather.horizon],['uLow',weather.fog]])this.skyMat.uniforms[key].value.setHex(color,THREE.LinearSRGBColorSpace);
+      for(const[key,color]of [['uDeep',weather.deep],['uLight',weather.water],['uFoam',weather.foam],['uFog',weather.fog],['uSun',weather.sun]])this.waterMat.uniforms[key].value.setHex(color,THREE.LinearSRGBColorSpace);
+      this.sun.material.color.set(weather.sun);this.sun.material.opacity=weather.sunOpacity;this.sun.visible=weather.sunOpacity>0;
+      this.sun.position.set(weather.sunX,weather.sunY,-280);this.sun.scale.setScalar(weather.sunSize);
+      this.cloudMaterial.color.set(weather.cloud);this.cloudMaterial.opacity=weather.cloudOpacity;
+      this.foam[0]?.material.color.set(weather.foam);
+      this.rain.material.color.set(weather.foam);
+    }
+    const flash=weatherLightning(time,weather,this.reducedMotion);
+    this.skyMat.uniforms.uLightning.value=flash;
+    this.lightning.visible=flash>0;this.lightning.material.opacity=flash*3;
+    this.scene.fog.near=weather.fogNear-intensity*18;this.scene.fog.far=weather.fogFar-intensity*45;
+    this.waterMat.uniforms.uFogFar.value=this.scene.fog.far;
+    this.waterMat.uniforms.uStorm.value=weather.rain;
+    const cloudTime=this.reducedMotion?0:time;
+    for(let i=0;i<this.weatherClouds.length;i++){
+      const cloud=this.weatherClouds[i],base=cloud.userData;
+      cloud.visible=i<Math.ceil(this.weatherClouds.length*weather.cloudCover);
+      cloud.position.set(base.x+Math.sin(cloudTime*.015+base.phase)*weather.wind*35,base.y,base.z);
+    }
+    this.rain.visible=weather.rain>0;
+    if(this.rain.visible){
+      this.rain.position.set(x,y-(this.reducedMotion?0:(time*18)%14),z);
+      this.rain.geometry.setDrawRange(0,Math.round(this.reducedMotion?35:100+intensity*115)*2);
+      this.rain.material.opacity=this.reducedMotion?.16:.26+intensity*.10;
+    }
+    for(const bird of this.birds)bird.visible=weather.rain===0;
+  }
   cutbackSpray(x,y,z,direction,amount,heading=0) {
     // A fan peels off the rear rail, following the snap turn rather than the wake.
     for(let i=0;i<5;i++){
@@ -297,14 +365,20 @@ export class SurfWorld {
     const x = attract ? (isPark?0:-1.4 + Math.sin(t * .6) * 1.1) : game.x;
     const z = isPark?(attract?22:game.z):-d;
     const oceanZ=Math.floor(-d/30)*30-90;
-    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : game.isRace&&!isPark ? alignRiderToOcean(x,game.y,z,t,oceanZ) : game.y;
+    const contactBarrel=game.rulesId==='storm'?game.barrel:null;
+    const contactOcean=!isPark&&(game.isRace||game.surfAdventureEnabled);
+    const y = attract ? (isPark?parkHeight(x,z):waveHeight(x, z, t)) : contactOcean ? alignSurfRiderToOcean(x,game.y,z,t,oceanZ,contactBarrel) : game.y;
     const heading=isPark?game.heading||0:0;
     const storm=!isPark&&game.rulesId==='storm',intensity=storm?stormDifficulty(t):0;
-    this.stormBarrels.update(d,t,intensity,storm);
-    this.waterMat.uniforms.uTime.value = t;this.waterMat.uniforms.uStorm.value=storm?.62+intensity*.38:0;this.skyMat.uniforms.uStorm.value=storm?.68+intensity*.32:0;
-    this.sun.visible=!storm;this.rain.visible=storm;this.rain.position.set(x,y-(t*16)%14,z);
-    if(storm){this.rain.geometry.setDrawRange(0,Math.round(95+intensity*145)*2);this.rain.material.opacity=.29+intensity*.24;}
-    if(!isPark){this.scene.fog.color.set(storm?0x576c79:0x91a7b0);this.scene.fog.near=storm?75-intensity*18:85;this.scene.fog.far=storm?215-intensity*55:265;}
+    this.stormBarrels.update(d,t,intensity,storm,game.barrelTimings,oceanZ);
+    this.waterMat.uniforms.uTime.value = t;
+    this.updateWeather(game,t,x,y,z,intensity);
+    this.surfHazards.update(game,t,oceanZ,{attract});
+    this.waterMat.uniforms.uWhirlpoolCount.value=this.surfHazards.maskCount;
+    for(let i=0;i<this.surfHazards.maskCount;i++)this.waterMat.uniforms.uWhirlpools.value[i].copy(this.surfHazards.masks[i]);
+    const surfBoost=!attract&&!isPark&&!game.isRace&&!game.bailTime&&(game.surfBoostTime||0)>0;
+    this.surfBoost.visible=surfBoost&&!this.reducedMotion;
+    if(surfBoost){this.surfBoost.position.set(x,y+.14,z);this.surfBoost.scale.set(1,1,game.surfBoostCombo?1.65:1);this.surfBoost.material.opacity=.30+.2*Math.min(1,game.surfBoostTime/.25);}
     this.ocean.position.z = oceanZ;
     this.coast.position.z = -d - 80; this.sky.position.z = isPark?0:-d;
     if(this.parkUpdate)this.parkUpdate(t);
@@ -358,7 +432,7 @@ export class SurfWorld {
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
     s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,cutbackDirection:game.cutbackDirection||1});
     s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
-    const ground=isPark?(surface?.height??parkHeight(x,z)):game.isRace?renderedWaveHeight(x,z,t,oceanZ):waveHeight(x,z,t);
+    const ground=isPark?(surface?.height??parkHeight(x,z)):contactOcean?alignSurfRiderToOcean(x,waveHeight(x,z,t),z,t,oceanZ,contactBarrel):waveHeight(x,z,t);
     this.shadow.position.set(x, ground + .055, z);
     this.shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - ground) * .07) : 1);
     this.shadow.visible = !bail&&!game.pipeRide;
@@ -398,15 +472,15 @@ export class SurfWorld {
       if(storm&&!attract&&game.barrel?.inside){
         // A slightly lower, central view shows the opening and the moving roof.
         target.x=x+.65;target.y=y+2.15;target.z=z+4.4;
-        resolveBarrelCamera(target,d,t);look.set(x,y+1.05,z-1.4);
+        resolveBarrelCamera(target,d,t,game.barrelTimings);look.set(x,y+1.05,z-1.4);
       }
     }
     if(parkFrame)this.camera.position.copy(parkFrame.position);
     else this.camera.position.lerp(target, 1 - Math.exp(-dt * (attract ? 1.5 : 4)));
-    if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t);
+    if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t,game.barrelTimings);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
     else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
-    const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50;
+    const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50+(surfBoost&&!this.reducedMotion?2.5:0);
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
@@ -416,6 +490,8 @@ export class SurfWorld {
     this.resizeObserver.disconnect();
     this.raceWorld.dispose();
     this.boardEffects.dispose();
+    this.surfHazards.dispose();
+    this.stormBarrels.dispose?.();
     this.scene.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
     this.renderer.dispose(); this.renderer.domElement.remove();
   }

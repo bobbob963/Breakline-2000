@@ -34,7 +34,7 @@ test('even a fully charged flat ocean hop cannot start any trick or earn empty j
   for(const id of ['surf','rush','storm']) {
     const events=[],game=new SurfGame(event=>events.push(event),id);game.start();
     advance(game,.8,{jump:true});assert.equal(game.launchSource,'flat');
-    assert.equal(game.jump(),true);assert.equal(game.airLaunchSource,'flat');assert.ok(game.vy<=2.6);
+    assert.equal(game.jump(),true);assert.equal(game.airLaunchSource,'flat');assert.ok(game.vy<=(id==='rush'?2.6:3.2));
     for(const trick of Object.keys(TRICKS))assert.equal(game.doTrick(trick),false);
     land(game);assert.ok(game.airtime<.8);assert.equal(game.comboBase,0);assert.equal(game.pendingTricks,0);
     assert.equal(game.bank(),false);assert.equal(game.score,0);assert.equal(game.wipeouts,0);

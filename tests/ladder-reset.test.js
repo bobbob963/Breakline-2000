@@ -9,6 +9,7 @@ import { createKeydownHandler } from '../src/keyboard.js';
 import { validateProfile } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked, REWARD_BOARD_ORDER } from '../src/board-rewards.js';
 import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
+import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
 import {
   createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
   TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength,
@@ -37,7 +38,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     return elements.get(id);
   };
   const context = {
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
     $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
     SurfGame, WaveParkGame, tournamentProgress: sanitizeTournamentProgress(progress),
