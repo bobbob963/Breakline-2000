@@ -3,6 +3,7 @@ import { surfRules } from './session-modes.js';
 import { findComboAnimation } from './combo-animations.js';
 import { getRewardBoard } from './board-rewards.js';
 import { sanitizeResolvedAdminStats } from './admin-settings.js';
+import { TimePower, TIME_POWER_SCALE, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,stormBarrelsNear,barrelCrossSection,barrelClosureProgress,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 import { surfHazardsNear,whirlpoolPull,sweepSurfHazard } from './surf-hazards.js';
 export { SURF_RULES } from './session-modes.js';
@@ -37,6 +38,8 @@ export function courseItem(index,rulesId='surf') {
 export class SurfGame {
   constructor(onEvent = () => {},rulesId='surf') { this.onEvent = onEvent;this.rulesId=surfRules(rulesId).id; this.reset(); }
   reset() {
+    if(this._timePower)this._timePower.reset();
+    else this._timePower=new TimePower(event=>this.onEvent(event));
     this.rules=surfRules(this.rulesId);this.rulesId=this.rules.id;
     Object.assign(this, {
       mode: 'surf', phase: 'ready', time: this.rules.startTime, elapsed: 0, distance: 0,
@@ -64,6 +67,7 @@ export class SurfGame {
   setAdminStats(value) {
     this.adminStats=sanitizeResolvedAdminStats(value);
     this.refreshAdminBoard();
+    if(!this.timePowerEnabled)this._timePower.cancel('unequip');
     // Editing stats/equipment during a flight never refills extra jumps.
     if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
     return this.adminStats;
@@ -84,12 +88,26 @@ export class SurfGame {
   setRewardBoard(id) {
     this.rewardBoard=getRewardBoard(id)?.id||null;
     this.refreshAdminBoard();
+    if(!this.timePowerEnabled)this._timePower.cancel('unequip');
     // Changing equipment cannot refill an extra jump during an existing flight.
     if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
     return this.rewardBoard;
   }
   get rewardBoardDefinition() {return this.adminStats?.active?this._adminBoardDefinition:getRewardBoard(this.rewardBoard);}
   get baseSpeedMultiplier() {return this.rewardBoardDefinition?.baseSpeedMultiplier??1;}
+  get timePowerEnabled() {return this.rewardBoard==='deadtime'||this.adminStats?.cheats?.slowMotion===true;}
+  get timePowerEligible() {return this.timePowerEnabled&&this.phase==='running'&&this.bailTime<=0&&!(this.countdownRemaining>0);}
+  get timePowerActive() {return !!this._timePower?.active&&this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0&&!(this.countdownRemaining>0);}
+  get timePowerCharge() {return this._timePower?.charge??0;}
+  get timePowerCooldown() {return this._timePower?.cooldown??0;}
+  get timePowerBurstTime() {return this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0?(this._timePower?.burst??0):0;}
+  get timePowerSpeedMultiplier() {return this.timePowerBurstTime>0?TIME_POWER_BURST_MULTIPLIER:1;}
+  get timeScale() {return this.timePowerActive?TIME_POWER_SCALE:1;}
+  toggleTimePower() {return this._timePower.toggle(this.timePowerEligible);}
+  updateTimePower(realDt) {
+    return this._timePower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
+      equipped:this.timePowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});
+  }
   get glideEligible() {
     return (this.phase==='running'||this.phase==='paused')&&this.airborne&&this.bailTime<=0&&
       !this.pipeRide&&!this.grinding&&!this.lipMove&&(this.rewardBoardDefinition?.glideFallSpeed||0)>0;
@@ -185,6 +203,7 @@ export class SurfGame {
   }
   bail(reason = 'WIPEOUT') {
     if (this.bailTime > 0 || this.phase !== 'running') return;
+    this._timePower.cancel('bail');
     const lost = this.comboBase * this.multiplier;
     this.clearSurfBoost();this.surfBoostAwarded=true;this.flatHopActive=false;
     this.clearCombo(); this.trick = null; this.airborne = false;
@@ -252,6 +271,7 @@ export class SurfGame {
   }
   finish(reason) {
     if(this.phase!=='running')return;
+    this._timePower.cancel('finish');
     if(this.airborne||this.bailTime>0||this.cutbackActive)this.clearCombo();else this.bank();
     this.lastCompletedTrickType = null;
     this.resultReason=reason;this.phase='finished';this.onEvent({type:'finish',reason});
@@ -286,7 +306,7 @@ export class SurfGame {
     // Board cruise speed and earned bursts are separate: a 25% faster deck
     // with a 50% stronger boost never multiplies that boost a second time.
     const baseSpeed=((input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5)*this.baseSpeedMultiplier;
-    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : baseSpeed+this.forwardSpeedBonus)*(this.cutbackActive?.72:1);
+    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : (baseSpeed+this.forwardSpeedBonus)*this.timePowerSpeedMultiplier)*(this.cutbackActive?.72:1);
     const acceleration=1.7*this.accelerationMultiplier;
     const previousSpeed = this.speed, decay = Math.exp(-dt * acceleration);
     this.speed = targetSpeed + (previousSpeed - targetSpeed) * decay;

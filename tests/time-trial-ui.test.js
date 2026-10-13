@@ -10,12 +10,13 @@ import { getTrialCosmeticSet,trialCosmeticUnlocked } from '../src/trial-cosmetic
 import { createTimeTrialGame } from '../src/time-trials.js';
 import { trialTime,trialListMarkup,trialRewardCards } from '../src/time-trial-ui.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
+import { SECRET_STORAGE_KEY,sanitizeSecretProgress } from '../src/secret-progress.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8'),noop=()=>{};
 function block(first,last){const a=source.indexOf(first),b=source.indexOf(last,a+first.length);assert.ok(a>=0&&b>a,`production block ${first} exists`);return source.slice(a,b);}
 function progress(n){return sanitizeTimeTrialProgress({version:1,completedTrials:n,selectedTrial:Math.min(n,11),bestTimes:TIME_TRIALS.map((t,i)=>i<n?t.timeLimit-5:null)});}
 function tournament(n){return sanitizeTournamentProgress({version:2,ladderIndex:Math.min(n,4),completedRounds:0,completedLadders:n});}
-const dependencies={ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
+const dependencies={SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
 
 test('real boot restoration gates Time Trials behind all five ladders and strips only locked cosmetics',()=>{
   for(const scenario of [
@@ -42,7 +43,7 @@ test('actual mode selection cannot enter locked trials and ladder resets keep th
 
 function equipmentFixture(clears=0){
   const writes=[],renders=[],context={...dependencies,profile:validateProfile({character:'jax',outfit:'yardcrew',rewardBoard:'sky'}),tournamentProgress:tournament(5),trialProgress:progress(clears),
-    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',
+    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     game:createTimeTrialGame(),write:(key,value)=>writes.push([key,JSON.parse(value)]),world:{setProfile:value=>renders.push(value),onEvent:noop},preview:{setProfile:noop},menuSurfer:{setProfile:noop},updateCustomizationChoices:noop,modalMode:null};
   vm.runInNewContext(block('function applyPlayerSettings(','function adminHomeScreen('),context);
   vm.runInNewContext(block('function cosmeticAvailable(','if(!cosmeticAvailable(OUTFITS'),context);
@@ -164,7 +165,7 @@ test('the actual trial prize button equips Afterburner and refreshes the correct
 
 test('production start/next/retry keeps trial identity correct and preserves equipped board perks',()=>{
   const element={classList:{add:noop,remove:noop},focus:noop},context={...dependencies,createTimeTrialGame,game:createTimeTrialGame(noop,progress(2)),trialProgress:progress(2),profile:validateProfile({rewardBoard:'sky'}),
-    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',
+    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     wasted:{reset:noop},closeWorkshop:noop,closeModal:noop,clearInput:noop,special:{reset:noop},soundPreference:'off',audio:{enabled:false,setMode:noop,setScene:noop},world:{setMode:noop},updateModeMenu:noop,updateSoundLabel:noop,onEvent:noop,$:()=>element,document:{body:element}};
   vm.runInNewContext(block('function applyPlayerSettings(','function adminHomeScreen('),context);
   vm.runInNewContext(block('function startRun(','function goHome('),context);

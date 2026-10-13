@@ -339,7 +339,7 @@ export class SurfWorld {
   }
   onEvent(event, game) {
     if(event.opponent)return;
-    if(event.type==='trick'||event.type==='airJump')this.boardEffects.trigger(event);
+    if(event.type==='trick'||event.type==='airJump'||event.type==='timePower')this.boardEffects.trigger(event);
     if(['reset','start','bail','finish'].includes(event.type))this.boardEffects.reset();
     if (event.type === 'start') {
       this.raceWorld.reset();
@@ -485,6 +485,13 @@ export class SurfWorld {
     this.camera.lookAt(this.lookAt);
     this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
     this.renderer.render(this.scene, this.camera);
+  }
+  boardScreenOrigin() {
+    const point=this.boardPulseOrigin??(this.boardPulseOrigin=new THREE.Vector3());
+    this.surfer.board.getWorldPosition(point);point.project(this.camera);
+    const rect=this.renderer.domElement.getBoundingClientRect();
+    if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||point.z < -1||point.z > 1)return undefined;
+    return {x:rect.left+(point.x+1)*rect.width/2,y:rect.top+(1-point.y)*rect.height/2};
   }
   dispose() {
     this.resizeObserver.disconnect();

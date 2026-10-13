@@ -326,6 +326,26 @@ export function rewardBoardTexture(id) {
     ctx.restore();ctx.fillStyle=primary;ctx.beginPath();ctx.ellipse(32,83,6,9,0,0,Math.PI*2);ctx.fill();
     for(const side of [-1,1])for(let i=0;i<3;i++)polygon([[32+side*(21-i*2),28+i*11],[32+side*(13-i*2),22+i*11],[32+side*(14-i*2),28+i*11],[32+side*(22-i*2),34+i*11]],accent);
     ctx.fillStyle=secondary;ctx.font='bold italic 12px monospace';ctx.textAlign='center';ctx.fillText('03',32,204);
+  } else if(id==='deadtime') {
+    // Broken chronometer print: two oversized hands, minute ticks and a split
+    // dial. This is original deck artwork, kept at the existing texture scale.
+    polygon([[9,13],[19,13],[51,198],[41,198]],secondary);
+    polygon([[52,10],[56,10],[22,203],[18,203]],accent);
+    ctx.fillStyle=secondary;ctx.beginPath();ctx.ellipse(32,105,25,58,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=accent;ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(32,105,22,53,0,.16,Math.PI*1.40);ctx.stroke();
+    ctx.beginPath();ctx.ellipse(32,105,22,53,0,Math.PI*1.53,Math.PI*1.91);ctx.stroke();
+    for(let i=0;i<12;i++){
+      const a=i*Math.PI/6,major=i%3===0;
+      ctx.lineWidth=major?2:1;ctx.beginPath();
+      ctx.moveTo(32+Math.sin(a)*(major?15:18),105-Math.cos(a)*(major?39:45));
+      ctx.lineTo(32+Math.sin(a)*20,105-Math.cos(a)*49);ctx.stroke();
+    }
+    polygon([[29,114],[28,95],[33,64],[36,97],[34,114]],accent);
+    polygon([[28,100],[46,118],[48,130],[37,123]],'#f4eccb');
+    ctx.fillStyle=primary;ctx.beginPath();ctx.arc(32,105,4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=accent;ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText('05:00',32,182);
+    for(let i=0;i<3;i++)polygon([[15+i*10,193],[24+i*10,193],[19+i*10,204],[10+i*10,204]],i%2?accent:secondary);
   } else if(id==='sky') {
     for(const side of [-1,1]){ctx.save();ctx.translate(32,108);ctx.scale(side,1);polygon([[0,38],[4,-59],[24,-89],[25,-55],[14,-35],[24,-47],[19,-22],[10,-8],[20,-19],[14,8]],secondary);ctx.restore();}
     polygon([[29,43],[35,29],[34,137],[29,162]],accent);

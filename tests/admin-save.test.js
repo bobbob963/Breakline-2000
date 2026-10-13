@@ -28,25 +28,30 @@ function fakeStorage(initial={}) {
 test('Give Me Everything unlocks every prize, ladder and trial without inventing any personal bests',()=>{
   const unlocked=everythingUnlocked();
   assert.equal(timeTrialsUnlocked(unlocked.tournament),true);
-  for(const id of ALL_REWARD_BOARD_ORDER) assert.equal(rewardBoardUnlocked(id,unlocked.tournament,unlocked.trials),true,id);
+  for(const id of ALL_REWARD_BOARD_ORDER) assert.equal(rewardBoardUnlocked(id,unlocked.tournament,unlocked.trials,unlocked.secrets),true,id);
   for(const set of TRIAL_COSMETIC_SETS) assert.equal(trialCosmeticUnlocked(set.id,unlocked.trials.completedTrials),true,set.name);
   for(let index=0;index<TOURNAMENT_LADDERS.length;index++) assert.notEqual(selectTournamentLadder(unlocked.tournament,index),null);
   for(let index=0;index<TIME_TRIALS.length;index++) assert.notEqual(selectTimeTrial(unlocked.trials,index),null);
   assert.deepEqual(unlocked.trials.bestTimes,Array(TIME_TRIALS.length).fill(null));
   assert.deepEqual(sanitizeTournamentProgress(unlocked.tournament),unlocked.tournament);
   assert.deepEqual(sanitizeTimeTrialProgress(unlocked.trials),unlocked.trials);
+  assert.deepEqual(unlocked.secrets,{version:1,deadtimeUnlocked:true});
+  assert.equal(Object.hasOwn(unlocked.secrets,'bestSurvival'),false);
 });
 
 test('unlocking preserves the active ladder, partial races, selected trial and genuine best times',()=>{
   const tournament={version:2,ladderIndex:2,completedRounds:3,completedLadders:2};
   const trials={version:1,completedTrials:3,selectedTrial:1,bestTimes:[32.13,35.79,40.25,...Array(9).fill(null)]};
   const source=JSON.stringify({tournament,trials});
-  const unlocked=everythingUnlocked(tournament,trials);
+  const secrets={version:1,deadtimeUnlocked:false};
+  const unlocked=everythingUnlocked(tournament,trials,secrets);
   assert.deepEqual(unlocked.tournament,{...tournament,completedLadders:5});
   assert.deepEqual(unlocked.trials,{...trials,completedTrials:12});
   assert.equal(JSON.stringify({tournament,trials}),source);
   unlocked.trials.bestTimes[0]=1;
   assert.equal(trials.bestTimes[0],32.13);
+  assert.deepEqual(secrets,{version:1,deadtimeUnlocked:false});
+  assert.deepEqual(unlocked.secrets,{version:1,deadtimeUnlocked:true});
 });
 
 test('Give Me Everything is repeatable and idempotent for current, legacy and damaged saves',()=>{
@@ -57,7 +62,7 @@ test('Give Me Everything is repeatable and idempotent for current, legacy and da
     [{version:99,completedLadders:999},{version:1,completedTrials:99,bestTimes:[NaN]}],
   ]) {
     const first=everythingUnlocked(tournament,trials);
-    assert.deepEqual(everythingUnlocked(first.tournament,first.trials),first);
+    assert.deepEqual(everythingUnlocked(first.tournament,first.trials,first.secrets),first);
     assert.equal(first.tournament.completedLadders,5);assert.equal(first.trials.completedTrials,12);
   }
 });
@@ -93,6 +98,7 @@ test('Full Reset removes all and only Breakline saves, including legacy, admin, 
   const gameEntries={
     'breakline99-tournament-v1':'legacy','breakline99-tournament-v2':'current',
     'breakline99-trials-v1':'PBs','breakline99-admin-v1':'stats',
+    'breakline99-secrets-v1':'secret board',
     'breakline99-profile':'board and outfit','breakline99-sound':'off',
     'breakline99-quality':'high','breakline99-best-surf':'12000',
     'breakline99-future-setting':'future',

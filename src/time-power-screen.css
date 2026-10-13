@@ -1,0 +1,5 @@
+.time-power-screen{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:100;isolation:isolate}
+.time-power-screen[hidden],.time-power-pulse[hidden]{display:none}
+.time-power-tint{position:absolute;inset:0;background:#18b65d;pointer-events:none}
+.time-power-pulse{position:absolute;border:5px solid #80ffc0;border-radius:50%;transform:translate(-50%,-50%);box-sizing:border-box;box-shadow:0 0 22px 9px #46ec9180,inset 0 0 22px 9px #46ec9150;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.time-power-pulse{display:none}.time-power-tint{clip-path:none!important}}

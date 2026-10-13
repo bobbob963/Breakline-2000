@@ -11,6 +11,7 @@ function fixture(selectedMode='surf',prior='sunset') {
   const noop=()=>{},saved=new Map([['breakline99-weather',prior]]);
   const element={classList:{add:noop,remove:noop},focus:noop};
   const context={selectedMode,lastSurfWeather:saved.get('breakline99-weather'),chooseSurfWeather,getSurfWeather,
+    secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     game:new SurfGame(noop,selectedMode),adminPanel:{isOpen:false},wasted:{reset:noop},
     closeWorkshop:noop,closeModal:noop,clearInput:noop,applyPlayerSettings:noop,
     special:{reset:noop},soundPreference:'off',audio:{setMode:noop,setScene:noop},world:{setMode:noop},

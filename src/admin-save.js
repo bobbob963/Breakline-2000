@@ -1,12 +1,14 @@
 import { sanitizeTournamentProgress, TOURNAMENT_LADDERS } from './tournament-progress.js';
 import { sanitizeTimeTrialProgress, TIME_TRIALS } from './time-trial-progress.js';
+import { sanitizeSecretProgress } from './secret-progress.js';
 
-export function everythingUnlocked(tournament, trials) {
+export function everythingUnlocked(tournament, trials, secrets) {
   const currentTournament = sanitizeTournamentProgress(tournament);
   const currentTrials = sanitizeTimeTrialProgress(trials);
   return {
     tournament: { ...currentTournament, completedLadders: TOURNAMENT_LADDERS.length },
     trials: { ...currentTrials, completedTrials: TIME_TRIALS.length },
+    secrets: { ...sanitizeSecretProgress(secrets), deadtimeUnlocked: true },
   };
 }
 

@@ -10,6 +10,7 @@ import { validateProfile } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked, REWARD_BOARD_ORDER } from '../src/board-rewards.js';
 import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
+import { SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret } from '../src/secret-progress.js';
 import {
   createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
   TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength,
@@ -38,6 +39,8 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     return elements.get(id);
   };
   const context = {
+    secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
+    SECRET_STORAGE_KEY,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),updateCustomizationChoices:noOp,
     adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
     $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
@@ -53,7 +56,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     isParkMode: () => context.game.mode === 'park', showResults: () => { context.modalMode = 'results'; },
   };
   vm.runInNewContext([
-    'clearInput', 'applyPlayerSettings', 'onEvent', 'makeGame', 'startRun', 'goHome', 'openModal', 'closeModal',
+    'clearInput', 'applyPlayerSettings', 'onEvent', 'makeGame', 'startRun', 'checkSurvivalSecret', 'goHome', 'openModal', 'closeModal',
     'pause', 'ladderRows', 'resetCurrentLadder', 'showLadder', 'closeWorkshop',
   ].map(productionFunction).join('\n'), context);
   context.makeGame();

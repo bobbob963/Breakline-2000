@@ -44,7 +44,7 @@ async function boot() {
         while(accumulator>=1/120&&game.phase==='running'){
           game.update(1/120,rewardDemoInput(game,demo,1/120));accumulator-=1/120;
           if(demo.mode==='glide'&&game.gliding){demo.glideTime+=1/120;if(demo.glideTime>=.24){game.pause();demo.mode='free';$('status').textContent='SKYBOUND: gliding down after a real jump. Angel wings follow the board. Resume to land; the extra air jump is still available during normal play.';}}
-          else if(demo.mode==='trick'&&demo.completedAt!==null&&game.elapsed-demo.completedAt>=.085){game.pause();$('status').textContent=`${REWARD_BOARDS[id].name}: a real 180 spin completed. Paused on its ${REWARD_BOARDS[id].vfx} effect. Resume to finish the landing or choose another board.`;}
+          else if(demo.mode==='trick'&&demo.completedAt!==null&&game.elapsed-demo.completedAt>=(id==='deadtime'?.30:.085)){game.pause();$('status').textContent=`${REWARD_BOARDS[id].name}: a real 180 spin completed. Paused on its ${REWARD_BOARDS[id].vfx} effect. Resume to finish the landing or choose another board.`;}
         }
       }else accumulator=0;
       world.update(dt,game);preview.update(dt,'board');$('pause').textContent=game.phase==='paused'?'Resume':'Pause';requestAnimationFrame(frame);

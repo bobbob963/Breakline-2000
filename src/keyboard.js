@@ -41,7 +41,7 @@ export function createKeydownHandler(getState, actions) {
     // Let the focused menu button receive its native Enter click. Otherwise
     // Enter on RESET THIS LADDER would start a race before the button fires.
     if (e.code === 'Enter' && !workshopMode && e.target?.closest?.('button')) return;
-    if (CONTROL_KEYS[e.code] || TRICK_KEYS[e.code] || ['Enter','Escape','KeyP','KeyR','KeyM','KeyC'].includes(e.code)) e.preventDefault();
+    if (CONTROL_KEYS[e.code] || TRICK_KEYS[e.code] || ['Enter','Escape','KeyP','KeyR','KeyM','KeyC','KeyQ'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'KeyM') { actions.toggleSound(); return; }
     if (workshopMode) {
@@ -63,6 +63,7 @@ export function createKeydownHandler(getState, actions) {
     if (e.code === 'Escape' || e.code === 'KeyP') { actions.pause(); return; }
     if (e.code === 'KeyR' && game.phase !== 'ready') { (actions.restartRun || actions.startRun)(); return; }
     if (game.phase !== 'running' || modalMode) return;
+    if (e.code === 'KeyQ') { if(!home) game.toggleTimePower?.(); return; }
     if (e.code === 'KeyC' && game.doCutback) {
       if (!game.doCutback(input.left ? -1 : input.right ? 1 : 0)) actions.toast(game.airborne ? 'LAND BEFORE CUTTING BACK' : 'BUILD SPEED · C TO CUTBACK');
       return;

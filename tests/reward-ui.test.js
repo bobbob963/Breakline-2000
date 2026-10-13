@@ -12,6 +12,7 @@ import { COMBO_ANIMATIONS } from '../src/combo-animations.js';
 import { sanitizeTimeTrialProgress,timeTrialsUnlocked } from '../src/time-trial-progress.js';
 import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
+import { SECRET_STORAGE_KEY,sanitizeSecretProgress } from '../src/secret-progress.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const noOp = () => {};
@@ -24,6 +25,7 @@ function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 
   const writes = [], visual = [], previews = [], menuPreviews = [], updates = [];
   const context = {
     adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,
+    secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
     trialProgress:sanitizeTimeTrialProgress(trials),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
@@ -67,13 +69,19 @@ test('boot restoration strips a locked board but restores an earned board and mi
     { reward: 'afterburner', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, trials: { version: 1, completedTrials: 2, selectedTrial: 2 }, expected: null },
     { reward: 'afterburner', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, trials: { version: 1, completedTrials: 3, selectedTrial: 3 }, expected: 'afterburner' },
     { reward: 'afterburner', progress: { version: 2, ladderIndex: 3, completedRounds: 0, completedLadders: 4 }, trials: { version: 1, completedTrials: 12, selectedTrial: 11 }, expected: null },
+    { reward: 'deadtime', expected:null },
+    { reward: 'deadtime', secrets:{version:1,deadtimeUnlocked:true}, expected:'deadtime' },
+    { reward: 'deadtime', secrets:{version:1,deadtimeUnlocked:'true'}, survival:299.99, expected:null },
+    { reward: 'deadtime', survival:300, expected:'deadtime' },
   ]) {
     const values = new Map([
       ['breakline99-profile', JSON.stringify({ rewardBoard: scenario.reward })],
       [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
       ['breakline99-trials-v1', JSON.stringify(scenario.trials ?? null)],
+      [SECRET_STORAGE_KEY,JSON.stringify(scenario.secrets??null)],
+      ['breakline99-survival-time',String(scenario.survival??0)],
     ]);
-    const context = { ADMIN_STORAGE_KEY,sanitizeAdminSettings,validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
+    const context = { SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
     vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
     assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
     if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);

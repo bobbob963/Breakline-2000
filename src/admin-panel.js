@@ -36,6 +36,10 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
           <label class="admin-enabled"><input type="checkbox" id="admin-enabled"> <span>ENABLE CUSTOM STATS</span></label>
           <p class="admin-enabled-note">Switch this off to ride with the normal stats. Your custom values stay saved.</p>
         </div>
+        <section class="admin-cheats" aria-labelledby="admin-cheats-title">
+          <div><h3 id="admin-cheats-title">CHEATS</h3><label class="admin-enabled"><input type="checkbox" id="admin-slow-motion" aria-describedby="admin-slow-motion-description"> <span>SLOW MOTION / Q</span></label></div>
+          <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Press Q to toggle a 6-second charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
+        </section>
         <div class="admin-columns">
           <section class="admin-stat-section" aria-labelledby="admin-character-title"><div class="admin-section-heading"><span>01 / CHARACTER</span><h3 id="admin-character-title"></h3></div><div id="admin-character-fields"></div></section>
           <section class="admin-stat-section" aria-labelledby="admin-board-title"><div class="admin-section-heading"><span>02 / BOARD</span><h3 id="admin-board-title"></h3></div><div id="admin-board-fields"></div></section>
@@ -79,6 +83,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     query('#admin-character-title').textContent = CHARACTERS[profile.character]?.name || 'YOUR RIDER';
     query('#admin-board-title').textContent = getRewardBoard(profile.rewardBoard)?.name || 'STANDARD BOARD';
     query('#admin-enabled').checked = draft.enabled;
+    query('#admin-slow-motion').checked = draft.cheats.slowMotion;
     overlay.classList.toggle('admin-tuning-off', !draft.enabled);
   }
 
@@ -112,6 +117,11 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
 
   function handleInput(event) {
     const input = event.target;
+    if (input.id === 'admin-slow-motion') {
+      draft = { ...draft, cheats: { ...draft.cheats, slowMotion: input.checked === true } };
+      status(input.checked ? 'Slow motion will work with any board after you apply.' : 'The slow motion cheat will switch off after you apply.');
+      return;
+    }
     if (input.id === 'admin-enabled') {
       draft = { ...draft, enabled: input.checked };
       overlay.classList.toggle('admin-tuning-off', !input.checked);
@@ -161,6 +171,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
       if (Number(input.value) !== current[input.dataset.adminScope][input.dataset.adminKey]) handleInput({ target: input });
     }
     draft.enabled = query('#admin-enabled').checked;
+    draft.cheats.slowMotion = query('#admin-slow-motion').checked === true;
     if (await action(() => onApply(sanitizeAdminSettings(draft)))) close();
   }
 

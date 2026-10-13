@@ -28,6 +28,8 @@ const characterIds = ['kai', 'nova', 'reef', 'jax'];
 const boardIds = ['standard', ...ALL_REWARD_BOARD_ORDER];
 const defaults = fields => Object.fromEntries(fields.map(item => [item.key, item.default]));
 const plain = value => !!value && typeof value === 'object' && !Array.isArray(value);
+const cleanCheats = value => ({ slowMotion: plain(value) && Object.hasOwn(value, 'slowMotion') && value.slowMotion === true });
+const ownCheats = value => plain(value) && Object.hasOwn(value, 'cheats') ? value.cheats : null;
 function cleanScope(value, fields, fill = false) {
   const result = fill ? defaults(fields) : {};
   if (!plain(value)) return result;
@@ -48,6 +50,7 @@ export function sanitizeAdminSettings(value) {
     version: 1, enabled: value?.enabled === true,
     characters: cleanMap(value?.characters, characterIds, ADMIN_CHARACTER_FIELDS),
     boards: cleanMap(value?.boards, boardIds, ADMIN_BOARD_FIELDS),
+    cheats: cleanCheats(ownCheats(value)),
   };
 }
 function scopeIds(profile) {
@@ -85,8 +88,10 @@ export function sanitizeResolvedAdminStats(value) {
     active: plain(value) && value.active === true,
     character: cleanScope(value?.character, ADMIN_CHARACTER_FIELDS, true),
     board: cleanScope(value?.board, ADMIN_BOARD_FIELDS, true),
+    cheats: cleanCheats(ownCheats(value)),
   };
 }
 export function resolveAdminStats(settings, profile) {
-  return sanitizeResolvedAdminStats({ active: settings?.enabled === true, ...getAdminScope(settings, profile) });
+  const saved = sanitizeAdminSettings(settings);
+  return sanitizeResolvedAdminStats({ active: saved.enabled, ...getAdminScope(saved, profile), cheats: saved.cheats });
 }

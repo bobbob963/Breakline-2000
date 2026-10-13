@@ -1,0 +1,7 @@
+.time-power-hud{position:absolute;right:24px;bottom:28px;width:230px;padding:10px 12px;border-left:3px solid #8cda9f;background:#102820dd;color:#c0e9c8;text-shadow:1px 1px #07180e;pointer-events:none}
+.time-power-hud strong{display:block;font:italic 20px/1.1 Impact,'Arial Narrow',sans-serif;letter-spacing:.5px}
+.time-power-hud span{display:block;margin:7px 0;font:7px/1.5 var(--mono)}
+.time-power-hud>div{height:4px;background:#345849}.time-power-hud i{display:block;height:100%;background:#9ce9b0;width:100%}
+.time-power-hud.active{border-color:#b6ffcc;background:#133e25e8}.time-power-hud.bursting{border-color:#ffdc87;color:#ffdc87}.time-power-hud.bursting i{background:#ffdc87}
+.reward-card[data-reward-theme="deadtime"]{border-color:#78b991;background:linear-gradient(115deg,#17382b,#172726)}
+.reward-card[data-reward-theme="deadtime"] .reward-icon{color:#a8e8bf}

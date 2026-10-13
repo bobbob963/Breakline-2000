@@ -7,7 +7,7 @@ import {
 
 test('missing and malformed admin saves start disabled with no overrides',()=>{
   for (const value of [undefined,null,false,[],42,'enabled',{enabled:'true',characters:[],boards:'sky'}]) {
-    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{}});
+    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{},cheats:{slowMotion:false}});
   }
   assert.equal(sanitizeAdminSettings({enabled:true}).enabled,true);
 });
@@ -18,14 +18,14 @@ test('saved stats reject nonfinite values and unknown fields, while clamping saf
     boards:{sky:{baseSpeed:-3,boostPower:99,extraJumps:2.9,popRecovery:0,glideGravity:-Infinity,boostDuration:null,unknown:1},unknown:{baseSpeed:3}},
   });
   assert.deepEqual(saved,{
-    version:1,enabled:true,
+    version:1,enabled:true,cheats:{slowMotion:false},
     characters:{kai:{jumpPower:3,gravity:.25,comboWindow:5}},
     boards:{sky:{baseSpeed:.25,boostPower:4,popRecovery:0,extraJumps:2}},
   });
   const inherited = Object.create({kai:{jumpPower:2}});
   const inheritedStats = Object.create({boostPower:4});
   assert.deepEqual(sanitizeAdminSettings({characters:inherited,boards:{standard:inheritedStats}}),{
-    version:1,enabled:false,characters:{},boards:{standard:{}},
+    version:1,enabled:false,characters:{},boards:{standard:{}},cheats:{slowMotion:false},
   });
 });
 
@@ -126,4 +126,43 @@ test('saved, resolved and returned setup objects are independent copies',()=>{
   assert.equal(clean.boards.sky.baseSpeed,1.5);assert.equal(clean.characters.kai.jumpPower,2);
   assert.equal(getAdminScope(undefined,profile).character.jumpPower,1);
   assert.equal(getAdminScope(undefined,profile).board.baseSpeed,1);
+});
+
+test('slow motion requires an explicit own boolean and survives independently of custom stats',()=>{
+  const profile={character:'kai',rewardBoard:null};
+  for(const enabled of [false,true]) {
+    const saved=sanitizeAdminSettings({enabled,cheats:{slowMotion:true,unknown:true}});
+    const resolved=resolveAdminStats(saved,profile);
+    assert.equal(resolved.active,enabled);
+    assert.deepEqual(saved.cheats,{slowMotion:true});
+    assert.deepEqual(resolved.cheats,{slowMotion:true});
+    assert.equal(sanitizeResolvedAdminStats(resolved).cheats.slowMotion,true);
+  }
+  for(const value of [undefined,null,false,0,1,'true',{},[],new Boolean(true)]) {
+    const source={enabled:true,cheats:{slowMotion:value}};
+    assert.equal(sanitizeAdminSettings(source).cheats.slowMotion,false);
+    assert.equal(resolveAdminStats(source,profile).cheats.slowMotion,false);
+    assert.equal(sanitizeResolvedAdminStats(source).cheats.slowMotion,false);
+  }
+  for(const source of [
+    {cheats:true},{cheats:'slowMotion'},{cheats:[]},
+    {cheats:Object.create({slowMotion:true})},Object.create({cheats:{slowMotion:true}}),
+  ]) {
+    assert.equal(sanitizeAdminSettings(source).cheats.slowMotion,false);
+    assert.equal(sanitizeResolvedAdminStats(source).cheats.slowMotion,false);
+  }
+});
+
+test('slow motion round-trips through save JSON and rider tuning without sharing cheat state',()=>{
+  const source={enabled:false,cheats:{slowMotion:true}},profile={character:'kai',rewardBoard:null};
+  let saved=updateAdminScope(source,profile,'character',{jumpPower:2});
+  saved=resetAdminScope(saved,profile);
+  assert.equal(saved.cheats.slowMotion,true);
+  const loaded=sanitizeAdminSettings(JSON.parse(JSON.stringify(saved)));
+  const resolved=resolveAdminStats(loaded,profile);
+  resolved.cheats.slowMotion=false;
+  assert.equal(loaded.cheats.slowMotion,true);
+  loaded.cheats.slowMotion=false;
+  assert.equal(saved.cheats.slowMotion,true);
+  assert.equal(source.cheats.slowMotion,true);
 });

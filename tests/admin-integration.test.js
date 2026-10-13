@@ -14,6 +14,7 @@ import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,updateAdminScope } from '../src/admin-settings.js';
 import { everythingUnlocked,persistAdminEntries,resetBreaklineSave } from '../src/admin-save.js';
 import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
+import { SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret } from '../src/secret-progress.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const noOp=()=>{};
@@ -28,6 +29,8 @@ function fixture() {
   const context={
     SurfGame,WaveParkGame,createTournamentGame,createTimeTrialGame,nextTournamentLadder,selectTournamentLadder,
     ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,everythingUnlocked,persistAdminEntries,resetBreaklineSave,
+    SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,
+    timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     validateProfile,rewardBoardUnlocked,OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
     profile:validateProfile(),adminSettings:sanitizeAdminSettings(null),lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
     tournamentProgress:sanitizeTournamentProgress(null),trialProgress:sanitizeTimeTrialProgress(null),
@@ -119,12 +122,39 @@ test('Give Me Everything opens every reward and course without inventing persona
   saved.setItem('breakline99-best-surf','12000');const beforeProfile={...c.profile},beforeSettings=c.adminSettings;
   c.giveEverything();assert.equal(c.tournamentProgress.completedLadders,5);assert.equal(c.trialProgress.completedTrials,12);
   assert.ok(timeTrialsUnlocked(c.tournamentProgress));assert.equal(c.game.phase,'ready');assert.equal(c.game.baseSpeedMultiplier,1.5);
-  for(const id of ALL_REWARD_BOARD_ORDER)assert.ok(rewardBoardUnlocked(id,c.tournamentProgress,c.trialProgress));
+  for(const id of ALL_REWARD_BOARD_ORDER)assert.ok(rewardBoardUnlocked(id,c.tournamentProgress,c.trialProgress,c.secretProgress));
   for(const entry of [...Object.values(OUTFITS),...Object.values(BOARD_DESIGNS)])assert.ok(c.cosmeticAvailable(entry));
   assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40]);assert.ok(c.trialProgress.bestTimes.slice(3).every(time=>time===null));
   assert.deepEqual(c.profile,beforeProfile);assert.equal(c.adminSettings,beforeSettings);assert.equal(saved.getItem('breakline99-best-surf'),'12000');
   assert.equal(JSON.parse(saved.getItem('breakline99-trials-v1')).completedTrials,12);assert.equal(calls.mode,1);assert.equal(calls.choices,1);
+  assert.equal(c.secretProgress.deadtimeUnlocked,true);assert.equal(JSON.parse(saved.getItem(SECRET_STORAGE_KEY)).deadtimeUnlocked,true);
+  assert.equal(saved.getItem('breakline99-survival-time'),null,'unlock-all does not fabricate a five-minute record');
   c.giveEverything();assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40],'repeating unlock does not change earned times');
+});
+
+test('Apply persists the slow-motion cheat independently of stat tuning and passes it to each new session',()=>{
+  const {context:c,saved}=fixture();
+  c.applyAdminSettings(sanitizeAdminSettings({enabled:false,cheats:{slowMotion:true}}));
+  assert.equal(c.game.timePowerEnabled,true);assert.equal(c.game.baseSpeedMultiplier,1);
+  assert.equal(JSON.parse(saved.getItem(ADMIN_STORAGE_KEY)).cheats.slowMotion,true);
+  c.startRun();assert.equal(c.game.toggleTimePower(),true);assert.equal(c.game.timePowerActive,true);
+  c.selectedMode='park';c.makeGame();c.startRun();
+  assert.equal(c.game.timePowerEnabled,true);assert.equal(c.game.toggleTimePower(),true);
+  c.applyAdminSettings(sanitizeAdminSettings({enabled:false,cheats:{slowMotion:false}}));
+  assert.equal(c.game.timePowerEnabled,false);assert.equal(c.game.timePowerActive,false);
+  assert.equal(c.game.toggleTimePower(),false);
+});
+
+test('a failed secret-board unlock rolls back all three saved progress records',()=>{
+  const {context:c,saved,calls}=fixture();
+  const entries=[['breakline99-tournament-v2',c.tournamentProgress],['breakline99-trials-v1',c.trialProgress],[SECRET_STORAGE_KEY,c.secretProgress]];
+  for(const [key,value] of entries)saved.setItem(key,JSON.stringify(value));
+  saved.setItem('breakline99-survival-time','42');
+  const before=[...saved.data],secrets=c.secretProgress,tournament=c.tournamentProgress,trials=c.trialProgress,set=saved.setItem;
+  saved.setItem=(key,value)=>{if(key===SECRET_STORAGE_KEY&&JSON.parse(value).deadtimeUnlocked)throw new Error('quota');set(key,value);};
+  assert.throws(()=>c.giveEverything(),/could not save/);
+  assert.deepEqual([...saved.data],before);assert.equal(c.secretProgress,secrets);
+  assert.equal(c.tournamentProgress,tournament);assert.equal(c.trialProgress,trials);assert.equal(calls.mode,0);
 });
 
 test('a failed multi-save unlock keeps both live progression and stored progression unchanged',()=>{

@@ -28,17 +28,22 @@ export const REWARD_BOARDS = Object.freeze({
   afterburner: board('afterburner', 'AFTERBURNER', null, '+25% BASE SPEED / +50% BOOST POWER',
     'Clear your first three Time Trials to earn this turbine deck. Ride 25% faster at base speed and get 50% more bonus speed from earned trick boosts. Warm exhaust bursts off completed tricks.',
     'exhaust', { primary: '#fa732f', secondary: '#352048', accent: '#ffebac' }, { trialClears: 3, baseSpeedMultiplier: 1.25, boostPowerMultiplier: 1.5 }),
+  deadtime: board('deadtime', 'DEADTIME', null, 'Q / SLOW TIME → +50% SPEED',
+    'A secret earned by surviving five minutes in Storm Rider. Q toggles six seconds of slow motion. Spend the full charge for 50% more speed for three seconds, then recharge. Clock hands spiral off completed tricks; a green pulse spreads from the board when time slows.',
+    'clock', { primary: '#176a45', secondary: '#112923', accent: '#b7ffd0' }, { hidden: true, slowMotion: true, survivalSeconds: 300 }),
 });
 
 // Ladder count and progression depend on this fixed list. Trial prizes are separate.
 export const REWARD_BOARD_ORDER = Object.freeze(['guitar', 'lightning', 'vortex', 'solar', 'sky']);
 export const TRIAL_REWARD_BOARD_ORDER = Object.freeze(['afterburner']);
-export const ALL_REWARD_BOARD_ORDER = Object.freeze([...REWARD_BOARD_ORDER, ...TRIAL_REWARD_BOARD_ORDER]);
+export const SECRET_REWARD_BOARD_ORDER = Object.freeze(['deadtime']);
+export const ALL_REWARD_BOARD_ORDER = Object.freeze([...REWARD_BOARD_ORDER, ...TRIAL_REWARD_BOARD_ORDER, ...SECRET_REWARD_BOARD_ORDER]);
 export function getRewardBoard(id) {
   return typeof id === 'string' && Object.hasOwn(REWARD_BOARDS, id) ? REWARD_BOARDS[id] : null;
 }
-export function rewardBoardUnlocked(id, progress, trialProgress) {
+export function rewardBoardUnlocked(id, progress, trialProgress, secretProgress) {
   const reward = getRewardBoard(id), completed = progress?.completedLadders;
+  if (reward?.hidden) return !!secretProgress && Object.hasOwn(secretProgress, 'deadtimeUnlocked') && secretProgress.deadtimeUnlocked === true;
   if (reward?.trialClears) {
     const clears = trialProgress?.completedTrials;
     return completed === REWARD_BOARD_ORDER.length && Number.isInteger(clears) && clears >= reward.trialClears && clears <= 12;

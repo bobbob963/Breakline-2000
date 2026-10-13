@@ -12,6 +12,10 @@
 .admin-enabled{display:flex;gap:10px;align-items:center;padding:11px 14px;background:#263e3e;border:1px solid #8fbdb2;color:#d7ead2;font:bold 11px var(--mono,'Courier New',monospace);letter-spacing:.5px;cursor:pointer}
 .admin-enabled input{width:17px;height:17px;margin:0;accent-color:#eac963;cursor:pointer}
 .admin-enabled-note{grid-column:1/-1;margin:8px 0 0;font:10px/1.5 var(--mono,'Courier New',monospace);color:#93aaa8}
+.admin-cheats{padding:14px 16px;margin-bottom:20px;border:1px solid #739785;background:#172f2d}
+.admin-cheats>div{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.admin-cheats h3{margin:0;color:#bce4a7;font:italic 25px/1.1 var(--display,Impact,sans-serif);letter-spacing:.7px}
+.admin-cheats p{color:#bbccba;font-size:12px;line-height:1.5;margin:10px 0 0;max-width:820px}
 .admin-columns{display:grid;grid-template-columns:1fr 1fr;gap:25px}
 .admin-stat-section{border:1px solid #617a79;background:#13232b}
 .admin-section-heading{padding:13px 16px;background:#23353b;border-bottom:1px solid #617a79}

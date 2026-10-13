@@ -5,6 +5,7 @@ import { GRAFFITI_WORDS, createGraffitiTexture } from './graffiti-art.js';
 export const BOARD_EFFECT_POOL_SIZE=3;
 export const BOARD_EFFECT_LIFETIME=.66;
 export const GRAFFITI_EFFECT_LIFETIME=1.15;
+export const CLOCK_EFFECT_LIFETIME=1.18;
 const TAU=Math.PI*2;
 const EFFECT_IDS=ALL_REWARD_BOARD_ORDER;
 
@@ -95,12 +96,18 @@ function angelWingGeometry() {
 
 function effectMaterial(color){return new THREE.MeshBasicMaterial({color,transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,opacity:0});}
 
+function clockHandGeometry() {
+  const outline=[[-.026,-.09],[.026,-.09],[.032,.34],[0,.50],[-.032,.34]],positions=[];
+  for(let i=1;i<outline.length-1;i++)for(const index of [0,i,i+1])positions.push(...outline[index],0);
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.computeVertexNormals();return geometry;
+}
+
 /** Local, depth-tested reward accents. Three fixed slots reuse all GPU assets. */
 export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false}={}) {
   const group=new THREE.Group();group.name='reward-board-effects';
   const textures=new Map(EFFECT_IDS.map(id=>[id,iconTexture(id)]));
   const graffitiTextures=GRAFFITI_WORDS.map(createGraffitiTexture);
-  const haloGeometry=jaggedHalo(),rayGeometry=new THREE.PlaneGeometry(.045,.56);
+  const haloGeometry=jaggedHalo(),rayGeometry=new THREE.PlaneGeometry(.045,.56),handGeometry=clockHandGeometry(),handHubGeometry=new THREE.CircleGeometry(.045,6),pulseGeometry=new THREE.RingGeometry(.94,1,40);
   const waterGeometry=ribbonGeometry('vortex'),coronaGeometry=ribbonGeometry('solar'),flareGeometry=flameGeometry(),particleGeometry=new THREE.OctahedronGeometry(.065,0),wingGeometry=angelWingGeometry();
   let equipped=null,next=0,disposed=false,sequence=0;
   const slots=Array.from({length:BOARD_EFFECT_POOL_SIZE},(_,index)=>{
@@ -119,8 +126,18 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const coronas=Array.from({length:2},(_,i)=>{const mesh=new THREE.Mesh(coronaGeometry,i?edgeMaterial:coreMaterial);mesh.name='solar-corona-'+i;sculpted.add(mesh);return mesh;});
     const flames=Array.from({length:10},(_,i)=>{const mesh=new THREE.Mesh(flareGeometry,i%2?coreMaterial:edgeMaterial);mesh.name='solar-flame-'+i;sculpted.add(mesh);return mesh;});
     const particles=Array.from({length:14},(_,i)=>{const mesh=new THREE.Mesh(particleGeometry,particleMaterial);mesh.name='reward-droplet-or-ember-'+i;sculpted.add(mesh);return mesh;});
-    return {root,icons,halo,rays,graffiti,word,wordMaterial,sculpted,ribbons,coronas,flames,particles,coreMaterial,edgeMaterial,particleMaterial,iconMaterial,rayMaterial,age:0,duration:BOARD_EFFECT_LIFETIME,id:null,seed:0,small:false};
+    const clocks=new THREE.Group();clocks.name='spiralling-clock-hands';clocks.visible=false;root.add(clocks);
+    const hands=Array.from({length:8},(_,i)=>{
+      const pivot=new THREE.Group();pivot.name='clock-hands-'+i;clocks.add(pivot);
+      const minute=new THREE.Mesh(handGeometry,edgeMaterial);minute.name='minute-hand';
+      const hour=new THREE.Mesh(handGeometry,coreMaterial);hour.name='hour-hand';hour.scale.y=.63;hour.position.z=.01;
+      const hub=new THREE.Mesh(handHubGeometry,particleMaterial);hub.name='clock-pivot';hub.position.z=.02;
+      pivot.add(minute,hour,hub);return {pivot,minute,hour};
+    });
+    return {root,icons,halo,rays,graffiti,word,wordMaterial,sculpted,ribbons,coronas,flames,particles,clocks,hands,coreMaterial,edgeMaterial,particleMaterial,iconMaterial,rayMaterial,age:0,duration:BOARD_EFFECT_LIFETIME,id:null,seed:0,small:false};
   });
+  const pulse=new THREE.Group();pulse.name='deadtime-board-pulse';pulse.visible=false;group.add(pulse);
+  const pulseMaterial=effectMaterial('#75ffb5'),pulseRing=new THREE.Mesh(pulseGeometry,pulseMaterial);pulseRing.rotation.x=-Math.PI/2;pulseRing.position.y=.04;pulse.add(pulseRing);
   const wings=new THREE.Group();wings.name='skybound-angel-wings';wings.visible=false;group.add(wings);
   const wingMaterial=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,opacity:0});
   const wingPair=[-1,1].map(side=>{
@@ -128,14 +145,17 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const mesh=new THREE.Mesh(wingGeometry,wingMaterial);mesh.scale.x=side;pivot.add(mesh);return {pivot,side};
   });
   const wingMatrix=new THREE.Matrix4(),parentInverse=new THREE.Matrix4();
-  let wingAmount=0,wingLife=0,wingTime=0;
-  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;}
+  let wingAmount=0,wingLife=0,wingTime=0,pulseAge=1;
+  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;pulseAge=1;pulse.visible=false;pulseMaterial.opacity=0;}
   function setProfile(profile){equipped=getRewardBoard(profile?.rewardBoard)?.id??null;reset();}
   function trigger(event) {
+    if(!disposed&&equipped==='deadtime'&&event?.type==='timePower'&&!event.opponent){
+      pulseAge=event.active?0:1;pulse.visible=!!event.active&&!reducedMotion;return !!event.active;
+    }
     if(disposed||!equipped||event?.opponent||!['trick','airJump'].includes(event?.type))return false;
     if(event.type==='airJump'&&equipped!=='sky')return false;
     const reward=getRewardBoard(equipped),slot=slots[next++%slots.length];
-    slot.id=equipped;slot.small=event.type==='airJump';slot.age=0;slot.duration=equipped==='lightning'?GRAFFITI_EFFECT_LIFETIME:slot.small?.46:BOARD_EFFECT_LIFETIME;slot.seed=(sequence%5)*.27;
+    slot.id=equipped;slot.small=event.type==='airJump';slot.age=0;slot.duration=equipped==='deadtime'?CLOCK_EFFECT_LIFETIME:equipped==='lightning'?GRAFFITI_EFFECT_LIFETIME:slot.small?.46:BOARD_EFFECT_LIFETIME;slot.seed=(sequence%5)*.27;
     slot.graffiti.visible=equipped==='lightning';
     if(slot.graffiti.visible){
       const wordIndex=sequence%GRAFFITI_WORDS.length;
@@ -146,9 +166,11 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     slot.iconMaterial.map=textures.get(equipped);slot.iconMaterial.needsUpdate=true;slot.iconMaterial.color.set(reward.colors.accent);
     slot.rayMaterial.color.set(reward.colors.secondary);slot.root.visible=true;slot.root.userData.effect=reward.vfx;slot.root.userData.completedTrick=event.type==='trick';
     slot.sculpted.visible=equipped==='vortex'||equipped==='solar'||equipped==='afterburner';
+    slot.clocks.visible=equipped==='deadtime';
     slot.sculpted.position.y=equipped==='afterburner'?-.50:0;
     slot.coreMaterial.color.set(equipped==='vortex'?'#26c9be':'#ff982f');slot.edgeMaterial.color.set(equipped==='vortex'?'#bdfff3':'#fff0a0');slot.particleMaterial.color.set(equipped==='vortex'?'#8aeade':'#ffc64c');
     if(equipped==='afterburner'){slot.coreMaterial.color.set('#ff792f');slot.edgeMaterial.color.set('#ffecad');slot.particleMaterial.color.set('#ce8dee');}
+    if(equipped==='deadtime'){slot.coreMaterial.color.set('#d9d6a9');slot.edgeMaterial.color.set('#b7ffd0');slot.particleMaterial.color.set('#5cd890');}
     if(equipped==='sky')wingLife=slot.small?.65:.52;
     return true;
   }
@@ -218,6 +240,16 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     if(disposed)return;
     if(finished){reset();return;}
     const elapsed=Math.max(0,Math.min(.1,dt||0));updateWings(elapsed,surfer,{paused,gliding});
+    const board=surfer.board??surfer.boardPivot??surfer.rig;
+    board.updateWorldMatrix(true,false);group.updateWorldMatrix(true,false);parentInverse.copy(group.matrixWorld).invert();wingMatrix.multiplyMatrices(parentInverse,board.matrixWorld);
+    if(pulse.visible){
+      if(!paused)pulseAge+=elapsed;
+      pulse.visible=equipped==='deadtime'&&pulseAge<.72&&!reducedMotion;
+      if(pulse.visible){
+        wingMatrix.decompose(pulse.position,pulse.quaternion,pulse.scale);
+        const p=pulseAge/.72;pulseRing.scale.setScalar(.18+3.9*(1-Math.pow(1-p,2)));pulseMaterial.opacity=.68*(1-p);
+      }
+    }
     for(const slot of slots) {
       if(!slot.root.visible)continue;
       if(!paused)slot.age+=Math.max(0,Math.min(.1,dt||0));
@@ -225,10 +257,11 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       // Fixed to the real rendered rider, including ocean-mesh alignment and
       // pipe rolls. This never changes the camera, simulation, or board pose.
       slot.root.position.copy(surfer.rig.position);slot.root.position.y+=.75;
+      if(slot.id==='deadtime')slot.root.position.setFromMatrixPosition(wingMatrix);
       slot.root.quaternion.copy(camera.quaternion);
       const age=slot.age,p=age/slot.duration,impact=age<.055,fade=Math.pow(1-p,.6),expansion=reducedMotion?0:Math.max(0,p-.085);
       const size=slot.small?.78:1;
-      const sculpted=slot.id==='vortex'||slot.id==='solar'||slot.id==='afterburner';
+      const clock=slot.id==='deadtime',sculpted=slot.id==='vortex'||slot.id==='solar'||slot.id==='afterburner';
       const graffiti=slot.id==='lightning';
       if(graffiti){
         // An opaque painted tag, not additive glow: readable against both ocean
@@ -242,10 +275,10 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       }
       slot.iconMaterial.opacity=(graffiti?.46:reducedMotion?.58:.96)*fade;
       slot.rayMaterial.opacity=reducedMotion?0:(impact?.72:.34)*fade;
-      slot.halo.visible=!sculpted&&!graffiti&&slot.id!=='sky'&&!reducedMotion&&age<.2;
+      slot.halo.visible=!clock&&!sculpted&&!graffiti&&slot.id!=='sky'&&!reducedMotion&&age<.2;
       slot.halo.scale.set(1.1*size+expansion*.65,1.06*size+expansion*.65,1);
       for(let i=0;i<slot.icons.length;i++) {
-        const icon=slot.icons[i];icon.visible=!sculpted&&(graffiti?i<(reducedMotion?2:4):!reducedMotion||i<4);
+        const icon=slot.icons[i];icon.visible=!clock&&!sculpted&&(graffiti?i<(reducedMotion?2:4):!reducedMotion||i<4);
         const angle=i*TAU/(reducedMotion?4:8)+slot.seed+(slot.id==='vortex'&&!reducedMotion?p*.7:0);
         const radius=(reducedMotion?1.13:1.02+expansion*.9)*size;
         icon.position.set(Math.cos(angle)*radius,Math.sin(angle)*radius*.85,.12+(i%2)*.08);
@@ -255,13 +288,25 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       }
       for(let i=0;i<slot.rays.length;i++) {
         const ray=slot.rays[i],angle=i*TAU/slot.rays.length+slot.seed;
-        ray.visible=!sculpted&&slot.id!=='sky'&&!reducedMotion&&age<(graffiti?.11:.28);ray.rotation.z=angle-Math.PI/2;
+        ray.visible=!clock&&!sculpted&&slot.id!=='sky'&&!reducedMotion&&age<(graffiti?.11:.28);ray.rotation.z=angle-Math.PI/2;
         const radius=(.92+expansion*.8)*size;ray.position.set(Math.cos(angle)*radius,Math.sin(angle)*radius,.02);
         ray.scale.set(graffiti?.7:1,(impact?1.2:.7)*size*(graffiti?.6:1),1);
       }
       if(sculpted)updateSculpted(slot,p,fade,size);
+      if(clock){
+        const motion=reducedMotion?0:p;
+        slot.coreMaterial.opacity=slot.edgeMaterial.opacity=slot.particleMaterial.opacity=(reducedMotion?.65:.92)*fade;
+        for(let i=0;i<slot.hands.length;i++){
+          const {pivot,minute,hour}=slot.hands[i],angle=i*TAU/8+slot.seed+motion*TAU*1.15;
+          pivot.visible=!reducedMotion||i<3;
+          const radius=reducedMotion?.9:.12+motion*(.95+(i%3)*.14);
+          pivot.position.set(Math.cos(angle)*radius,.15+motion*1.45+Math.sin(angle)*radius*.45,.08+(i%3)*.07);
+          pivot.scale.setScalar(reducedMotion?.70:.5+Math.sin(p*Math.PI)*.30);
+          minute.rotation.z=-(i*.7+motion*TAU*1.5);hour.rotation.z=minute.rotation.z*.27+1.4;
+        }
+      }
     }
   }
-  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.wordMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry])geometry.dispose();for(const texture of [...textures.values(),...graffitiTextures])texture.dispose();group.removeFromParent();group.clear();}
+  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.wordMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();pulseMaterial.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry,handGeometry,handHubGeometry,pulseGeometry])geometry.dispose();for(const texture of [...textures.values(),...graffitiTextures])texture.dispose();group.removeFromParent();group.clear();}
   return {group,setProfile,trigger,update,reset,dispose,get activeCount(){return slots.filter(s=>s.root.visible).length;},get reducedMotion(){return reducedMotion;}};
 }

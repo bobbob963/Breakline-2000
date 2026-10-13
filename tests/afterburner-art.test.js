@@ -15,7 +15,7 @@ function withCanvas(run) {
 test('Afterburner is an additional three-trial prize, preserving the five-ladder order and old equipment',()=>{
   assert.deepEqual(REWARD_BOARD_ORDER,['guitar','lightning','vortex','solar','sky']);
   assert.deepEqual(TRIAL_REWARD_BOARD_ORDER,['afterburner']);
-  assert.deepEqual(ALL_REWARD_BOARD_ORDER,[...REWARD_BOARD_ORDER,'afterburner']);
+  assert.deepEqual(ALL_REWARD_BOARD_ORDER,[...REWARD_BOARD_ORDER,'afterburner','deadtime']);
   const reward=getRewardBoard('afterburner');
   assert.equal(reward.ladderIndex,null);assert.equal(reward.trialClears,3);
   assert.equal(reward.baseSpeedMultiplier,1.25);assert.equal(reward.boostPowerMultiplier,1.5);

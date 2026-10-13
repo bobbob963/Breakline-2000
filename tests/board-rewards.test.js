@@ -58,7 +58,7 @@ test('five ladder prizes unlock permanently in order and reject invalid IDs or p
 
 test('Afterburner is an additional trial prize with a permanent third-clear unlock, not a sixth ladder', () => {
   assert.deepEqual(TRIAL_REWARD_BOARD_ORDER, ['afterburner']);
-  assert.deepEqual(ALL_REWARD_BOARD_ORDER, [...REWARD_BOARD_ORDER, 'afterburner']);
+  assert.deepEqual(ALL_REWARD_BOARD_ORDER, [...REWARD_BOARD_ORDER, 'afterburner', 'deadtime']);
   assert.deepEqual(Object.keys(REWARD_BOARDS), ALL_REWARD_BOARD_ORDER);
   const reward = getRewardBoard('afterburner');
   assert.equal(reward.name, 'AFTERBURNER'); assert.equal(reward.trialClears, 3);
