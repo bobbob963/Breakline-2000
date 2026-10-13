@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { getRewardBoard } from './board-rewards.js';
+import { getRewardBoard, ALL_REWARD_BOARD_ORDER } from './board-rewards.js';
 import { GRAFFITI_WORDS, createGraffitiTexture } from './graffiti-art.js';
 
 export const BOARD_EFFECT_POOL_SIZE=3;
 export const BOARD_EFFECT_LIFETIME=.66;
 export const GRAFFITI_EFFECT_LIFETIME=1.15;
 const TAU=Math.PI*2;
-const EFFECT_IDS=['guitar','lightning','vortex','solar','sky'];
+const EFFECT_IDS=ALL_REWARD_BOARD_ORDER;
 
 function iconTexture(id) {
   const canvas=document.createElement('canvas');canvas.width=canvas.height=64;
@@ -20,7 +20,10 @@ function iconTexture(id) {
     for(let i=0;i<3;i++){c.save();c.translate(32,32);c.rotate(i*TAU/3);shape([[0,-6],[12,-13],[27,-6],[28,8],[16,25],[19,9],[14,1],[5,0]]);c.restore();}
   } else if(id==='solar') {
     c.save();c.translate(32,32);for(let i=0;i<8;i++){c.rotate(TAU/8);shape([[-3,-17],[0,-31],[4,-17]]);}c.beginPath();c.arc(0,0,11,0,TAU);c.fill();c.restore();
-  } else {
+  } else if(id==='afterburner') {
+    shape([[13,57],[11,42],[26,17],[28,31],[41,4],[50,34],[54,47],[43,59],[26,63]]);
+    c.globalCompositeOperation='destination-out';shape([[24,54],[30,43],[31,51],[41,34],[43,52],[36,59]]);c.globalCompositeOperation='source-over';
+  } else if(id==='sky') {
     shape([[8,58],[21,13],[40,3],[53,5],[54,22],[40,37],[31,36],[33,46],[21,49]]);
     c.globalCompositeOperation='destination-out';c.lineWidth=3;c.beginPath();c.moveTo(12,56);c.lineTo(43,16);c.stroke();
     for(let i=0;i<3;i++){c.beginPath();c.moveTo(21+i*6,44-i*8);c.lineTo(41+i*4,44-i*10);c.stroke();}
@@ -142,8 +145,10 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     sequence++;
     slot.iconMaterial.map=textures.get(equipped);slot.iconMaterial.needsUpdate=true;slot.iconMaterial.color.set(reward.colors.accent);
     slot.rayMaterial.color.set(reward.colors.secondary);slot.root.visible=true;slot.root.userData.effect=reward.vfx;slot.root.userData.completedTrick=event.type==='trick';
-    slot.sculpted.visible=equipped==='vortex'||equipped==='solar';
+    slot.sculpted.visible=equipped==='vortex'||equipped==='solar'||equipped==='afterburner';
+    slot.sculpted.position.y=equipped==='afterburner'?-.50:0;
     slot.coreMaterial.color.set(equipped==='vortex'?'#26c9be':'#ff982f');slot.edgeMaterial.color.set(equipped==='vortex'?'#bdfff3':'#fff0a0');slot.particleMaterial.color.set(equipped==='vortex'?'#8aeade':'#ffc64c');
+    if(equipped==='afterburner'){slot.coreMaterial.color.set('#ff792f');slot.edgeMaterial.color.set('#ffecad');slot.particleMaterial.color.set('#ce8dee');}
     if(equipped==='sky')wingLife=slot.small?.65:.52;
     return true;
   }
@@ -168,6 +173,25 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
   function updateSculpted(slot,p,fade,size) {
     const water=slot.id==='vortex',motion=reducedMotion?0:p,impact=p<.1;
     slot.coreMaterial.opacity=(reducedMotion?.48:.77)*fade;slot.edgeMaterial.opacity=(reducedMotion?.56:.94)*fade;slot.particleMaterial.opacity=(reducedMotion?.48:.92)*fade;
+    if(slot.id==='afterburner') {
+      // Two compact exhaust fans lift off the deck rails. Reuse the existing
+      // flame/ember pool, with no bright full-screen flash or per-trick assets.
+      for(const mesh of [...slot.ribbons,...slot.coronas])mesh.visible=false;
+      for(let i=0;i<slot.flames.length;i++){
+        const flame=slot.flames[i],side=i%2?-1:1,j=Math.floor(i/2);
+        flame.visible=i<(reducedMotion?2:6);
+        flame.position.set(side*(.38+j*.12+motion*.44),-.18+j*.06+motion*.08,.04);
+        flame.rotation.z=side*(-1.12+j*.12);
+        flame.scale.set(.64*size,(.48-j*.07)*(1-motion*.6)*size,1);
+      }
+      for(let i=0;i<slot.particles.length;i++){
+        const particle=slot.particles[i],side=i%2?-1:1,j=Math.floor(i/2);
+        particle.visible=i<(reducedMotion?4:10);
+        particle.position.set(side*(.58+j*.09+motion*.62),-.22+j*.085+motion*.08-motion*motion*.16,.08);
+        particle.rotation.z=side*(.6+motion);particle.scale.set(.45,(.75-j*.04)*(1-motion*.5),.45);
+      }
+      return;
+    }
     for(let i=0;i<slot.ribbons.length;i++){
       const ribbon=slot.ribbons[i];ribbon.visible=water&&(!reducedMotion||i<2);
       ribbon.rotation.z=i*TAU/3+slot.seed+motion*(i===1?-2.1:1.55);
@@ -204,7 +228,7 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       slot.root.quaternion.copy(camera.quaternion);
       const age=slot.age,p=age/slot.duration,impact=age<.055,fade=Math.pow(1-p,.6),expansion=reducedMotion?0:Math.max(0,p-.085);
       const size=slot.small?.78:1;
-      const sculpted=slot.id==='vortex'||slot.id==='solar';
+      const sculpted=slot.id==='vortex'||slot.id==='solar'||slot.id==='afterburner';
       const graffiti=slot.id==='lightning';
       if(graffiti){
         // An opaque painted tag, not additive glow: readable against both ocean

@@ -1,6 +1,6 @@
-// Permanent ladder prizes. Rendering and physics read the same catalogue.
+// Permanent ladder and Time Trial prizes. Rendering and physics share one catalogue.
 const defaults = Object.freeze({
-  trickPointsMultiplier: 1, boostPowerMultiplier: 1,
+  baseSpeedMultiplier: 1, trickPointsMultiplier: 1, boostPowerMultiplier: 1,
   boostDurationMultiplier: 1, popRecoveryMultiplier: 1, airJumps: 0,
   glideGravityMultiplier: 1, glideFallSpeed: 0,
 });
@@ -25,13 +25,23 @@ export const REWARD_BOARDS = Object.freeze({
   sky: board('sky', 'SKYBOUND', 4, 'ANGEL GLIDE + EXTRA AIR JUMP',
     'Winged deck. Angel wings open around the board as you glide gently down after each jump. Release Space again after your trick for one extra air jump per flight.',
     'wind', { primary: '#8db5ed', secondary: '#252d5e', accent: '#f3ffff' }, { airJumps: 1, glideGravityMultiplier: .32, glideFallSpeed: 3.6 }),
+  afterburner: board('afterburner', 'AFTERBURNER', null, '+25% BASE SPEED / +50% BOOST POWER',
+    'Clear your first three Time Trials to earn this turbine deck. Ride 25% faster at base speed and get 50% more bonus speed from earned trick boosts. Warm exhaust bursts off completed tricks.',
+    'exhaust', { primary: '#fa732f', secondary: '#352048', accent: '#ffebac' }, { trialClears: 3, baseSpeedMultiplier: 1.25, boostPowerMultiplier: 1.5 }),
 });
 
-export const REWARD_BOARD_ORDER = Object.freeze(Object.keys(REWARD_BOARDS));
+// Ladder count and progression depend on this fixed list. Trial prizes are separate.
+export const REWARD_BOARD_ORDER = Object.freeze(['guitar', 'lightning', 'vortex', 'solar', 'sky']);
+export const TRIAL_REWARD_BOARD_ORDER = Object.freeze(['afterburner']);
+export const ALL_REWARD_BOARD_ORDER = Object.freeze([...REWARD_BOARD_ORDER, ...TRIAL_REWARD_BOARD_ORDER]);
 export function getRewardBoard(id) {
   return typeof id === 'string' && Object.hasOwn(REWARD_BOARDS, id) ? REWARD_BOARDS[id] : null;
 }
-export function rewardBoardUnlocked(id, progress) {
+export function rewardBoardUnlocked(id, progress, trialProgress) {
   const reward = getRewardBoard(id), completed = progress?.completedLadders;
+  if (reward?.trialClears) {
+    const clears = trialProgress?.completedTrials;
+    return completed === REWARD_BOARD_ORDER.length && Number.isInteger(clears) && clears >= reward.trialClears && clears <= 12;
+  }
   return !!reward && Number.isInteger(completed) && completed > reward.ladderIndex && completed <= REWARD_BOARD_ORDER.length;
 }

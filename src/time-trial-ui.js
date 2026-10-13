@@ -1,5 +1,6 @@
 import { TIME_TRIALS } from './time-trials.js';
 import { TRIAL_COSMETIC_SETS } from './trial-cosmetics.js';
+import { getRewardBoard } from './board-rewards.js';
 
 export function trialTime(seconds) {
   if(!Number.isFinite(seconds))return '—';
@@ -7,7 +8,8 @@ export function trialTime(seconds) {
   return `${Math.floor(centiseconds/6000)}:${String(Math.floor(centiseconds/100)%60).padStart(2,'0')}.${String(centiseconds%100).padStart(2,'0')}`;
 }
 export function trialRewardCards(progress,{equip=false}={}) {
-  return `<div class="trial-rewards">${TRIAL_COSMETIC_SETS.map(set=>{
+  const board=getRewardBoard('afterburner'),unlocked=progress.completedTrials>=board.trialClears;
+  return `<article class="trial-speed-prize ${unlocked?'earned':''}"><div><small>${unlocked?'SPEED BOARD UNLOCKED':`BONUS PRIZE / CLEAR ${board.trialClears} TIME TRIALS`}</small><strong>${board.name}</strong><p>${board.buffLabel}</p><span>Normal riding speed ×1.25. Extra speed from trick and combo boosts ×1.5.</span></div>${equip&&unlocked?'<button type="button" data-reward-board="afterburner">EQUIP AFTERBURNER</button>':''}</article><div class="trial-rewards">${TRIAL_COSMETIC_SETS.map(set=>{
     const earned=progress.completedTrials>=set.requiredClears;
     return `<article class="${earned?'earned':''}"><small>${earned?'UNLOCKED':`CLEAR ${set.requiredClears} TRIALS`}</small><b>${set.name}</b><span>OUTFIT + DECK GRAPHIC</span>${equip&&earned?`<button type="button" data-trial-equip="${set.id}">EQUIP SET</button>`:''}</article>`;
   }).join('')}</div>`;

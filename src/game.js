@@ -63,6 +63,7 @@ export class SurfGame {
     return this.rewardBoard;
   }
   get rewardBoardDefinition() {return getRewardBoard(this.rewardBoard);}
+  get baseSpeedMultiplier() {return this.rewardBoardDefinition?.baseSpeedMultiplier||1;}
   get glideEligible() {
     return (this.phase==='running'||this.phase==='paused')&&this.airborne&&this.bailTime<=0&&
       !this.pipeRide&&!this.grinding&&!this.lipMove&&(this.rewardBoardDefinition?.glideFallSpeed||0)>0;
@@ -236,7 +237,10 @@ export class SurfGame {
     if(chord&&this.cutbackChordArmed&&this.doCutback(chord))this.cutbackChordArmed=false;
     this.current=(1.35*Math.sin(this.distance*.022+this.elapsed*.5)+.7*Math.sin(this.elapsed*1.1))*this.rules.currentStrength*(1+this.stormDifficulty*.8);
     if(this.cutbackActive){this.cutbackAge+=dt;this.cutbackProgress=clamp(this.cutbackAge/.72,0,1);this.cutback=Math.sin(this.cutbackProgress*Math.PI);}
-    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : (input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5+this.forwardSpeedBonus)*(this.cutbackActive?.72:1);
+    // Board cruise speed and earned bursts are separate: a 25% faster deck
+    // with a 50% stronger boost never multiplies that boost a second time.
+    const baseSpeed=((input.pump ? this.rules.pumpSpeed : this.rules.normalSpeed)+this.stormDifficulty*5)*this.baseSpeedMultiplier;
+    const targetSpeed = this.bailTime > 0 ? 8 : (input.brake ? this.rules.brakeSpeed : baseSpeed+this.forwardSpeedBonus)*(this.cutbackActive?.72:1);
     const previousSpeed = this.speed, decay = Math.exp(-dt * 1.7);
     this.speed = targetSpeed + (previousSpeed - targetSpeed) * decay;
     this.distance += targetSpeed * dt + (previousSpeed - targetSpeed) * (1 - decay) / 1.7;

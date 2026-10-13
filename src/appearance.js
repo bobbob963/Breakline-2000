@@ -277,7 +277,7 @@ export function trialBoardTexture(id) {
   ctx.globalAlpha=.06;for(let i=0;i<170;i++){ctx.fillStyle=i%2?'#fff4d3':'#111b22';ctx.fillRect((i*37)%64,(i*71)%256,1,i%7?1:3);}ctx.globalAlpha=1;
   const texture=canvasTexture(c);texture.name='trial-deck-'+id;return texture;
 }
-// Five original screen-printed decks. Art stays crisp and angular at the same
+// Original screen-printed prize decks. Art stays crisp and angular at the same
 // texture density as the standard board; reward gear never changes rider shape.
 export function rewardBoardTexture(id) {
   const reward=getRewardBoard(id);
@@ -311,7 +311,22 @@ export function rewardBoardTexture(id) {
     ctx.save();ctx.translate(32,108);ctx.scale(1,2.9);sun(ctx,0,0,37,secondary,12);ctx.restore();
     sun(ctx,32,108,26,accent,12);ctx.fillStyle='#f9e7ae';ctx.beginPath();ctx.arc(32,108,12,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=secondary;for(let i=0;i<5;i++)ctx.fillRect(13+i*2,181+i*5,38-i*4,2);
-  } else {
+  } else if(id==='afterburner') {
+    // A cream turbine inlet, purple blades and jagged orange exhaust. Broad
+    // shapes stay readable on the same 64px deck atlas as the original prizes.
+    polygon([[8,0],[19,0],[55,207],[41,207]],secondary);
+    polygon([[51,0],[59,0],[23,207],[12,207]],'#aa438c');
+    polygon([[25,113],[19,147],[28,141],[17,196],[34,177],[43,205],[42,155],[51,168],[39,114]],secondary);
+    polygon([[29,114],[23,142],[31,136],[25,176],[34,158],[39,188],[38,145],[44,154],[36,112]],accent);
+    polygon([[32,126],[30,148],[35,140],[35,168],[39,157],[35,126]],primary);
+    ctx.fillStyle=secondary;ctx.beginPath();ctx.ellipse(32,83,25,36,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=accent;ctx.beginPath();ctx.ellipse(32,83,21,31,0,0,Math.PI*2);ctx.fill();
+    ctx.save();ctx.translate(32,83);ctx.scale(.68,1);
+    for(let i=0;i<7;i++){ctx.save();ctx.rotate(i*Math.PI*2/7);polygon([[2,-7],[5,-28],[16,-22],[18,-13],[8,-3]],i%2?'#704578':secondary);ctx.restore();}
+    ctx.restore();ctx.fillStyle=primary;ctx.beginPath();ctx.ellipse(32,83,6,9,0,0,Math.PI*2);ctx.fill();
+    for(const side of [-1,1])for(let i=0;i<3;i++)polygon([[32+side*(21-i*2),28+i*11],[32+side*(13-i*2),22+i*11],[32+side*(14-i*2),28+i*11],[32+side*(22-i*2),34+i*11]],accent);
+    ctx.fillStyle=secondary;ctx.font='bold italic 12px monospace';ctx.textAlign='center';ctx.fillText('03',32,204);
+  } else if(id==='sky') {
     for(const side of [-1,1]){ctx.save();ctx.translate(32,108);ctx.scale(side,1);polygon([[0,38],[4,-59],[24,-89],[25,-55],[14,-35],[24,-47],[19,-22],[10,-8],[20,-19],[14,8]],secondary);ctx.restore();}
     polygon([[29,43],[35,29],[34,137],[29,162]],accent);
     for(let i=0;i<4;i++){ctx.strokeStyle=accent;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(10,173+i*7);ctx.bezierCurveTo(27,167+i*7,38,190+i*4,53,173+i*7);ctx.stroke();}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { validateProfile, OUTFITS, BOARD_DESIGNS } from '../src/appearance.js';
-import { rewardBoardUnlocked } from '../src/board-rewards.js';
+import { rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER } from '../src/board-rewards.js';
 import { sanitizeTournamentProgress,selectTournamentLadder } from '../src/tournament-progress.js';
 import { sanitizeTimeTrialProgress,timeTrialsUnlocked,recordTimeTrialWin,selectTimeTrial,TIME_TRIALS } from '../src/time-trial-progress.js';
 import { getTrialCosmeticSet,trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
@@ -14,7 +14,7 @@ const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8'),noop
 function block(first,last){const a=source.indexOf(first),b=source.indexOf(last,a+first.length);assert.ok(a>=0&&b>a,`production block ${first} exists`);return source.slice(a,b);}
 function progress(n){return sanitizeTimeTrialProgress({version:1,completedTrials:n,selectedTrial:Math.min(n,11),bestTimes:TIME_TRIALS.map((t,i)=>i<n?t.timeLimit-5:null)});}
 function tournament(n){return sanitizeTournamentProgress({version:2,ladderIndex:Math.min(n,4),completedRounds:0,completedLadders:n});}
-const dependencies={validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
+const dependencies={validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
 
 test('real boot restoration gates Time Trials behind all five ladders and strips only locked cosmetics',()=>{
   for(const scenario of [
@@ -45,6 +45,7 @@ function equipmentFixture(clears=0){
   vm.runInNewContext(block('function cosmeticAvailable(','if(!cosmeticAvailable(OUTFITS'),context);
   vm.runInNewContext(block('function setProfile(','function openWorkshop('),context);
   vm.runInNewContext(block('function equipTrialSet(','const rewardIcons='),context);
+  vm.runInNewContext(block('const rewardIcons=','function ladderRows('),context);
   return {context,writes,renders};
 }
 
@@ -82,6 +83,9 @@ test('trial menu exposes only unlocked courses, replay, personal bests and earne
     if(n>3)assert.match(content,/CLEAR PREVIOUS TRIAL/);
   }
   assert.match(markup,/data-trial-equip="afterhours"/);assert.doesNotMatch(markup,/data-trial-equip="ripcurrent"/);
+  assert.match(markup,/AFTERBURNER/);assert.match(markup,/data-reward-board="afterburner"/);
+  const lockedReward=trialRewardCards(progress(2),{equip:true});
+  assert.match(lockedReward,/AFTERBURNER/);assert.doesNotMatch(lockedReward,/data-reward-board="afterburner"/);
   assert.equal((trialRewardCards(progress(12),{equip:true}).match(/data-trial-equip=/g)||[]).length,4);
   assert.equal(trialTime(59.999),'1:00.00');assert.equal(trialTime(null),'—');
   assert.equal(selectTimeTrial(progress(3),4),null);assert.equal(selectTimeTrial(progress(3),0).completedTrials,3);
@@ -102,8 +106,57 @@ test('replaying a cleared trial improves the saved time without issuing a third-
   context.game.finish('win');
   assert.equal(context.trialProgress.completedTrials,2);assert.equal(context.trialProgress.bestTimes[0],TIME_TRIALS[0].timeLimit-10);
   assert.equal(context.game.unlockedSet,null);assert.equal(context.equipTrialSet('afterhours'),false);
+  assert.equal(rewardBoardUnlocked('afterburner',context.tournamentProgress,context.trialProgress),false);
   assert.equal(writes.at(-1)[0],'breakline99-trials-v1');assert.equal(writes.at(-1)[1].completedTrials,2);
-  assert.doesNotMatch(modals.at(-1)[2],/NEW SET|data-trial-equip=/);
+  assert.doesNotMatch(modals.at(-1)[2],/NEW SET|data-trial-equip=|data-reward-board="afterburner"/);
+});
+
+test('the third unique trial clear offers both the existing cosmetic set and an equippable Afterburner board',()=>{
+  const {context,writes}=equipmentFixture(2),modals=[];
+  Object.assign(context,{selectedMode:'trials',audio:{event:noop},saveBest:noop,clearInput:noop,toast:noop,trialTime,openModal:(...args)=>{context.modalMode=args[0];modals.push(args);}});
+  vm.runInNewContext(block('function showTrialResults(','function equipTrialSet('),context);
+  context.showResults=()=>context.showTrialResults();
+  vm.runInNewContext(block('function onEvent(','function makeGame('),context);
+  context.game=createTimeTrialGame(context.onEvent,context.trialProgress);context.game.start();
+  // The route/finish crossing is tested with ordinary controls separately.
+  // This boundary specifically verifies the persisted third-clear UI award.
+  context.game.finishTime=TIME_TRIALS[2].timeLimit-1;
+  context.game.nextCheckpoint=context.game.course.checkpoints.length;context.game.finish('win');
+  assert.equal(context.trialProgress.completedTrials,3);
+  assert.equal(writes.at(-1)[0],'breakline99-trials-v1');
+  assert.match(modals.at(-1)[2],/data-trial-equip="afterhours"/);
+  assert.match(modals.at(-1)[2],/data-reward-board="afterburner"/);
+  assert.match(modals.at(-1)[2],/AFTERBURNER/);
+  assert.equal(context.setProfile({rewardBoard:'afterburner'}),true);
+  assert.equal(context.game.rewardBoard,'afterburner');
+  context.showTrialResults();assert.match(modals.at(-1)[2],/data-reward-board="afterburner"[^>]*aria-pressed="true"/);
+  assert.equal(writes.at(-1)[0],'breakline99-profile');
+  assert.equal(context.equipTrialSet('afterhours'),true,'the original third-clear outfit and graphic remain available');
+  assert.equal(context.profile.outfit,'afterhours');assert.equal(context.profile.boardDesign,'afterhours');
+  assert.equal(context.setProfile({rewardBoard:'afterburner'}),true);
+  context.tournamentProgress=selectTournamentLadder(context.tournamentProgress,0);
+  assert.equal(rewardBoardUnlocked('afterburner',context.tournamentProgress,context.trialProgress),true);
+  context.game=createTimeTrialGame(context.onEvent,selectTimeTrial(context.trialProgress,2));context.game.start();
+  context.game.finishTime=TIME_TRIALS[2].timeLimit-2;context.game.nextCheckpoint=context.game.course.checkpoints.length;context.game.finish('win');
+  assert.equal(context.trialProgress.completedTrials,3);assert.equal(context.game.unlockedSet,null);
+  assert.doesNotMatch(modals.at(-1)[2],/NEW SET|data-reward-board="afterburner"/);
+  assert.equal(context.profile.rewardBoard,'afterburner');
+  assert.equal(rewardBoardUnlocked('afterburner',context.tournamentProgress,context.trialProgress),true);
+});
+
+test('the actual trial prize button equips Afterburner and refreshes the correct screen without a rival result',()=>{
+  const {context,writes}=equipmentFixture(3),screens=[];
+  let click;
+  Object.assign(context,{$:()=>({addEventListener:(type,handler)=>{assert.equal(type,'click');click=handler;}}),showTrials:()=>screens.push('trials'),showTrialResults:()=>screens.push('trial-results'),showTournamentResults:()=>screens.push('rival-results')});
+  vm.runInNewContext(block("$('modal-content').addEventListener(","$('modal-home').addEventListener("),context);
+  const event=disabled=>({target:{closest:()=>({disabled,dataset:{rewardBoard:'afterburner'}})}});
+  click(event(true));assert.equal(writes.length,0);assert.equal(screens.length,0);
+  context.modalMode='results';click(event(false));
+  assert.equal(context.profile.rewardBoard,'afterburner');assert.equal(context.game.rewardBoard,'afterburner');
+  assert.deepEqual(screens,['trial-results']);assert.equal(writes.at(-1)[1].rewardBoard,'afterburner');
+  context.modalMode='trials';click(event(false));assert.deepEqual(screens,['trial-results','trials']);
+  context.trialProgress=progress(2);const saved=writes.length;click(event(false));
+  assert.equal(writes.length,saved);assert.deepEqual(screens,['trial-results','trials']);
 });
 
 test('production start/next/retry keeps trial identity correct and preserves equipped board perks',()=>{

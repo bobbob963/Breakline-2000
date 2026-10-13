@@ -18,12 +18,12 @@ function block(first, last) {
   assert.ok(start >= 0 && end > start, `production block ${first} exists`);
   return source.slice(start, end);
 }
-function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }) {
+function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }, trials = null) {
   const writes = [], visual = [], previews = [], menuPreviews = [], updates = [];
   const context = {
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
-    trialProgress:sanitizeTimeTrialProgress(null),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
+    trialProgress:sanitizeTimeTrialProgress(trials),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
     game: new SurfGame(), write: (key, value) => writes.push([key, JSON.parse(value)]),
     world: { setProfile: profile => visual.push({ ...profile }) },
     preview: { setProfile: profile => previews.push({ ...profile }) },
@@ -60,16 +60,42 @@ test('boot restoration strips a locked board but restores an earned board and mi
     { reward: 'guitar', progress: { version: 2, ladderIndex: 1, completedRounds: 0, completedLadders: 1 }, expected: 'guitar' },
     { reward: 'sky', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, expected: 'sky' },
     { reward: 'guitar', progress: { version: 1, completedRounds: 5 }, expected: 'guitar', legacy: true },
+    { reward: 'afterburner', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, trials: { version: 1, completedTrials: 2, selectedTrial: 2 }, expected: null },
+    { reward: 'afterburner', progress: { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 }, trials: { version: 1, completedTrials: 3, selectedTrial: 3 }, expected: 'afterburner' },
+    { reward: 'afterburner', progress: { version: 2, ladderIndex: 3, completedRounds: 0, completedLadders: 4 }, trials: { version: 1, completedTrials: 12, selectedTrial: 11 }, expected: null },
   ]) {
     const values = new Map([
       ['breakline99-profile', JSON.stringify({ rewardBoard: scenario.reward })],
       [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
+      ['breakline99-trials-v1', JSON.stringify(scenario.trials ?? null)],
     ]);
     const context = { validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
     vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
     assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
     if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);
   }
+});
+
+test('Afterburner equips only after three trial clears, saves its identity and retains the existing outfit and deck setup', () => {
+  const championship = { version: 2, ladderIndex: 4, completedRounds: 5, completedLadders: 5 };
+  const { context, writes, visual, previews, menuPreviews } = equipFixture(championship, { version: 1, completedTrials: 2, selectedTrial: 2 });
+  const original = { ...context.profile };
+  assert.equal(context.setProfile({ rewardBoard: 'afterburner' }), false);
+  assert.equal(writes.length, 0); assert.equal(visual.length, 0);
+  context.trialProgress = sanitizeTimeTrialProgress({ version: 1, completedTrials: 3, selectedTrial: 3 });
+  assert.equal(context.setProfile({ rewardBoard: 'afterburner' }), true);
+  assert.deepEqual(context.profile, { ...original, rewardBoard: 'afterburner' });
+  assert.equal(context.game.rewardBoard, 'afterburner');
+  assert.equal(context.game.rewardBoardDefinition.baseSpeedMultiplier, 1.25);
+  assert.equal(context.game.rewardBoardDefinition.boostPowerMultiplier, 1.5);
+  assert.deepEqual(writes.at(-1), ['breakline99-profile', context.profile]);
+  for (const calls of [visual, previews, menuPreviews]) assert.deepEqual(calls.at(-1), context.profile);
+  context.tournamentProgress = selectTournamentLadder(context.tournamentProgress, 0);
+  context.setProfile({ outfit: 'blackout' });
+  assert.equal(context.profile.rewardBoard, 'afterburner', 'resetting a ladder does not revoke the trial board');
+  context.game.start(); assert.equal(context.game.rewardBoard, 'afterburner');
+  assert.equal(context.setProfile({ rewardBoard: null }), true);
+  assert.equal(context.profile.boardDesign, original.boardDesign); assert.equal(context.profile.boardColor, original.boardColor);
 });
 
 test('the production finish handler saves the newly won board before equipment is offered, and replay keeps it', () => {

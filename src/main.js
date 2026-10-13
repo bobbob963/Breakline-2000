@@ -14,7 +14,7 @@ import { sanitizeTimeTrialProgress, timeTrialsUnlocked, selectTimeTrial } from '
 import { TRIAL_COSMETIC_SETS, getTrialCosmeticSet, trialCosmeticUnlocked } from './trial-cosmetics.js';
 import { trialTime, trialListMarkup, trialRewardCards } from './time-trial-ui.js';
 import { createTournamentGame, TOURNAMENT_RIVALS, TOURNAMENT_LADDERS, sanitizeTournamentProgress, tournamentCourseLength, tournamentRivalsForLadder, selectTournamentLadder, nextTournamentLadder } from './tournament.js';
-import { REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from './board-rewards.js';
+import { ALL_REWARD_BOARD_ORDER, TRIAL_REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from './board-rewards.js';
 import { createWastedSequence } from './wasted.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
 import { brandLogo } from './brand-art.js';
@@ -44,8 +44,8 @@ let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{
 let selectedMode=read('breakline99-mode','surf');
 if(!['surf','park','rush','storm','tournament','trials'].includes(selectedMode))selectedMode='surf';
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v2',read('breakline99-tournament-v1','null'))));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
-if(!rewardBoardUnlocked(profile.rewardBoard,tournamentProgress))profile.rewardBoard=null;
 let trialProgress;try{trialProgress=sanitizeTimeTrialProgress(JSON.parse(read('breakline99-trials-v1','null')));}catch{trialProgress=sanitizeTimeTrialProgress(null);}
+if(!rewardBoardUnlocked(profile.rewardBoard,tournamentProgress,trialProgress))profile.rewardBoard=null;
 if(selectedMode==='trials'&&!timeTrialsUnlocked(tournamentProgress))selectedMode='tournament';
 function cosmeticAvailable(entry){return !entry?.trialReward||(timeTrialsUnlocked(tournamentProgress)&&trialCosmeticUnlocked(entry.trialReward,trialProgress.completedTrials));}
 if(!cosmeticAvailable(OUTFITS[profile.outfit]))profile.outfit='riptide';
@@ -75,7 +75,7 @@ let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
 const modeInfo={
-  trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears.'},
+  trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears. Clear three to earn the Afterburner speed board.'},
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
@@ -224,8 +224,9 @@ function showTrials(){
 function showTrialResults(){
   clearInput();const win=game.result==='win',earned=game.unlockedSet;
   const set=typeof earned==='string'?getTrialCosmeticSet(earned):earned;
+  const unlockedBoards=win&&set?TRIAL_REWARD_BOARD_ORDER.filter(id=>getRewardBoard(id).trialClears===set.requiredClears):[];
   const best=trialProgress.bestTimes?.[game.trial.id]??trialProgress.bestTimes?.[game.trialIndex];
-  openModal('results',win?'TIME BEATEN':game.resultReason||'TIME UP',`<p>TRIAL ${game.trialIndex+1} / 12 · ${game.trial.name}</p><div class="trial-result-time">${trialTime(game.finishTime??game.elapsed)}</div><p>TARGET ${trialTime(game.trial.timeLimit)} · BEST ${trialTime(best)}</p><div class="results-stats"><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>TRIALS CLEARED<b>${trialProgress.completedTrials} / 12</b></span></div>${set?`<div class="trial-unlock"><strong>NEW SET: ${set.name}</strong><p>Outfit and deck graphic unlocked. Equip them here or in the wardrobe and board shop.</p><button type="button" data-trial-equip="${set.id}">EQUIP ${set.name}</button></div>`:''}<p>${win?(trialProgress.completedTrials===12?'ALL TRIALS CLEARED. FOUR COMPLETE COSMETIC SETS EARNED.':'CLEARED. The next run demands a faster line. Replays improve your best time without awarding duplicate clears.'):'Pass every sun ring before the target time. Land tricks for boosts and keep a clean line.'}</p>`,win&&trialProgress.selectedTrial!==game.trialIndex?'NEXT TIME TRIAL':'RETRY TIME TRIAL','CHAMPION CIRCUIT / SOLO RUN');
+  openModal('results',win?'TIME BEATEN':game.resultReason||'TIME UP',`<p>TRIAL ${game.trialIndex+1} / 12 · ${game.trial.name}</p><div class="trial-result-time">${trialTime(game.finishTime??game.elapsed)}</div><p>TARGET ${trialTime(game.trial.timeLimit)} · BEST ${trialTime(best)}</p><div class="results-stats"><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>TRIALS CLEARED<b>${trialProgress.completedTrials} / 12</b></span></div>${unlockedBoards.map(id=>`<p class="trial-board-award">NEW SPEED BOARD UNLOCKED</p>${rewardCard(id,{unlocked:true,equipped:profile.rewardBoard===id,result:true})}`).join('')}${set?`<div class="trial-unlock"><strong>NEW SET: ${set.name}</strong><p>Outfit and deck graphic unlocked. Equip them here or in the wardrobe and board shop.</p><button type="button" data-trial-equip="${set.id}">EQUIP ${set.name}</button></div>`:''}<p>${win?(trialProgress.completedTrials===12?'ALL TRIALS CLEARED. FOUR COMPLETE COSMETIC SETS EARNED.':'CLEARED. The next run demands a faster line. Replays improve your best time without awarding duplicate clears.'):'Pass every sun ring before the target time. Land tricks for boosts and keep a clean line.'}</p>`,win&&trialProgress.selectedTrial!==game.trialIndex?'NEXT TIME TRIAL':'RETRY TIME TRIAL','CHAMPION CIRCUIT / SOLO RUN');
 }
 function equipTrialSet(id){
   const set=getTrialCosmeticSet(id);if(!set||!timeTrialsUnlocked(tournamentProgress)||!trialCosmeticUnlocked(id,trialProgress.completedTrials))return false;
@@ -234,10 +235,10 @@ function equipTrialSet(id){
   return true;
 }
 
-const rewardIcons={guitar:'♫',lightning:'ϟ',vortex:'◎',solar:'☀',sky:'↟'};
+const rewardIcons={guitar:'♫',lightning:'ϟ',vortex:'◎',solar:'☀',sky:'↟',afterburner:'»'};
 function rewardCard(id,{unlocked=false,equipped=false,result=false}={}){
   const board=getRewardBoard(id);
-  return `<article class="reward-card ${unlocked?'unlocked':'locked'} ${equipped?'equipped':''}" data-reward-theme="${id}"><span class="reward-icon" aria-hidden="true">${rewardIcons[id]}</span><div><small>${equipped?'EQUIPPED':unlocked?'UNLOCKED':`CLEAR LADDER ${board.ladderIndex+1}`}</small><strong>${board.name}</strong><p>${board.buffLabel}</p><span>${board.description}</span></div><button type="button" data-reward-board="${id}" ${unlocked?'':'disabled'} aria-pressed="${equipped}">${equipped?'EQUIPPED':unlocked?'EQUIP BOARD':'LOCKED'}</button></article>`;
+  return `<article class="reward-card ${unlocked?'unlocked':'locked'} ${equipped?'equipped':''}" data-reward-theme="${id}"><span class="reward-icon" aria-hidden="true">${rewardIcons[id]}</span><div><small>${equipped?'EQUIPPED':unlocked?'UNLOCKED':board.trialClears?`CLEAR ${board.trialClears} TIME TRIALS`:`CLEAR LADDER ${board.ladderIndex+1}`}</small><strong>${board.name}</strong><p>${board.buffLabel}</p><span>${board.description}</span></div><button type="button" data-reward-board="${id}" ${unlocked?'':'disabled'} aria-pressed="${equipped}">${equipped?'EQUIPPED':unlocked?'EQUIP BOARD':'LOCKED'}</button></article>`;
 }
 function ladderRows(){return `<ol class="rival-ladder">${tournamentRivalsForLadder(tournamentProgress).map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.venue==='park'?'WATERWORKS CIRCUIT':'SURF SESSION'} · RACE</span></div><div class="rival-target"><strong>${fmt(tournamentCourseLength(r))}m</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
 function showLadder(){
@@ -279,10 +280,10 @@ function updateCustomizationChoices(){
   $('home-surfer-name').textContent=CHARACTERS[profile.character].name;
   $('home-surfer-setup').textContent=`${OUTFITS[profile.outfit].name} / ${$('board-name').textContent}`;
   $('home-surfer-preview').setAttribute('aria-label',`${CHARACTERS[profile.character].name} wearing ${OUTFITS[profile.outfit].name}, leaning against their ${$('board-name').textContent} surfboard`);
-  $('reward-board-options').innerHTML=REWARD_BOARD_ORDER.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress),equipped:profile.rewardBoard===id})).join('');
+  $('reward-board-options').innerHTML=ALL_REWARD_BOARD_ORDER.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress,trialProgress),equipped:profile.rewardBoard===id})).join('');
   $('standard-board').setAttribute('aria-pressed',String(!profile.rewardBoard));
   $('standard-board').classList.toggle('is-selected',!profile.rewardBoard);
-  $('reward-collection-count').textContent=`${tournamentProgress.completedLadders} / 5 UNLOCKED`;
+  $('reward-collection-count').textContent=`${ALL_REWARD_BOARD_ORDER.filter(id=>rewardBoardUnlocked(id,tournamentProgress,trialProgress)).length} / ${ALL_REWARD_BOARD_ORDER.length} UNLOCKED`;
   const character=CHARACTERS[profile.character], labels=['AIR','HANG TIME','POP','SPEED','SPIN','LANDING','SWITCH','RAIL BALANCE','LIP BALANCE','FLOW'];
   $('character-stats').innerHTML=labels.map((label,i)=>{const rating=character.stats?.[i]??7;return `<div class="stat-row" aria-label="${label}: ${rating} out of 10"><span>${label}</span><div class="stat-dots" aria-hidden="true">${Array.from({length:10},(_,n)=>`<i class="stat-dot${n<rating?'':' empty'}"></i>`).join('')}</div></div>`;}).join('');
   $('character-bio').textContent=character.bio||'A local with a taste for long lines and late summer swells.';
@@ -301,7 +302,7 @@ function cycleCharacter(direction){
 }
 function setProfile(patch){
   const next=validateProfile({...profile,...patch});
-  if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress))return false;
+  if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress,trialProgress))return false;
   if(!cosmeticAvailable(OUTFITS[next.outfit])||!cosmeticAvailable(BOARD_DESIGNS[next.boardDesign]))return false;
   profile=next;write('breakline99-profile',JSON.stringify(profile));game.setRewardBoard(profile.rewardBoard);world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
 }
@@ -428,7 +429,7 @@ $('modal-content').addEventListener('click',event=>{
   if(button.dataset.trialEquip){equipTrialSet(button.dataset.trialEquip);return;}
   if(button.dataset.trial!==undefined){const next=selectTimeTrial(trialProgress,Number(button.dataset.trial));if(next){trialProgress=next;write('breakline99-trials-v1',JSON.stringify(next));goHome();showTrials();}return;}
   if(button.dataset.resetLadder!==undefined){resetCurrentLadder();return;}
-  if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard}))showTournamentResults();
+  if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard})){if(modalMode==='trials')showTrials();else if(game.isTimeTrial)showTrialResults();else showTournamentResults();}
   if(button.dataset.ladder!==undefined){
     const next=selectTournamentLadder(tournamentProgress,Number(button.dataset.ladder));
     if(next){tournamentProgress=next;write('breakline99-tournament-v2',JSON.stringify(next));goHome();showLadder();}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { REWARD_BOARDS, REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from '../src/board-rewards.js';
+import { REWARD_BOARDS, REWARD_BOARD_ORDER, ALL_REWARD_BOARD_ORDER, TRIAL_REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from '../src/board-rewards.js';
 import { SurfGame, TRICKS } from '../src/game.js';
 import { WaveParkGame, PARK_PIPES, parkPointBlocked } from '../src/park.js';
 import { SurfRaceGame } from '../src/surf-race.js';
@@ -54,6 +54,28 @@ test('five ladder prizes unlock permanently in order and reject invalid IDs or p
   for (const completedLadders of [-1, 6, Infinity, NaN, '5', 2.5, undefined]) {
     assert.equal(rewardBoardUnlocked('guitar', { completedLadders }), false);
   }
+});
+
+test('Afterburner is an additional trial prize with a permanent third-clear unlock, not a sixth ladder', () => {
+  assert.deepEqual(TRIAL_REWARD_BOARD_ORDER, ['afterburner']);
+  assert.deepEqual(ALL_REWARD_BOARD_ORDER, [...REWARD_BOARD_ORDER, 'afterburner']);
+  assert.deepEqual(Object.keys(REWARD_BOARDS), ALL_REWARD_BOARD_ORDER);
+  const reward = getRewardBoard('afterburner');
+  assert.equal(reward.name, 'AFTERBURNER'); assert.equal(reward.trialClears, 3);
+  assert.equal(reward.baseSpeedMultiplier, 1.25); assert.equal(reward.boostPowerMultiplier, 1.5);
+  assert.equal(reward.boostDurationMultiplier, 1, 'the requested bonus affects power, not duration');
+  for (let ladders = 0; ladders <= 5; ladders++) for (let trials = 0; trials <= 12; trials++) {
+    assert.equal(rewardBoardUnlocked('afterburner', { completedLadders: ladders }, { completedTrials: trials }), ladders === 5 && trials >= 3);
+  }
+  for (const invalid of [-1, 2, 13, Infinity, NaN, '3', 3.5, undefined, null]) {
+    assert.equal(rewardBoardUnlocked('afterburner', { completedLadders: 5 }, { completedTrials: invalid }), false);
+  }
+  for (const invalid of [-1, 4, 6, Infinity, NaN, '5', 5.5, undefined, null]) {
+    assert.equal(rewardBoardUnlocked('afterburner', { completedLadders: invalid }, { completedTrials: 3 }), false);
+  }
+  assert.equal(rewardBoardUnlocked('afterburner', { completedLadders: 5 }), false);
+  assert.equal(rewardBoardUnlocked('afterburner', null, { completedTrials: 3 }), false);
+  assert.equal(rewardBoardUnlocked('afterburner', { completedLadders: 5 }, null), false);
 });
 
 test('stock boards retain normal physics and equipment survives resets without leaking to opponents', () => {

@@ -17,9 +17,9 @@ export const timeTrialLabControls=game=>game.mode==='park'
 
 async function boot() {
   const $=id=>document.getElementById(id),pressed=new Set(),previews=[];
-  let game,world,input={},actualInput={},accumulator=0,events=[],currentSet=TRIAL_COSMETIC_SETS[0];
+  let game,world,input={},actualInput={},accumulator=0,events=[],currentSet=TRIAL_COSMETIC_SETS[0],currentReward=null;
   let progress=sanitizeTimeTrialProgress({version:1,completedTrials:12,selectedTrial:0,bestTimes:[]});
-  const profileFor=set=>validateProfile({character:'jax',outfit:set.outfit,boardDesign:set.boardDesign,rewardBoard:null});
+  const profileFor=set=>validateProfile({character:'jax',outfit:set.outfit,boardDesign:set.boardDesign,rewardBoard:currentReward});
   const clearInput=()=>{pressed.clear();input={};actualInput={};};
   function syncInput(){input={};for(const code of pressed)input[CONTROL_KEYS[code]]=true;}
   function renderList(){ $('trial-list').innerHTML=trialListMarkup(progress); }
@@ -38,7 +38,7 @@ async function boot() {
   function chooseTrial(index) {
     if(!Number.isInteger(index)||index<0||index>=TIME_TRIALS.length)return;
     clearInput();accumulator=0;events=[];progress={...progress,selectedTrial:index};
-    game=createTimeTrialGame(()=>{},progress);game.onEvent=onEvent;game.profile=profileFor(currentSet);
+    game=createTimeTrialGame(()=>{},progress);game.onEvent=onEvent;game.profile=profileFor(currentSet);game.setRewardBoard(currentReward);
     world.setProfile(game.profile);world.onEvent({type:'reset'},game);renderList();
     $('title').textContent=game.trial.name;
     $('status').textContent=`Ready: ${game.trial.name} · ${Math.round(game.course.length).toLocaleString()} m · ${game.course.checkpoints.length} sun rings · target ${trialTime(game.target)}. Press Start trial.`;
@@ -56,7 +56,7 @@ async function boot() {
   }
   function equipSet(id) {
     const set=getTrialCosmeticSet(id);if(!set)return;
-    currentSet=set;const profile=profileFor(set);world.setProfile(profile);game.profile=profile;
+    currentSet=set;currentReward=null;game.setRewardBoard(null);const profile=profileFor(set);world.setProfile(profile);game.profile=profile;
     for(const card of $('cosmetics').children){const equipped=card.dataset.set===id;card.dataset.equipped=String(equipped);card.querySelector('button').setAttribute('aria-pressed',String(equipped));card.querySelector('button').textContent=equipped?'EQUIPPED FOR REVIEW':'EQUIP FOR REVIEW';}
     $('stat-set').textContent=set.name;
   }
@@ -93,7 +93,7 @@ async function boot() {
     $('autopilot').addEventListener('change',clearInput);
     $('trial-list').addEventListener('click',event=>{
       const choice=event.target.closest('button[data-trial]'),set=event.target.closest('button[data-trial-equip]');
-      if(choice)chooseTrial(Number(choice.dataset.trial));else if(set)equipSet(set.dataset.trialEquip);
+      if(choice)chooseTrial(Number(choice.dataset.trial));else if(set)equipSet(set.dataset.trialEquip);else if(event.target.closest('button[data-reward-board=afterburner]')){currentReward='afterburner';game.setRewardBoard(currentReward);game.profile=profileFor(currentSet);world.setProfile(game.profile);$('stat-set').textContent=currentSet.name+' / AFTERBURNER';$('status').textContent='AFTERBURNER equipped for review: +25% base speed and +50% bonus boost power. No saved progress changed.';}
     });
     const actions={toggleSound(){},closeWorkshop(){},cycleCharacter(){},closeModal(){},rotatePreview(){},isWardrobeOpen:()=>false,hideWardrobe(){},
       startRun:start,restartRun:start,pause,toast:text=>{$('status').textContent=text;},

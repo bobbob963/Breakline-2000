@@ -122,7 +122,7 @@ All four can wear any of the **twelve starting outfits** and four earned Time Tr
 
 Open **CUSTOMISE BOARD** to combine **five deck colours** with **eight starting graphics**: Lightning, Checker Rip, Hot Rod, Black Tide, Hibiscus, Skull Reef, Solar Flare and Pinstripe. Four additional illustrated deck styles unlock through Time Trials. Your choices appear on the surfboard in every mode.
 
-The **BOARD SHOP** also displays five prize boards. Locked cards show the required ladder; after a clear, choose **EQUIP BOARD** on its result card or in the shop. Each board has original deck artwork and a brief effect around the rider and board whenever a trick completes. These are local bursts, not full-screen flashes. Equipping one board activates **one perk at a time; perks do not stack**. Choosing **STANDARD BOARD**, a deck colour or a standard graphic returns to your custom standard board with no perk. Earned prize boards stay in your collection.
+The **BOARD SHOP** also displays six prize boards. Locked cards show the required ladder or Time Trial clears; after a clear, choose **EQUIP BOARD** on its result card or in the shop. Each board has original deck artwork and a brief effect around the rider and board whenever a trick completes. These are local bursts, not full-screen flashes. Equipping one board activates **its own powers; different boards do not stack**. Choosing **STANDARD BOARD**, a deck colour or a standard graphic returns to your custom standard board with no perk. Earned prize boards stay in your collection.
 
 | Ladder / prize board | Trick-completion effect | Equipped perk |
 | --- | --- | --- |
@@ -130,7 +130,10 @@ The **BOARD SHOP** also displays five prize boards. Locked cards show the requir
 | **2 — LIVE WIRE** | Completed tricks throw up original graffiti tags: **NICE!**, **WOW!**, **SICK!**, **RAD!**, **FRESH!** and **STYLE!**, with painted outlines, drips and small electric sparks. Tags rise beside the rider and fade; no screen flash. | **+25% race boost power** on cleanly landed trick and combo boosts. |
 | **3 — UNDERTOW** | Spiralling water curls around the rider and vortex deck. | **+35% race boost duration**. |
 | **4 — SOLAR FLARE** | Sharp sun rays and warm flare bursts punctuate each trick. | **25% faster pop recovery** in every mode. |
+| **3 Time Trials — AFTERBURNER** | Orange exhaust flares and purple embers lift off the turbine deck after completed tricks. | **+25% base riding speed and +50% bonus trick/combo boost speed**. |
 | **5 — SKYBOUND** | Angel wings unfold around the board during a downward glide, with feathered trick bursts. | **Automatic gentle downward glide + one extra airborne jump per flight** in every mode. |
+
+**AFTERBURNER** unlocks permanently after your first **three distinct Time Trial clears**, alongside the Afterhours outfit and deck graphic. Existing saves with three or more clears qualify automatically. Base cruising/pumping speed is multiplied by **1.25**, and extra race-boost speed is multiplied separately by **1.5**: the normal +6 / +9 / +13 m/s boosts become **+9 / +13.5 / +19.5 m/s**. Braking and wipeout speeds stay manageable. The new board does not add another ladder or replace any existing prize.
 
 With **SKYBOUND** equipped, your ordinary jump rises normally, then angel wings open around the board and slow your descent automatically. The glide always moves downwards and still collides with the terrain, pipes and rails. Finish your current trick, then press and release **Space** again while airborne for the second jump. It adds lift to the same flight and temporarily folds the wings until you descend again, so the combo continues and the race boost still requires a clean landing. Landing recharges the extra jump; holding Space, unfinished tricks and changing boards mid-flight cannot refill it. The LIVE WIRE and UNDERTOW boost perks apply to Hit List races and Time Trials; their artwork and trick effects appear in every mode.
 

@@ -480,10 +480,10 @@ export class WaveParkGame extends SurfGame {
       const groundTurn=1.65+.55*(1-clamp((this.speed-3.5)/11.5,0,1));
       if(this.cutbackActive)this.updateCutback(dt);
       else if (active&&!this.rampReturn&&!copingPriority) this.heading += steering * (this.airborne ? 0.88 : groundTurn) * dt;
-      const targetSpeed = active ? (input.brake ? 3.5 : (pushing ? 23.5 : 15)+this.forwardSpeedBonus)*(this.cutbackActive?.72:1) : 3;
+      const targetSpeed = active ? (input.brake ? 3.5 : (pushing ? 23.5 : 15)*this.baseSpeedMultiplier+this.forwardSpeedBonus)*(this.cutbackActive?.72:1) : 3;
       // Crouching pumps the board toward the same limit as W. Let earned
       // momentum coast through a flight/landing instead of braking toward cruise.
-      const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15+this.forwardSpeedBonus;
+      const coasting=active&&!input.brake&&!this.cutbackActive&&!pushing&&this.speed>15*this.baseSpeedMultiplier+this.forwardSpeedBonus;
       const acceleration=input.brake?3.6:coasting?(this.airborne?.10:.35):1.5;
       this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * acceleration));
       const decay = 1 - Math.exp(-dt * (this.airborne ? 3.4 : this.cutbackActive?17:14));
@@ -673,7 +673,7 @@ export class WaveParkGame extends SurfGame {
     if(ride.releasePending&&Math.abs(normalized)<.035) {
       ride.angle-=normalized;this.applyPipeRide();this.endPipeRide();return;
     }
-    const targetSpeed=input.brake?3:input.pump?11:8.5;
+    const targetSpeed=input.brake?3:(input.pump?11:8.5)*this.baseSpeedMultiplier;
     this.speed+=(targetSpeed-this.speed)*(1-Math.exp(-dt*4));
     const angular=ride.releasePending?-Math.sign(normalized)*2.4:((input.right?1:0)-(input.left?1:0))*ride.dir*(input.pump?2.6:2.25);
     const change=ride.releasePending?Math.sign(angular)*Math.min(Math.abs(angular*dt),Math.abs(normalized)):angular*dt;
@@ -762,7 +762,7 @@ export class WaveParkGame extends SurfGame {
       this.faceIntoRamp(rail.rampId);this.grinding=null;this.railCooldown=1;
       this.launch(2.6,'COPING DROP-IN',160);return;
     }
-    this.speed += ((input.pump ? 17 : 11) - this.speed) * (1 - Math.exp(-dt * 2));
+    this.speed += ((input.pump ? 17 : 11)*this.baseSpeedMultiplier - this.speed) * (1 - Math.exp(-dt * 2));
     grind.local += grind.dir * this.speed * dt;
     grind.age += dt;
     this.heading = rail.rotation + (grind.dir < 0 ? Math.PI : 0);

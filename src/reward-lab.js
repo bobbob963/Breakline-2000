@@ -1,7 +1,7 @@
 import { SurfRaceGame } from './surf-race.js';
 import { SurfWorld } from './world.js';
 import { CustomizationPreview,validateProfile } from './appearance.js';
-import { REWARD_BOARD_ORDER,REWARD_BOARDS } from './board-rewards.js';
+import { ALL_REWARD_BOARD_ORDER,REWARD_BOARDS } from './board-rewards.js';
 import { loadCharacterTextures } from './character-textures.js';
 
 // The review presses the real charge/pop/trick controls. It never supplies a
@@ -18,7 +18,7 @@ export function rewardDemoInput(game,demo,dt) {
 }
 
 async function boot() {
-  const $=id=>document.getElementById(id),requested=new URLSearchParams(location.search).get('board');let world,preview,game,demo,id=REWARD_BOARD_ORDER.includes(requested)?requested:'guitar',accumulator=0;
+  const $=id=>document.getElementById(id),requested=new URLSearchParams(location.search).get('board');let world,preview,game,demo,id=ALL_REWARD_BOARD_ORDER.includes(requested)?requested:'guitar',accumulator=0;
   function start(nextId=id,mode='trick') {
     id=nextId;const board=REWARD_BOARDS[id],profile=validateProfile({character:'jax',outfit:'yardcrew',rewardBoard:id});
     const url=new URL(location.href);url.searchParams.set('board',id);history.replaceState(null,'',url);
@@ -34,7 +34,7 @@ async function boot() {
   }
   try {
     await loadCharacterTextures();world=new SurfWorld($('viewport'));preview=new CustomizationPreview($('board-preview'),validateProfile({rewardBoard:id}));
-    for(const key of REWARD_BOARD_ORDER){const button=document.createElement('button');button.dataset.board=key;button.textContent=REWARD_BOARDS[key].name;button.addEventListener('click',()=>start(key));$('boards').append(button);}
+    for(const key of ALL_REWARD_BOARD_ORDER){const button=document.createElement('button');button.dataset.board=key;button.textContent=REWARD_BOARDS[key].name;button.addEventListener('click',()=>start(key));$('boards').append(button);}
     $('replay').addEventListener('click',()=>start());$('pause').addEventListener('click',()=>{if(game.phase==='paused'){demo.completedAt=null;game.resume();}else game.pause();});
     $('glide').addEventListener('click',()=>start('sky','glide'));
     $('loading').remove();start();let previous=performance.now();

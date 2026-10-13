@@ -4,6 +4,7 @@
 .reward-card[data-reward-theme="vortex"]{--reward-accent:#71e1cb}
 .reward-card[data-reward-theme="solar"]{--reward-accent:#ffc05b}
 .reward-card[data-reward-theme="sky"]{--reward-accent:#dccbff}
+.reward-card[data-reward-theme="afterburner"]{--reward-accent:#ffb273;background:linear-gradient(130deg,#382840,#1c202e)}
 .reward-card.unlocked{border-color:var(--reward-accent)}
 .reward-card.equipped{box-shadow:inset 3px 0 var(--reward-accent);background:linear-gradient(130deg,#344047,#111b23)}
 .reward-icon{font:bold 34px/1.2 Georgia,serif;color:var(--reward-accent);text-align:center}

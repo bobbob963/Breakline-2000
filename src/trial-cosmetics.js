@@ -1,5 +1,5 @@
 // Time Trials award paired clothes and printed deck art. These are cosmetics;
-// the five ladder prize boards remain the only equipment with riding perks.
+// powered boards use the separate reward-board catalogue and unlock checks.
 export const TRIAL_COSMETIC_SETS = Object.freeze([
   Object.freeze({ id: 'afterhours', name: 'AFTERHOURS', requiredClears: 3, outfit: 'afterhours', boardDesign: 'afterhours', description: 'Ink-black surf tee, violet panels and a neon-night deck.' }),
   Object.freeze({ id: 'ripcurrent', name: 'RIP CURRENT', requiredClears: 6, outfit: 'ripcurrent', boardDesign: 'ripcurrent', description: 'Seafoam rashguard, deep teal shorts and a breaking-wave deck.' }),
