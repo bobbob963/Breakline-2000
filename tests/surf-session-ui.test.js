@@ -57,3 +57,20 @@ test('legacy storm selection never starts another stormy Surf Session',()=>{
   assert.ok(SURF_SESSION_WEATHER_IDS.includes(c.game.weatherId));
   assert.notEqual(saved.get('breakline99-weather'),'storm');
 });
+
+test('Surf Session help omits trick boost prompts while Survival and Reef Rush explain them',()=>{
+  const helpCode=source.slice(source.indexOf('function showHelp('),source.indexOf('function showResults('));
+  for(const selectedMode of ['surf','storm','rush']) {
+    let content='';
+    const game=new SurfGame(()=>{},selectedMode);
+    vm.runInNewContext(helpCode+';showHelp();',{game,selectedMode,modalMode:null,isParkMode:()=>false,
+      COMBO_ANIMATIONS:[],openModal:(_mode,_title,html)=>{content=html;}});
+    assert.equal(content.includes('<span>TRICK BOOST</span>'),selectedMode!=='surf');
+    if(selectedMode==='surf'){
+      assert.ok(content.includes('WEATHER + TIME'));
+      assert.equal(content.includes('automatic speed burst'),false);
+      assert.equal(game.objectiveText.includes('BOOST'),false);
+      assert.equal(game.objectiveText.includes('DRIFTWOOD'),false);
+    }
+  }
+});

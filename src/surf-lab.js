@@ -176,7 +176,7 @@ function updateCounters() {
   $('stat-barrel').textContent=game.rulesId==='storm'?`${game.barrel?.inside?'INSIDE':game.barrel?'APPROACH':'BETWEEN WAVES'} / ${game.barrelTime.toFixed(2)} s inside${game.barrel?` / ${Math.round(game.barrel.progress*100)}% through`:''}`:'—';
   const weather=resolveWorldWeather(game);
   $('stat-weather').textContent=weather?`${weather.label} / ${weather.timeLabel}`:'—';
-  $('stat-boost').textContent=game.surfBoostTime>0?`${game.surfBoostLabel} / +${game.surfBoostSpeed.toFixed(1)} m/s / ${game.surfBoostTime.toFixed(2)} s`:'Land a trick to boost';
+  $('stat-boost').textContent=!game.trickBoostEnabled?'Surf Session · points only':game.surfBoostTime>0?`${game.surfBoostLabel} / +${game.surfBoostSpeed.toFixed(1)} m/s / ${game.surfBoostTime.toFixed(2)} s`:'Land a trick to boost';
   $('stat-hazard').textContent=game.hazardWarning||'Clear water';
   const timing=game.barrel?game.barrelTimings.get(game.barrel.index):null;
   $('stat-deadline').textContent=game.barrelWarning?`${game.barrelRemaining.toFixed(2)} s LEFT / CURL ${Math.round(game.barrelClosingProgress*100)}%${timing?` / ${timing.escapeWindow.toFixed(2)} s MOUTH WINDOW`:''}`:'—';

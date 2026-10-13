@@ -43,7 +43,7 @@ export const TUTORIAL_STEPS = Object.freeze([
       { keys: ['F'], label: '360 air' }, { keys: ['B'], label: 'Tweaked grab' }, { keys: ['I'], label: '100% Special' },
     ],
     cards: [
-      { title: 'COMBO → BOOST', text: 'Surf Session, Survival, Waterworks and races reward landed tricks with speed bursts. Link more before banking for stronger boosts. Try J, wait for the spin, then B for a custom combo animation.' },
+      { title: 'COMBO → BOOST', text: 'Survival, Waterworks, Reef Rush and races reward landed tricks with speed bursts. Surf Session combos build your score without a speed boost. Try J, wait for the spin, then B for a custom combo animation.' },
       { title: 'BANK YOUR POINTS', text: 'Enter banks a landed combo. Pop again before its meter empties to keep linking. An unfinished trick can cause a wipeout and lose the combo.' },
     ],
     note: 'Each surfer has a signature special: Kai has Tidal Rodeo, Nova has Orbital 720, Reef has Reef Kickout, and Jax has Dockside Flip. A full Special meter stays at 100% until you use I in the air. Give each trick enough time to land.',
@@ -53,9 +53,9 @@ export const TUTORIAL_STEPS = Object.freeze([
     lead: 'Two minutes on the wave. Build a score through clean tricks and flowing combos.',
     cards: [
       { title: 'READ THE WATER', text: 'Use the wave lip and cutbacks for air. Catch sun rings and steer around visible reefs.' },
-      { title: 'LAND FOR SPEED', text: 'A completed lip or cutback trick gives an automatic boost. Link a combo for a stronger, longer burst; no extra boost key.' },
+      { title: 'LAND FOR POINTS', text: 'Finish lip or cutback tricks and land cleanly to build your score. Link more moves for a bigger combo multiplier. Surf Session has no trick or combo speed boosts.' },
       { title: 'A DIFFERENT SKY', text: 'Each new Surf Session picks dawn, midday, sunset or dusk. Sunset has its own chilled soundtrack. Surf Session is never stormy.' },
-      { title: 'REEF RUSH', text: 'Want a checkpoint challenge? Catch 12 sun rings before the clock runs out. Each ring adds eight seconds.' },
+      { title: 'REEF RUSH', text: 'Want a checkpoint challenge? Catch 12 sun rings before the clock runs out. Each ring adds eight seconds. Land tricks and combos for speed boosts.' },
     ],
     note: 'Whirlpools and driftwood belong to Survival. Surf Session keeps the focus on your line, score and landing.',
   },

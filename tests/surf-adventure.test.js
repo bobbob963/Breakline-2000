@@ -77,8 +77,8 @@ test('whirlpool visibly bounded pull affects water only, can be steered around a
   }
 });
 
-test('clean single and combo flights earn stronger boosts only after landing; bail and reset clear them',()=>{
-  for(const mode of ['surf','storm'])for(const tricks of [['spin'],['spin','grab']]) {
+test('Survival and Reef Rush award single and combo boosts after landing; bail and reset clear them',()=>{
+  for(const mode of ['storm','rush'])for(const tricks of [['spin'],['spin','grab']]) {
     const events=[],game=new SurfGame(e=>events.push(e),mode);game.start();lipFlight(game,tricks);
     assert.equal(game.wipeouts,0);assert.equal(game.surfBoostSpeed,tricks.length===1?7:10);
     assert.equal(game.surfBoostCombo,tricks.length>1);assert.equal(events.filter(e=>e.type==='surfBoost').length,1);
@@ -89,12 +89,30 @@ test('clean single and combo flights earn stronger boosts only after landing; ba
 });
 
 test('reward and admin boost multipliers apply once and races retain their separate boost pipeline',()=>{
-  const board=new SurfGame();board.setRewardBoard('afterburner');board.start();lipFlight(board);
+  const board=new SurfGame(()=>{},'storm');board.setRewardBoard('afterburner');board.start();lipFlight(board);
   assert.equal(board.surfBoostSpeed,10.5);assert.equal(board.baseSpeedMultiplier,1.25);
-  const custom=new SurfGame();custom.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower:2,boostDuration:1.5}}},{}));custom.start();lipFlight(custom);
+  const custom=new SurfGame(()=>{},'storm');custom.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower:2,boostDuration:1.5}}},{}));custom.start();lipFlight(custom);
   assert.equal(custom.surfBoostSpeed,14);assert.ok(custom.surfBoostDuration===3.9||Math.abs(custom.surfBoostDuration-3.9)<1e-8);
   const Racer=RaceRider(SurfGame),race=new Racer();race.start();assert.equal(race.surfAdventureEnabled,false);lipFlight(race);
   assert.equal(race.surfBoostTime,0);assert.ok(race._pendingRaceBoost);assert.equal(race.hazardProcessed.size,0);
+});
+
+test('Surf Session banks single and combo trick points without any speed boost, including powered boards and admin stats',()=>{
+  for(const equipment of ['standard','afterburner','admin'])for(const tricks of [['spin'],['spin','grab']]) {
+    const events=[],game=new SurfGame(event=>events.push(event));
+    if(equipment==='afterburner')game.setRewardBoard('afterburner');
+    if(equipment==='admin')game.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower:2,boostDuration:1.5}}},{}));
+    game.start();lipFlight(game,tricks);
+    assert.equal(game.wipeouts,0);assert.equal(game.trickBoostEnabled,false);
+    assert.equal(game.pendingTricks,tricks.length);assert.ok(game.comboBase>0);
+    assert.equal(game.surfBoostTime,0);assert.equal(game.surfBoostSpeed,0);assert.equal(game.forwardSpeedBonus,0);
+    const earned=game.comboBase*game.multiplier,before=game.score;
+    assert.equal(game.bank(),true);assert.equal(game.score,before+earned);
+    assert.equal(game.landedTricks,tricks.length);
+    advance(game,.1);assert.equal(events.some(event=>event.type==='surfBoost'),false);
+    if(equipment==='afterburner')assert.equal(game.baseSpeedMultiplier,1.25);
+    game.start();assert.equal(game.trickBoostEnabled,false);assert.equal(game.forwardSpeedBonus,0);
+  }
 });
 
 test('obstacle collisions and boost drain agree at 30 and 120 Hz, with pause freezing event state',()=>{

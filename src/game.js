@@ -163,8 +163,9 @@ export class SurfGame {
   }
   // Race mixins own their own boosts and courses, including their AI riders.
   get surfAdventureEnabled() {return this.mode==='surf'&&(this.rulesId==='surf'||this.rulesId==='storm')&&typeof this.clearRaceBoost!=='function';}
-  // Waterworks shares landed-trick rewards without opting into ocean hazards.
-  get trickBoostEnabled() {return (this.surfAdventureEnabled||this.mode==='park')&&typeof this.clearRaceBoost!=='function';}
+  // Surf Session keeps combo points without a speed burst. Other modes share
+  // landed-trick boosts; race mixins keep their separate player/AI pipeline.
+  get trickBoostEnabled() {return (this.mode==='park'||(this.mode==='surf'&&this.rulesId!=='surf'))&&typeof this.clearRaceBoost!=='function';}
   get forwardSpeedBonus() {return this.trickBoostEnabled&&this.surfBoostTime>0?this.surfBoostSpeed:0;}
   clearSurfBoost() {this.surfBoostTime=0;this.surfBoostDuration=0;this.surfBoostSpeed=0;this.surfBoostCombo=false;this.surfBoostLabel='';}
   drainSurfBoost(dt) {
@@ -286,7 +287,7 @@ export class SurfGame {
     this.charge=0;this.onEvent({type:'cutbackStart',direction:this.cutbackDirection});return true;
   }
   updateObjective() {
-    this.objectiveText=this.rulesId==='rush'?`CATCH 12 CHECKPOINTS · ${this.gates}/12 · +8s PER RING`:this.rulesId==='storm'?`ENDLESS STORM · STAGE ${this.stormStage} · ${this.lives} ${this.lives===1?'LIFE':'LIVES'} · BOOST THROUGH THE CURL`:'LAND TRICKS TO BOOST · HOP DRIFTWOOD · LINK COMBOS';
+    this.objectiveText=this.rulesId==='rush'?`CATCH 12 CHECKPOINTS · ${this.gates}/12 · +8s PER RING`:this.rulesId==='storm'?`ENDLESS STORM · STAGE ${this.stormStage} · ${this.lives} ${this.lives===1?'LIFE':'LIVES'} · BOOST THROUGH THE CURL`:'CARVE FOR AIR · LAND TRICKS · LINK COMBOS';
   }
   finish(reason) {
     if(this.phase!=='running')return;
@@ -425,7 +426,7 @@ export class SurfGame {
     }
     // Award after all same-step collisions, so landing on a branch or reef
     // never produces a boost before the wipeout clears the flight.
-    if(this.surfAdventureEnabled&&!this.airborne&&this.bailTime<=0)this.awardSurfBoost();
+    if(this.trickBoostEnabled&&!this.airborne&&this.bailTime<=0)this.awardSurfBoost();
     if (!this.rules.endless&&this.time <= 0) {
       this.finish(this.rulesId==='rush'?'TIME EXPIRED':'SESSION COMPLETE');
     }
