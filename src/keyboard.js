@@ -38,9 +38,10 @@ export function createKeydownHandler(getState, actions) {
       e.preventDefault();
       return;
     }
-    // Let the focused menu button receive its native Enter click. Otherwise
-    // Enter on RESET THIS LADDER would start a race before the button fires.
-    if (e.code === 'Enter' && !workshopMode && e.target?.closest?.('button')) return;
+    // Focused buttons own Enter, and workshop buttons also own Space. Outfit
+    // choices must receive their native click instead of closing the workshop
+    // or charging a pop. Background focus keeps the usual session shortcuts.
+    if ((e.code === 'Enter' || (workshopMode && e.code === 'Space')) && e.target?.closest?.('button')) return;
     if (CONTROL_KEYS[e.code] || TRICK_KEYS[e.code] || ['Enter','Escape','KeyP','KeyR','KeyM','KeyC','KeyQ'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'KeyM') { actions.toggleSound(); return; }

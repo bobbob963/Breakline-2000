@@ -107,7 +107,7 @@ export const TUTORIAL_STEPS = Object.freeze([
     lead: 'Choose your rider in the lobby, then dress and equip them for the next session.',
     cards: [
       { title: 'SELECT SURFER', text: 'Use the character button beside your lobby rider. Compare riders and their stats, rotate the preview with X / C, and accept your choice.' },
-      { title: 'OUTFITS', text: 'Open the wardrobe from character selection to choose an outfit. Time Trial clothes appear here as you earn them.' },
+      { title: 'SELECT OUTFIT', text: 'Use the gold Select Outfit button beside your lobby rider to open the wardrobe directly. You can also open it from character selection. Time Trial clothes appear here as you earn them.' },
       { title: 'CUSTOMISE BOARD', text: 'Choose paint and deck graphics, or equip an unlocked prize board. The active prize board supplies the perk and trick effects; perks do not stack.' },
       { title: 'BOARD POWERS', text: 'SKYBOUND opens angel wings on descent. After a trick finishes, press and release Space for one extra air jump. Land to recharge it. DEADTIME uses Q.' },
     ],

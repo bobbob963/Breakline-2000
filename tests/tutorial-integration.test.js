@@ -91,7 +91,7 @@ test('admin and tutorial opening require an unobscured home screen and cannot ne
 test('the production keyboard gate blocks gameplay and the admin arrow code during the tutorial',()=>{
   const {context:c,calls}=fixture();
   Object.assign(c,{createKeydownHandler,keydownHandler:null,input:{},pressed:new Set(),syncInput:noOp,
-    toggleSound:noOp,cycleCharacter:noOp,pause:noOp,tryTrick:noOp,toast:noOp,preview:null});
+    toggleSound:noOp,closeWardrobe:noOp,cycleCharacter:noOp,pause:noOp,tryTrick:noOp,toast:noOp,preview:null});
   vm.runInNewContext(block('keydownHandler=createKeydownHandler(','window.addEventListener(\'keydown\''),c);
   const press=code=>c.keydownHandler({code,repeat:false,timeStamp:100,preventDefault:noOp});
   c.tutorial.isOpen=true;

@@ -389,14 +389,22 @@ function openWorkshop(mode){
   workshopMode=mode==='board'?'board':'character';
   $('workshop').dataset.mode=workshopMode;
   $('workshop').querySelector('.selection-side').textContent=workshopMode==='board'?'BOARD SHOP':'SELECT SURFER';
-  $('wardrobe').classList.add('hidden');
+  $('wardrobe').classList.add('hidden');$('wardrobe-toggle').setAttribute('aria-expanded','false');
   $('workshop').classList.remove('hidden');$('workshop-title').textContent=workshopMode==='board'?'BOARD WORKSHOP':'CHOOSE YOUR STYLE';
   $('character-options').classList.toggle('hidden',workshopMode!=='character');$('board-options').classList.toggle('hidden',workshopMode!=='board');
   document.querySelectorAll('[data-workshop]').forEach(b=>{const on=b.dataset.workshop===workshopMode;b.classList.toggle('is-selected',on);b.setAttribute('aria-pressed',String(on));});
   if(!preview)preview=new CustomizationPreview($('custom-preview'),profile);
   updateCustomizationChoices();$('workshop-close').focus({preventScroll:true});
 }
-function closeWorkshop(){if(!workshopMode)return;$('workshop').classList.add('hidden');$('wardrobe').classList.add('hidden');workshopMode=null;$('start').focus({preventScroll:true});}
+function closeWorkshop(){if(!workshopMode)return;$('workshop').classList.add('hidden');$('wardrobe').classList.add('hidden');$('wardrobe-toggle').setAttribute('aria-expanded','false');workshopMode=null;$('start').focus({preventScroll:true});}
+function openWardrobe(){
+  $('wardrobe').classList.remove('hidden');$('wardrobe-toggle').setAttribute('aria-expanded','true');
+  ($('outfit-options').querySelector('[data-outfit][aria-pressed="true"]:not(:disabled)')||$('wardrobe-close')).focus({preventScroll:true});
+}
+function closeWardrobe(){
+  $('wardrobe').classList.add('hidden');$('wardrobe-toggle').setAttribute('aria-expanded','false');
+  if(workshopMode==='character')$('wardrobe-toggle').focus({preventScroll:true});
+}
 function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast('RODEO AIR!');}}
 function tryPop(){if(game.jump())return;if(game.rewardBoardDefinition?.airJumps>0&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE EXTRA AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
@@ -505,7 +513,7 @@ keydownHandler=createKeydownHandler(
   ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen}),
   {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,openAdmin,
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
-    hideWardrobe:()=>$('wardrobe').classList.add('hidden'),
+    hideWardrobe:closeWardrobe,
     rotatePreview:delta=>preview?.rotate(delta),
     pressControl:code=>{pressed.add(code);syncInput();}}
 );
@@ -538,11 +546,11 @@ $('quality').addEventListener('click',()=>{$('quality').textContent=world.toggle
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();goHome();});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>selectMode(b.dataset.mode)));
 $('park-start').addEventListener('change',e=>{selectedParkStart=e.target.value;write('breakline99-park-start',selectedParkStart);});
-$('menu-characters').addEventListener('click',()=>openWorkshop('character'));$('menu-board').addEventListener('click',()=>openWorkshop('board'));$('workshop-close').addEventListener('click',closeWorkshop);
+$('menu-characters').addEventListener('click',()=>openWorkshop('character'));$('menu-board').addEventListener('click',()=>openWorkshop('board'));$('menu-outfit').addEventListener('click',()=>{openWorkshop('character');openWardrobe();});$('workshop-close').addEventListener('click',closeWorkshop);
 $('workshop-accept').addEventListener('click',closeWorkshop);$('workshop-back').addEventListener('click',closeWorkshop);
 $('previous-character').addEventListener('click',()=>cycleCharacter(-1));$('next-character').addEventListener('click',()=>cycleCharacter(1));
 $('rotate-left').addEventListener('click',()=>preview?.rotate(-.5));$('rotate-right').addEventListener('click',()=>preview?.rotate(.5));
-$('wardrobe-toggle').addEventListener('click',()=>$('wardrobe').classList.toggle('hidden'));$('wardrobe-close').addEventListener('click',()=>$('wardrobe').classList.add('hidden'));
+$('wardrobe-toggle').addEventListener('click',()=>{$('wardrobe').classList.contains('hidden')?openWardrobe():closeWardrobe();});$('wardrobe-close').addEventListener('click',closeWardrobe);
 document.querySelectorAll('[data-workshop]').forEach(b=>b.addEventListener('click',()=>openWorkshop(b.dataset.workshop)));
 $('workshop').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;if(b.dataset.character)setProfile({character:b.dataset.character});if(b.dataset.outfit)setProfile({outfit:b.dataset.outfit});if(b.dataset.boardColor)setProfile({boardColor:b.dataset.boardColor,rewardBoard:null});if(b.dataset.boardDesign)setProfile({boardDesign:b.dataset.boardDesign,rewardBoard:null});if(b.dataset.rewardBoard)setProfile({rewardBoard:b.dataset.rewardBoard});});
 

@@ -138,6 +138,8 @@ Open **SELECT SURFER** for Kai, Nova, Reef or **Jax**, a standing 3D character p
 
 All four can wear any of the **twelve starting outfits** and four earned Time Trials outfits, including oversized surf tees, an open tropical shirt, beachwear with a straw hat, a wetsuit and a long-sleeve rashguard. Jax starts in **Yard Crew**: a grey sweatshirt, baggy grey trousers, a backwards white cap, long dreadlocks and trainers. **Sun Crew** adds the yellow sweatshirt and navy trousers alternative.
 
+The lobby places **CUSTOMISE BOARD** directly left of **SELECT SURFER** beneath your rider. The gold **SELECT OUTFIT** button opens the wardrobe straight from the lobby, and character selection also has a prominent outfit button. Pick clothes with the mouse or Enter/Space; Escape closes the wardrobe first.
+
 Open **CUSTOMISE BOARD** to combine **five deck colours** with **eight starting graphics**: Lightning, Checker Rip, Hot Rod, Black Tide, Hibiscus, Skull Reef, Solar Flare and Pinstripe. Four additional illustrated deck styles unlock through Time Trials. Your choices appear on the surfboard in every mode.
 
 The **BOARD SHOP** also displays six prize boards. Locked cards show the required ladder or Time Trial clears; after a clear, choose **EQUIP BOARD** on its result card or in the shop. Each board has original deck artwork and a brief effect around the rider and board whenever a trick completes. These are local bursts, not full-screen flashes. Equipping one board activates **its own powers; different boards do not stack**. Choosing **STANDARD BOARD**, a deck colour or a standard graphic returns to your custom standard board with no perk. Earned prize boards stay in your collection.

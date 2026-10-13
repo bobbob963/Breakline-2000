@@ -133,7 +133,7 @@ test('production global input callbacks ignore keys before game construction', (
     createKeydownHandler,
     keydownHandler:null,wasted:{active:false},adminPanel:{isOpen:false},tutorial:{isOpen:false},adminHomeScreen:()=>false,openAdmin:bootAction,
     bootReady: false, game: undefined, workshopMode: null, modalMode: null, input: {}, clearInput() {},
-    toggleSound:bootAction,closeWorkshop:bootAction,cycleCharacter:bootAction,closeModal:bootAction,
+    toggleSound:bootAction,closeWorkshop:bootAction,closeWardrobe:bootAction,cycleCharacter:bootAction,closeModal:bootAction,
     startRun:bootAction,restartRun:bootAction,pause:bootAction,tryTrick:bootAction,toast:bootAction,
   };
   vm.runInNewContext(source.slice(start, end), context);

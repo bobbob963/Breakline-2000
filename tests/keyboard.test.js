@@ -21,7 +21,7 @@ function inputRoute(game) {
   actions.tryTrick = type => { calls.push(['tryTrick',type]); return game.doTrick(type); };
   const handler = createKeydownHandler(() => state, actions);
   return { state, calls, wardrobe:()=>{wardrobeOpen=true;},
-    press(code, repeat=false) { const event={code,repeat,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;}};handler(event);return event; } };
+    press(code, repeat=false, target) { const event={code,repeat,target,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;}};handler(event);return event; } };
 }
 function naturalParkLaunch() {
   const events=[],game=new WaveParkGame(event=>events.push(event));game.start('filters');
@@ -72,6 +72,28 @@ test('B retains its workshop-back function instead of reaching gameplay',()=>{
   for(const mode of ['character','board']) {
     const {game}=naturalParkLaunch(),route=inputRoute(game);route.state.workshopMode=mode;
     route.press('KeyB');assert.deepEqual(route.calls,[['closeWorkshop']]);assert.equal(game.trick,null);
+  }
+});
+
+test('focused workshop buttons keep native Enter and Space without closing or steering',()=>{
+  for(const mode of ['character','board']){
+    const game=new WaveParkGame();game.start();const route=inputRoute(game);route.state.workshopMode=mode;route.wardrobe();
+    const button={closest:selector=>selector==='button'?button:null};
+    for(const code of ['Enter','Space'])for(const repeat of [false,true]){
+      assert.equal(route.press(code,repeat,button).defaultPrevented,false,`${mode}: ${code} repeat=${repeat}`);
+      assert.deepEqual(route.calls,[]);assert.deepEqual(route.state.input,{});
+    }
+    route.press('Escape',false,button);assert.deepEqual(route.calls,[['hideWardrobe']]);
+    route.press('Escape',false,button);assert.deepEqual(route.calls,[['hideWardrobe'],['closeWorkshop']]);
+  }
+});
+
+test('workshop background retains Enter accept and A/B back shortcuts',()=>{
+  for(const code of ['Enter','KeyA','KeyB']){
+    const game=new WaveParkGame();game.start();const route=inputRoute(game);route.state.workshopMode='character';
+    const background={closest:()=>null};
+    assert.equal(route.press(code,false,background).defaultPrevented,true);
+    assert.deepEqual(route.calls,[['closeWorkshop']]);assert.deepEqual(route.state.input,{});
   }
 });
 
