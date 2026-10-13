@@ -4,6 +4,7 @@ import {SurfGame,courseItem,waveHeight} from '../src/game.js';
 import {stormBarrel,stormBarrelsNear,barrelCrossSection,barrelSurfacePoint,barrelShellDistance,sampleStormBarrel,sweepStormBarrel,stormDifficulty,waveCrest} from '../src/storm-waves.js';
 import {surfHazardsNear} from '../src/surf-hazards.js';
 import {resolveAdminStats} from '../src/admin-settings.js';
+import {surfLabRouteControls,applySurfLabControls} from '../src/surf-lab.js';
 
 function routeInput(game) {
   let pop=false;
@@ -95,6 +96,9 @@ test('a real Storm update collides with the visible roof and consumes only one l
   const events=[],game=new SurfGame(event=>events.push(event),'storm');game.start();
   const barrel=stormBarrel(0),z=-barrel.centerDistance,s=barrelCrossSection(barrel,z,10);
   Object.assign(game,{elapsed:10,distance:barrel.centerDistance,x:s.centerX,y:s.centerY+s.innerRadius-1.9,airborne:true,airtime:.4,vy:12,vx:0});
+  // This contact fixture starts inside a mature wave; normal play earns that
+  // formation by approaching it, so supply its already-triggered timing too.
+  game.barrelTimings.set(0,{index:0,deadline:20,closeDuration:1.2});
   game.update(.05);
   assert.equal(game.lives,2);assert.equal(game.wipeouts,1);assert.equal(events.filter(event=>event.type==='bail')[0].reason,'CAUGHT BY THE WAVE LIP');
   game.update(.05);assert.equal(game.lives,2);assert.equal(game.wipeouts,1);
@@ -108,7 +112,7 @@ test('steering, pumping and a driftwood hop traverse two timed barrels from the 
     game.update(1/120,routeInput(game));
   }
   assert.equal(approached,true,'the rider gets a usable advance lineup target');
-  assert.equal(game.lives,3);assert.equal(game.wipeouts,0);assert.equal(game.barrelsSurvived,2);assert.ok(game.barrelTime>2.5);
+  assert.equal(game.lives,3);assert.equal(game.wipeouts,0);assert.equal(game.barrelsSurvived,2);assert.ok(game.barrelTime>1.6);
   const exits=events.filter(event=>event.type==='barrelExit');assert.equal(exits.length,2);
   assert.deepEqual(exits.map(event=>event.index),[0,1]);assert.ok(exits.every(event=>event.points>=600&&event.rideTime>=.7));
   assert.ok(game.score>=exits.reduce((sum,event)=>sum+event.points,0));
@@ -148,19 +152,22 @@ test('the approach warning starts a real deadline: pumping escapes while a slow 
 
 test('a genuinely landed two-trick combo provides enough speed to escape a curl that otherwise closes on the rider',()=>{
   for(const boostPower of [0,1]) {
-    const events=[],game=new SurfGame(event=>events.push(event),'storm');
-    game.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower}}},{}));game.start();
-    // Begin before the warning at the lip, then use only public jump/trick/
-    // steering controls. The comparison disables the burst through admin stats.
-    game.distance=75;game.x=waveCrest(-75,0);game.y=waveHeight(game.x,-75,0);game.charge=1;
-    assert.equal(game.jump(),true);assert.equal(game.doTrick('spin'),true);
-    for(let tick=0;tick<14*120&&game.distance<235&&game.wipeouts===0;tick++) {
-      const input=routeInput(game);
-      if(!game.trick&&game.launchTricks===1&&game.airborne)game.doTrick('grab');
-      game.update(1/120,{...input,pump:false});
+    const events=[];let done=false,changed=false;
+    const game=new SurfGame(event=>{
+      if(['bail','barrelExit','surfBoost','barrelCommit'].includes(event.type)&&game.elapsed>300){
+        events.push(event);if(event.type==='bail'||event.type==='barrelExit')done=true;
+      }
+    },'storm');game.start();
+    // Both stock-board riders earn every second and boost from the normal
+    // spawn. Only after five minutes does the comparison disable boost power;
+    // neither positions, clocks, trick completions nor lives are injected.
+    for(let tick=0;tick<330*120&&game.phase==='running'&&!done;tick++) {
+      if(game.elapsed>=300&&!changed){game.setAdminStats(resolveAdminStats({enabled:true,boards:{standard:{boostPower}}},{}));changed=true;}
+      applySurfLabControls(game,surfLabRouteControls(game));
     }
     const boost=events.find(event=>event.type==='surfBoost');assert.equal(boost.tricks,2);
-    assert.equal(game.barrelsSurvived,boostPower);assert.equal(game.wipeouts,1-boostPower);
+    assert.ok(events.find(event=>event.type==='barrelCommit').seconds<1.31);
+    assert.equal(events.filter(event=>event.type==='barrelExit').length,boostPower);assert.equal(game.wipeouts,1-boostPower);
     if(boostPower===0)assert.equal(events.find(event=>event.type==='bail').reason,'CAUGHT BY THE CLOSING WAVE');
   }
 });

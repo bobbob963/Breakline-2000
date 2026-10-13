@@ -164,7 +164,7 @@ export class SurfWorld {
   createOcean() {
     const {width,length,columns,rows}=OCEAN_MESH;
     const geo = new THREE.PlaneGeometry(width, length, columns, rows); geo.rotateX(-Math.PI / 2);
-    this.waterMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 },uStorm:{value:0},uDeep:{value:new THREE.Color(0x0b2447)},uLight:{value:new THREE.Color(0x298a9c)},uFoam:{value:new THREE.Color(0xe3e8c4)},uFog:{value:new THREE.Color(0x91a7b0)},uSun:{value:new THREE.Color(0xf3dac0)},uFogFar:{value:265},uWhirlpoolCount:{value:0},uWhirlpools:{value:Array.from({length:4},()=>new THREE.Vector3())} }, side: THREE.DoubleSide,
+    this.waterMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 },uStorm:{value:0},uSunset:{value:0},uDeep:{value:new THREE.Color(0x0b2447)},uLight:{value:new THREE.Color(0x298a9c)},uFoam:{value:new THREE.Color(0xe3e8c4)},uFog:{value:new THREE.Color(0x91a7b0)},uSun:{value:new THREE.Color(0xf3dac0)},uFogFar:{value:265},uWhirlpoolCount:{value:0},uWhirlpools:{value:Array.from({length:4},()=>new THREE.Vector3())} }, side: THREE.DoubleSide,
       vertexShader: `uniform float uTime; varying vec3 vWorld; varying float vRidge;
         void main(){vec3 p=position;vec3 w=(modelMatrix*vec4(p,1.)).xyz;
         float crest=-9.+sin(w.z*.026+uTime*.38)*1.1;
@@ -172,7 +172,7 @@ export class SurfWorld {
         p.y=3.9*ridge+sin(w.z*.07+uTime*1.2)*.32+sin(w.z*.34+w.x*.45+uTime*2.)*.1;
         vWorld=(modelMatrix*vec4(p,1.)).xyz;vRidge=ridge;
         gl_Position=projectionMatrix*viewMatrix*vec4(vWorld,1.);gl_Position.xy=floor(gl_Position.xy/gl_Position.w*vec2(256.,192.)+.5)/vec2(256.,192.)*gl_Position.w;}`,
-      fragmentShader: `uniform float uTime;uniform float uStorm;uniform vec3 uDeep;uniform vec3 uLight;uniform vec3 uFoam;uniform vec3 uFog;uniform vec3 uSun;uniform float uFogFar;uniform int uWhirlpoolCount;uniform vec3 uWhirlpools[4];varying vec3 vWorld;varying float vRidge;
+      fragmentShader: `uniform float uTime;uniform float uStorm;uniform float uSunset;uniform vec3 uDeep;uniform vec3 uLight;uniform vec3 uFoam;uniform vec3 uFog;uniform vec3 uSun;uniform float uFogFar;uniform int uWhirlpoolCount;uniform vec3 uWhirlpools[4];varying vec3 vWorld;varying float vRidge;
         float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
         void main(){for(int i=0;i<4;i++){if(i>=uWhirlpoolCount)break;if(distance(vWorld.xz,uWhirlpools[i].xy)<uWhirlpools[i].z)discard;}vec3 n=normalize(cross(dFdx(vWorld),dFdy(vWorld))); if(n.y<0.) n=-n;
         float diffuse=max(dot(n,normalize(vec3(-.4,1.,-.6))),0.);
@@ -183,6 +183,10 @@ export class SurfWorld {
         col=mix(col,uFoam,foam*.94+lace*.32);
         float sparkle=pow(max(0.,sin(vWorld.x*.28+vWorld.z*.35+uTime)),20.)*smoothstep(-80.,-20.,vWorld.x)*.13;
         col+=uSun*sparkle*(1.-uStorm*.6);
+        // A broken, warm reflection leads toward the low setting sun.
+        float sunsetPath=exp(-pow((vWorld.x+8.)/(4.+max(0.,cameraPosition.z-vWorld.z)*.028),2.));
+        float sunsetRipple=smoothstep(.15,.9,sin(vWorld.z*1.25+vWorld.x*.5+uTime*1.4));
+        col=mix(col,uSun,uSunset*sunsetPath*(.12+sunsetRipple*.25));
         float fog=smoothstep(80.,uFogFar,length(vWorld-cameraPosition));col=mix(col,uFog,fog);
         float dither=(mod(gl_FragCoord.x+mod(gl_FragCoord.y,2.),2.)-.5)*.032;
         col=floor((col+dither)*24.)/24.;gl_FragColor=vec4(col,1.);}` });
@@ -311,6 +315,7 @@ export class SurfWorld {
     this.scene.fog.near=weather.fogNear-intensity*18;this.scene.fog.far=weather.fogFar-intensity*45;
     this.waterMat.uniforms.uFogFar.value=this.scene.fog.far;
     this.waterMat.uniforms.uStorm.value=weather.rain;
+    this.waterMat.uniforms.uSunset.value=weather.id==='sunset'?1:0;
     const cloudTime=this.reducedMotion?0:time;
     for(let i=0;i<this.weatherClouds.length;i++){
       const cloud=this.weatherClouds[i],base=cloud.userData;

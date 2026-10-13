@@ -1,15 +1,15 @@
-import { SurfGame,courseItem } from './game.js';
+import { SurfGame,courseItem,waveCrest,waveHeight } from './game.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
 import { loadCharacterTextures } from './character-textures.js';
 import { sampleRiderTrick } from './rider-pose.js';
-import { barrelCrossSection,stormBarrel } from './storm-waves.js';
+import { barrelCrossSection,stormBarrel,stormBarrelsNear } from './storm-waves.js';
 import { surfHazardsNear } from './surf-hazards.js';
 import { chooseSurfWeather,resolveWorldWeather } from './surf-weather.js';
 
 const $=id=>document.getElementById(id);
 const names={session:'WEATHER RIDE',grab:'INDY GRAB',tweak:'TWEAKED GRAB',cutback:'ROUNDHOUSE CUTBACK',rush:'REEF RUSH',storm:'ENDLESS STORM',barrel:'CURLING WAVE',closing:'CLOSING WAVE',driftwood:'DRIFTWOOD HOP',whirlpool:'WHIRLPOOL APPROACH'};
-let world,game,scenario=null,stage='ready',setupAt=0,checkpoint=false,passedCheckpoint=false,completed=false,input={},events=[],previousWeather=null;
+let world,game,scenario=null,stage='ready',setupAt=0,checkpoint=false,passedCheckpoint=false,lateCheckpoint=false,completed=false,input={},events=[],previousWeather=null;
 const stormScenarios=['storm','barrel','closing','driftwood','whirlpool'];
 const firstStormDriftwood=surfHazardsNear(0,'storm',0,0,180).find(item=>item.type==='driftwood');
 
@@ -21,7 +21,7 @@ function onEvent(event) {
 }
 
 function start(kind) {
-  scenario=kind;stage='approach';setupAt=0;checkpoint=false;passedCheckpoint=false;completed=false;input={};events=[];
+  scenario=kind;stage='approach';setupAt=0;checkpoint=false;passedCheckpoint=false;lateCheckpoint=false;completed=false;input={};events=[];
   game=new SurfGame(()=>{},stormScenarios.includes(kind)?'storm':kind==='rush'?'rush':'surf');game.onEvent=onEvent;game.start();
   applyLabWeather();
   $('rate').value=['rush','storm','barrel','closing','driftwood','whirlpool'].includes(kind)?'4':'1';
@@ -41,24 +41,38 @@ function applyLabWeather(){
 export function surfLabRouteControls(game) {
   if(game.rulesId==='storm') {
     const tube=game.barrel;
-    let target=tube?barrelCrossSection(stormBarrel(tube.index),-Math.max(game.distance,tube.startDistance+8),game.elapsed).centerX:0;
-    const index=Math.max(0,Math.floor((game.distance-game.rules.firstGate)/game.rules.spacing));
+    let target=tube?barrelCrossSection(stormBarrel(tube.index),-Math.max(game.distance,tube.startDistance+16),game.elapsed).baseCenterX:0;
+    const approaching=stormBarrelsNear(game.distance,0,120).find(item=>item.endDistance>=game.distance);
+    const toMouth=approaching?approaching.startDistance-game.distance:Infinity;
+    if(!tube&&approaching)target=barrelCrossSection(approaching,-approaching.startDistance-16,game.elapsed).baseCenterX;
+    // Later curls need earned momentum. Set up on the lip, perform two actual
+    // moves, then land into the opening with the normal combo boost.
+    const boostSetup=game.elapsed>75&&approaching&&toMouth>36&&toMouth<115&&game.surfBoostTime<=0;
+    if(boostSetup&&!game.airborne)target=waveCrest(-game.distance,game.elapsed);
+    else if(game.airborne&&approaching)target=barrelCrossSection(approaching,-approaching.startDistance-16,game.elapsed).baseCenterX;
+    const index=Math.max(0,Math.floor((game.distance-game.rules.firstGate)/game.rules.spacing));let reefPriority=Infinity;
     for(let i=Math.max(0,index-1);i<=index+2;i++) {
       const item=courseItem(i,'storm'),ahead=item.hazardDistance-game.distance;
       if(ahead> -3&&ahead<32&&Math.abs(target-item.hazardX)<item.hazardRadius+1.3) {
         const choices=[item.hazardX-item.hazardRadius-1.5,item.hazardX+item.hazardRadius+1.5]
           .filter(x=>Math.abs(x)<13&&(!tube||Math.abs(x-target)<3));
-        if(choices.length)target=choices.sort((a,b)=>Math.abs(a-game.x)-Math.abs(b-game.x))[0];
+        if(choices.length){target=choices.sort((a,b)=>Math.abs(a-target)-Math.abs(b-target))[0];reefPriority=Math.min(reefPriority,item.hazardDistance);}
       }
     }
-    let jump=false;
+    let jump=boostSetup&&!game.airborne&&toMouth<95&&game.popReady&&game.launchSource==='lip',trick=null;
+    if(game.airborne&&game.airLaunchSource!=='flat'&&!game.trick&&game.launchTricks<2){
+      const height=Math.max(0,game.y-waveHeight(game.x,-game.distance,game.elapsed));
+      const flight=(game.vy+Math.sqrt(Math.max(0,game.vy*game.vy+21*height)))/10.5;
+      const next=game.launchTricks===0?'spin':'grab',required=next==='spin'?.56:.84;
+      if(flight>required)trick=next;
+    }
     for(const item of surfHazardsNear(game.distance,'storm',game.elapsed,8,40)) {
       const ahead=item.distance-game.distance;
       if(item.type==='driftwood'&&ahead>3&&ahead<6&&Math.abs(game.x-item.x)<item.radiusX+.5&&game.popReady)jump=true;
-      if(item.type==='whirlpool'&&ahead>-4&&ahead<28&&Math.abs(target-item.x)<5.5)target=item.x+(game.x<item.x?-6:6);
+      if(item.type==='whirlpool'&&item.distance<reefPriority&&ahead>-4&&ahead<28&&Math.abs(target-item.x)<5.5)target=item.x+(game.x<item.x?-6:6);
     }
     const error=target-game.x-game.vx*.24;
-    return {left:error<-.22,right:error>.22,pump:true,jump};
+    return {left:error<-.22,right:error>.22,pump:true,jump,trick};
   }
   const index=Math.max(0,Math.floor((game.distance-game.rules.firstGate)/game.rules.spacing)),targets=[];
   for(let i=Math.max(0,index-1);i<index+3;i++) {
@@ -83,12 +97,14 @@ export function surfLabDriftwoodControls(game){
 
 export function surfLabClosingControls(game){
   const route=surfLabRouteControls(game);
-  if(game.barrel?.inside&&game.barrel.progress>.22){route.pump=false;route.brake=true;route.jump=false;}
+  const first=stormBarrel(0);
+  if(game.distance>first.startDistance-12&&game.distance<first.endDistance){route.pump=false;route.brake=true;route.jump=false;route.trick=null;}
   return route;
 }
 
 export function applySurfLabControls(game,buttons){
   if(buttons.jump&&game.popReady)game.jump();
+  if(buttons.trick)game.doTrick(buttons.trick);
   game.update(1/120,buttons);
 }
 
@@ -132,6 +148,9 @@ function tick() {
     else if(passedCheckpoint&&game.distance>=312)stop(game.wipeouts?'The current caught this attempt. Restart to retry.':'Whirlpool avoided by steering wide. The first barrel and the swirling current were passed with ordinary riding controls.',true);
   } else if(scenario==='storm'&&!passedCheckpoint&&game.barrelsSurvived>=2&&game.phase==='running'){
     stop(`Two barrels survived with ${game.lives} lives remaining. Continue into stronger swell, more debris and whirlpools. Survival has no time limit.`);
+  } else if(scenario==='storm'&&!lateCheckpoint&&game.elapsed>=320&&game.phase==='running'){
+    lateCheckpoint=true;
+    stop(`Five minutes survived using ordinary controls. The minimum 1.30-second mouth window is active, with ${game.lives} lives remaining. Continue to keep riding the storm.`);
   } else if(scenario==='cutback') {
     if(!passedCheckpoint&&game.cutbackActive&&game.cutbackProgress>=.5)stop('Peak cutback: the board carves across the face and throws a spray fan. Continue to finish.');
     else if(stage==='cutback'&&passedCheckpoint&&!game.cutbackActive)stop('Sequence complete: cutback boost earned. Pop within 2.2 seconds for trick airtime; the setup itself scores no points.',true);
@@ -151,7 +170,7 @@ function updateCounters() {
   $('stat-time').textContent=game.rulesId==='storm'?`${game.elapsed.toFixed(3)} s / ENDLESS`:`${game.elapsed.toFixed(3)} s / ${game.time.toFixed(2)} s`;
   $('stat-lives').textContent=game.lives??'unlimited';$('stat-rings').textContent=String(game.gates)+(game.rulesId==='rush'?' / 12':'');
   $('stat-points').textContent=`${game.score} / ${game.comboBase} × ${game.multiplier}`;
-  $('stat-controls').textContent=Object.entries(input).filter(([,held])=>held).map(([name])=>({pump:'W',brake:'S',left:'A',right:'D',jump:'SPACE',grind:'SHIFT'}[name]||name)).join(' + ')||'none';
+  $('stat-controls').textContent=Object.entries(input).filter(([,held])=>held).map(([name,value])=>name==='trick'?({spin:'J',grab:'L'}[value]||value):({pump:'W',brake:'S',left:'A',right:'D',jump:'SPACE',grind:'SHIFT'}[name]||name)).join(' + ')||'none';
   $('stat-progress').textContent=game.trick?(pose.progress*100).toFixed(1)+'%':'—';$('stat-tweak').textContent=((pose.tweak||0)*100).toFixed(1)+'%';
   $('stat-storm').textContent=game.rulesId==='storm'?`Swell ${game.stormStage||1} / ${Math.round((game.stormDifficulty||0)*100)}% / ${game.barrelsSurvived||0} barrels`:'—';
   $('stat-barrel').textContent=game.rulesId==='storm'?`${game.barrel?.inside?'INSIDE':game.barrel?'APPROACH':'BETWEEN WAVES'} / ${game.barrelTime.toFixed(2)} s inside${game.barrel?` / ${Math.round(game.barrel.progress*100)}% through`:''}`:'—';
@@ -159,7 +178,8 @@ function updateCounters() {
   $('stat-weather').textContent=weather?`${weather.label} / ${weather.timeLabel}`:'—';
   $('stat-boost').textContent=game.surfBoostTime>0?`${game.surfBoostLabel} / +${game.surfBoostSpeed.toFixed(1)} m/s / ${game.surfBoostTime.toFixed(2)} s`:'Land a trick to boost';
   $('stat-hazard').textContent=game.hazardWarning||'Clear water';
-  $('stat-deadline').textContent=game.barrelWarning?game.barrelClosingProgress>0?`CLOSING / ${Math.round(game.barrelClosingProgress*100)}%`:`${game.barrelRemaining.toFixed(2)} s before closing`:'—';
+  const timing=game.barrel?game.barrelTimings.get(game.barrel.index):null;
+  $('stat-deadline').textContent=game.barrelWarning?`${game.barrelRemaining.toFixed(2)} s LEFT / CURL ${Math.round(game.barrelClosingProgress*100)}%${timing?` / ${timing.escapeWindow.toFixed(2)} s MOUTH WINDOW`:''}`:'—';
   const landmarks=world.surfer.landmarks;
   $('stat-contact').textContent=pose.holdingGrab&&landmarks.rightFingertip&&landmarks.boardGrabTarget?(landmarks.rightFingertip.distanceTo(landmarks.boardGrabTarget)*1000).toFixed(3)+' mm':'— (not held)';
   $('stat-cutback').textContent=`${(game.cutback*100).toFixed(1)}% lean / ${game.cutbackLaunchTime.toFixed(2)} s boost / ${game.popCooldown.toFixed(2)} s pop recovery`;

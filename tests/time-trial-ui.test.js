@@ -166,7 +166,7 @@ test('the actual trial prize button equips Afterburner and refreshes the correct
 test('production start/next/retry keeps trial identity correct and preserves equipped board perks',()=>{
   const element={classList:{add:noop,remove:noop},focus:noop},context={...dependencies,createTimeTrialGame,game:createTimeTrialGame(noop,progress(2)),trialProgress:progress(2),profile:validateProfile({rewardBoard:'sky'}),
     adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
-    wasted:{reset:noop},closeWorkshop:noop,closeModal:noop,clearInput:noop,special:{reset:noop},soundPreference:'off',audio:{enabled:false,setMode:noop,setScene:noop},world:{setMode:noop},updateModeMenu:noop,updateSoundLabel:noop,onEvent:noop,$:()=>element,document:{body:element}};
+    wasted:{reset:noop},closeWorkshop:noop,closeModal:noop,clearInput:noop,special:{reset:noop},soundPreference:'off',audio:{enabled:false,setMode:noop,setRideContext:noop,setScene:noop},world:{setMode:noop},updateModeMenu:noop,updateSoundLabel:noop,onEvent:noop,$:()=>element,document:{body:element}};
   vm.runInNewContext(block('function applyPlayerSettings(','function adminHomeScreen('),context);
   vm.runInNewContext(block('function startRun(','function goHome('),context);
   context.startRun();assert.equal(context.game.trialIndex,2);assert.equal(context.game.phase,'running');assert.equal(context.game.rewardBoard,'sky');

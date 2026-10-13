@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {WEATHER_PRESETS,WEATHER_IDS,getSurfWeather,chooseSurfWeather,resolveWorldWeather,weatherLightning} from '../src/surf-weather.js';
+import {WEATHER_PRESETS,WEATHER_IDS,SURF_SESSION_WEATHER_IDS,getSurfWeather,getSurfSessionWeather,chooseSurfWeather,resolveWorldWeather,weatherLightning} from '../src/surf-weather.js';
 import {SurfWorld} from '../src/world.js';
 
-test('Surf Session rolls five complete weather/time combinations without an immediate repeat',()=>{
-  assert.equal(WEATHER_IDS.length,5);
+test('Surf Session rolls four calm weather combinations without storms or immediate repeats',()=>{
+  assert.equal(SURF_SESSION_WEATHER_IDS.length,4);
   for(const previous of [...WEATHER_IDS,undefined]){
     const reached=new Set();
     for(let i=0;i<=100;i++){
-      const id=chooseSurfWeather(previous,()=>i/100);assert.ok(WEATHER_IDS.includes(id));assert.notEqual(id,previous);reached.add(id);
+      const id=chooseSurfWeather(previous,()=>i/100);assert.ok(SURF_SESSION_WEATHER_IDS.includes(id));assert.notEqual(id,'storm');assert.notEqual(id,previous);reached.add(id);
     }
-    assert.equal(reached.size,previous?4:5);
+    assert.equal(reached.size,SURF_SESSION_WEATHER_IDS.includes(previous)?3:4);
   }
   for(const id of WEATHER_IDS){const preset=getSurfWeather(id);assert.equal(preset.id,id);assert.match(preset.timeLabel,/^[0-9]{2}:[0-9]{2}$/);assert.ok(preset.label.length>3);assert.ok(preset.fogFar>preset.fogNear+100);}
   assert.equal(new Set(WEATHER_IDS.map(id=>getSurfWeather(id).skyTop)).size,5);
@@ -19,13 +19,15 @@ test('Surf Session rolls five complete weather/time combinations without an imme
 });
 
 test('weather random boundaries and saved unknown ids always resolve to a valid preset',()=>{
-  for(const value of [-1,1,100,NaN,Infinity,undefined])assert.ok(WEATHER_IDS.includes(chooseSurfWeather('sunset',()=>value)));
+  for(const value of [-1,1,100,NaN,Infinity,undefined])assert.ok(SURF_SESSION_WEATHER_IDS.includes(chooseSurfWeather('sunset',()=>value)));
   for(const id of [undefined,null,'__proto__','constructor','garbage'])assert.equal(getSurfWeather(id).id,'sunset');
 });
 
 test('survival remains storm while races, Time Trials, Reef Rush and Waterworks preserve their palette',()=>{
   for(const weatherId of WEATHER_IDS)assert.equal(resolveWorldWeather({mode:'surf',rulesId:'storm',weatherId}).id,'storm');
   assert.equal(resolveWorldWeather({mode:'surf',rulesId:'surf',weatherId:'dawn'}).id,'dawn');
+  assert.equal(getSurfSessionWeather('storm').id,'sunset');
+  assert.equal(resolveWorldWeather({mode:'surf',rulesId:'surf',weatherId:'storm'}).id,'sunset');
   assert.equal(resolveWorldWeather({mode:'surf',rulesId:'surf',isRace:true,weatherId:'storm'}).id,'legacy');
   assert.equal(resolveWorldWeather({mode:'surf',rulesId:'surf',isTimeTrial:true,weatherId:'storm'}).id,'legacy');
   assert.equal(resolveWorldWeather({mode:'surf',rulesId:'rush',weatherId:'storm'}).id,'legacy');
@@ -35,16 +37,19 @@ test('survival remains storm while races, Time Trials, Reef Rush and Waterworks 
 function weatherWorld(){
   const scene=new THREE.Scene();scene.background=new THREE.Color();scene.fog=new THREE.Fog(0,1,200);
   const uniforms=keys=>Object.fromEntries(keys.map(key=>[key,{value:key.startsWith('u')&&['uTop','uHorizon','uLow','uDeep','uLight','uFoam','uFog','uSun'].includes(key)?new THREE.Color():0}]));
-  return {scene,weatherId:null,reducedMotion:false,ambientLight:new THREE.HemisphereLight(),keyLight:new THREE.DirectionalLight(),skyMat:{uniforms:uniforms(['uTop','uHorizon','uLow','uLightning'])},waterMat:{uniforms:uniforms(['uDeep','uLight','uFoam','uFog','uSun','uFogFar','uStorm'])},sun:new THREE.Mesh(new THREE.CircleGeometry(),new THREE.MeshBasicMaterial()),cloudMaterial:new THREE.MeshBasicMaterial(),foam:[{material:new THREE.MeshBasicMaterial()}],rain:new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial()),lightning:new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial()),weatherClouds:[Object.assign(new THREE.Group(),{userData:{x:0,y:50,z:-150,phase:0}})],birds:[new THREE.Group()]};
+  return {scene,weatherId:null,reducedMotion:false,ambientLight:new THREE.HemisphereLight(),keyLight:new THREE.DirectionalLight(),skyMat:{uniforms:uniforms(['uTop','uHorizon','uLow','uLightning'])},waterMat:{uniforms:uniforms(['uDeep','uLight','uFoam','uFog','uSun','uFogFar','uStorm','uSunset'])},sun:new THREE.Mesh(new THREE.CircleGeometry(),new THREE.MeshBasicMaterial()),cloudMaterial:new THREE.MeshBasicMaterial(),foam:[{material:new THREE.MeshBasicMaterial()}],rain:new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial()),lightning:new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial()),weatherClouds:[Object.assign(new THREE.Group(),{userData:{x:0,y:50,z:-150,phase:0}})],birds:[new THREE.Group()]};
 }
 test('weather drives actual sky, water, sun, fog and lamps; rain clears when leaving storm',()=>{
   const world=weatherWorld();
   for(const id of WEATHER_IDS){
-    SurfWorld.prototype.updateWeather.call(world,{mode:'surf',rulesId:'surf',weatherId:id},8,0,1,-20,0);
+    SurfWorld.prototype.updateWeather.call(world,{mode:'surf',rulesId:id==='storm'?'storm':'surf',weatherId:id},8,0,1,-20,0);
     const p=getSurfWeather(id);assert.equal(world.weatherId,id);assert.equal(world.scene.background.getHex(),p.background);assert.equal(world.scene.fog.far,p.fogFar);assert.equal(world.keyLight.color.getHex(),p.light);assert.equal(world.ambientLight.intensity,p.ambientPower);assert.equal(world.sun.position.y,p.sunY);assert.equal(world.rain.visible,p.rain>0);assert.equal(world.waterMat.uniforms.uLight.value.getHex(THREE.LinearSRGBColorSpace),p.water);
   }
   SurfWorld.prototype.updateWeather.call(world,{mode:'surf',rulesId:'surf',weatherId:'sunset'},20,0,1,-20,0);
   assert.equal(world.rain.visible,false);assert.equal(world.sun.visible,true);assert.equal(world.lightning.visible,false);
+  assert.equal(world.waterMat.uniforms.uSunset.value,1);
+  SurfWorld.prototype.updateWeather.call(world,{mode:'surf',rulesId:'surf',weatherId:'dawn'},20,0,1,-20,0);
+  assert.equal(world.waterMat.uniforms.uSunset.value,0,'golden reflection only appears during sunset');
 });
 test('storm motion freezes at the same elapsed time and reduced motion removes lightning and moving rain',()=>{
   const world=weatherWorld(),game={mode:'surf',rulesId:'storm'};

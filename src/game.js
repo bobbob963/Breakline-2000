@@ -6,6 +6,7 @@ import { sanitizeResolvedAdminStats } from './admin-settings.js';
 import { TimePower, TIME_POWER_SCALE, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,stormBarrelsNear,barrelCrossSection,barrelClosureProgress,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 import { surfHazardsNear,whirlpoolPull,sweepSurfHazard } from './surf-hazards.js';
+import { createStormTiming } from './storm-progression.js';
 export { SURF_RULES } from './session-modes.js';
 export { waveHeight,waveCrest } from './storm-waves.js';
 export const RUN_SECONDS = 120;
@@ -32,7 +33,11 @@ export function courseItem(index,rulesId='surf') {
   const gates=rules.id==='rush'?[-7,7,-3,10,-9,3]:rules.id==='storm'?[-6,5,-9,8,0,10]:[-3,5,-8,2,10,-5];
   const reefs=rules.id==='storm'?[1,-8,7,-2,11,-11]:rules.id==='rush'?[3,-5,8,-9,0,11]:[6,-4,10,-11,2,-7];
   const slot=((index%gates.length)+gates.length)%gates.length,distance=rules.firstGate+index*rules.spacing;
-  return {index,distance,x:gates[slot],ringRadius:rules.ringRadius,hazardX:reefs[slot],hazardDistance:distance+rules.hazardOffset,hazardRadius:rules.hazardRadius,hazardHeight:1.7};
+  const hazardDistance=distance+rules.hazardOffset;
+  // Survival's low wave-face lane remains continuous between the curls. Reef
+  // outcrops occupy the outer water; logs, currents and visible banks provide
+  // the changing route challenges instead of placing a reef across the exit.
+  return {index,distance,x:gates[slot],ringRadius:rules.ringRadius,hazardX:rulesId==='storm'?7+index%3:reefs[slot],hazardDistance,hazardRadius:rules.hazardRadius,hazardHeight:1.7};
 }
 
 export class SurfGame {
@@ -417,12 +422,12 @@ export class SurfGame {
       const ahead=item.distance-this.distance;
       if(ahead>=-item.radiusZ&&ahead<65&&!this.hazardProcessed.has(item.id)) {
         const inPath=Math.abs(this.x-item.x)<item.radiusX+(item.type==='whirlpool'?4:1);
-        if(inPath&&!this.hazardWarning)this.hazardWarning=item.type==='whirlpool'?'WHIRLPOOL · STEER WIDE OR GET AIR':'DRIFTWOOD · TAP SPACE TO HOP';
+        if(inPath&&!this.hazardWarning)this.hazardWarning=item.type==='whirlpool'?'WHIRLPOOL · STEER WIDE OR GET AIR':item.type==='reefbank'?'REEF BANKS · FOLLOW THE BARREL OPENING':'DRIFTWOOD · TAP SPACE TO HOP';
         if(inPath)this.hazardDanger=Math.max(this.hazardDanger,clamp(1-ahead/65,0,1)*.8);
       }
       if(!this.hazardProcessed.has(item.id)&&this.bailTime<=0&&sweepSurfHazard(item,previous,this,this.elapsed-dt,this.elapsed)) {
         this.hazardProcessed.add(item.id);
-        this.bail(item.type==='whirlpool'?'PULLED INTO A WHIRLPOOL':'CAUGHT ON DRIFTWOOD');
+        this.bail(item.type==='whirlpool'?'PULLED INTO A WHIRLPOOL':item.type==='reefbank'?'HIT THE EXPOSED REEF BANK':'CAUGHT ON DRIFTWOOD');
         this.onEvent({type:'surfHazardHit',hazard:item.type,id:item.id});
         if(this.phase!=='running')return;
       }
@@ -441,11 +446,18 @@ export class SurfGame {
       if(!this.barrelTimings.has(tube.index)) {
         const crossingFraction=clamp((tube.approachDistance+previous.z)/(this.distance+previous.z||1),0,1);
         const triggerTime=this.elapsed-dt+dt*crossingFraction;
-        const run={index:tube.index,triggerTime,deadline:triggerTime+4.45-this.stormDifficulty*.55,closeDuration:1.2};
+        const run=createStormTiming(tube,triggerTime,this.rules.pumpSpeed+this.stormDifficulty*5);
         this.barrelTimings.set(tube.index,run);
         this.onEvent({type:'barrelWarning',index:tube.index,seconds:run.deadline-this.elapsed});
       }
       const timing=this.barrelTimings.get(tube.index);
+      if(timing.waitingForEntry&&this.distance>=tube.startDistance) {
+        const crossingFraction=clamp((tube.startDistance+previous.z)/(this.distance+previous.z||1),0,1);
+        const enteredAt=this.elapsed-dt+dt*crossingFraction;
+        timing.entryClosureProgress=barrelClosureProgress(tube,enteredAt,this.barrelTimings);
+        timing.enteredAt=enteredAt;timing.deadline=enteredAt+timing.escapeWindow;timing.waitingForEntry=false;
+        this.onEvent({type:'barrelCommit',index:tube.index,seconds:timing.escapeWindow});
+      }
       this.barrelRemaining=Math.max(0,timing.deadline-this.elapsed);
       this.barrelClosingProgress=barrelClosureProgress(tube,this.elapsed,this.barrelTimings);
       this.barrelWarning=this.barrelClosingProgress>0?'WAVE CLOSING · BOOST OUT':'CLOSING BARREL · PUMP / LAND TRICKS TO BOOST';
@@ -481,7 +493,7 @@ export class SurfGame {
     this.nextBarrelDistance=sample?0:next.startDistance-this.distance;
     if(!sample&&this.nextBarrelDistance<=90) {
       const section=barrelCrossSection(next,-next.centerDistance,this.elapsed,this.barrelTimings);
-      this.barrel={id:next.id,index:next.index,inside:false,time:0,progress:0,x:section.centerX,startDistance:next.startDistance,endDistance:next.endDistance,closingProgress:section.closingProgress,timeRemaining:this.barrelRemaining};
+      this.barrel={id:next.id,index:next.index,inside:false,time:0,progress:0,x:section.baseCenterX??section.centerX,startDistance:next.startDistance,endDistance:next.endDistance,closingProgress:section.closingProgress,timeRemaining:this.barrelRemaining};
     }
   }
 }

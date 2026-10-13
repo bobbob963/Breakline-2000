@@ -13,7 +13,7 @@ import { getRewardBoard,rewardBoardUnlocked,ALL_REWARD_BOARD_ORDER } from '../sr
 import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,updateAdminScope } from '../src/admin-settings.js';
 import { everythingUnlocked,persistAdminEntries,resetBreaklineSave } from '../src/admin-save.js';
-import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
+import { chooseSurfWeather,getSurfWeather,getSurfSessionWeather } from '../src/surf-weather.js';
 import { SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret } from '../src/secret-progress.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
@@ -32,11 +32,11 @@ function fixture() {
     SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,
     timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     validateProfile,rewardBoardUnlocked,OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
-    profile:validateProfile(),adminSettings:sanitizeAdminSettings(null),lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
+    profile:validateProfile(),adminSettings:sanitizeAdminSettings(null),lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
     tournamentProgress:sanitizeTournamentProgress(null),trialProgress:sanitizeTimeTrialProgress(null),
     selectedMode:'surf',selectedParkStart:'basin',localStorage:saved,
     window:{location:{reload:()=>calls.reloads++}},world:{setMode:noOp,setProfile:noOp,onEvent:noOp},
-    audio:{enabled:false,setMode:noOp,setScene:noOp,event:noOp},preview:null,menuSurfer:null,
+    audio:{enabled:false,setMode:noOp,setRideContext:noOp,setScene:noOp,event:noOp},preview:null,menuSurfer:null,
     loadBest:noOp,updateHud:()=>calls.hud++,updateModeMenu:()=>calls.mode++,updateCustomizationChoices:()=>calls.choices++,
     clearInput:()=>calls.clear++,bootReady:true,modalMode:null,workshopMode:null,
     adminPanel:{isOpen:false,open:()=>calls.opened++},$:()=>element,document:{body:element},

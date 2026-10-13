@@ -143,7 +143,7 @@ test('the actual start and retry actions carry an equipped board into the next l
   Object.assign(context, {
     createTournamentGame, nextTournamentLadder, selectTournamentLadder, onEvent: noOp,
     selectedMode: 'tournament', selectedParkStart: 'basin', wasted: { reset: noOp }, closeWorkshop: noOp, closeModal: noOp, clearInput: noOp,
-    special: { reset: noOp }, soundPreference: 'off', audio: { enabled: false, setMode: noOp, setScene: noOp },
+    special: { reset: noOp }, soundPreference: 'off', audio: { enabled: false, setMode: noOp, setRideContext: noOp, setScene: noOp },
     updateModeMenu: noOp, updateSoundLabel: noOp, document: { body: element }, $: () => element,
   });
   context.world.setMode = noOp;

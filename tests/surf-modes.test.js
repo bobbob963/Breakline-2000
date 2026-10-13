@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SurfGame,SURF_RULES,TRICKS,courseItem,waveHeight} from '../src/game.js';
 import {WaveParkGame} from '../src/park.js';
+import {surfLabRouteControls,applySurfLabControls} from '../src/surf-lab.js';
 
 function advance(game,seconds,input={}){for(let i=0;i<Math.round(seconds*120);i++)game.update(1/120,input);}
 function crossGate(game,index,hit=true) {
@@ -134,12 +135,15 @@ test('mode physics and course rewards match at 30 and 120 frames per second',()=
   }
 });
 
-test('continuous steering can finish Reef Rush and survive endless Storm beyond 120 seconds',()=>{
+test('ordinary controls can finish Reef Rush and survive endless Storm beyond 120 seconds',()=>{
   for(const id of ['rush','storm']) {
     const game=new SurfGame(()=>{},id);game.start();
-    // A simple route follower chooses the next visible ring or a safe side of
-    // the next reef. It never edits simulation positions, time, lives or score.
+    // Rush keeps its checkpoint follower. Survival follows the visible curls
+    // and earns boosts with normal hop/trick controls; its outer shoulder now
+    // contains the real reef banks. Neither route edits simulation state.
     for(let tick=0;tick<120*150&&game.phase==='running';tick++) {
+      if(id==='storm')applySurfLabControls(game,surfLabRouteControls(game));
+      else {
       const index=Math.max(0,Math.floor((game.distance-game.rules.firstGate)/game.rules.spacing)),targets=[];
       for(let i=Math.max(0,index-1);i<index+3;i++) {
         const item=courseItem(i,id);
@@ -147,10 +151,9 @@ test('continuous steering can finish Reef Rush and survive endless Storm beyond 
         if(!game.processed.has('h'+i)&&item.hazardDistance+2.2>=game.distance)targets.push({distance:item.hazardDistance+2.2,x:Math.max(-10,Math.min(10,item.hazardX+(item.hazardX>0?-6:6)))});
       }
       targets.sort((a,b)=>a.distance-b.distance);
-      // The endless-clock check follows the clear outer shoulder. The timed
-      // curl, wood hops and whirlpool routes are exercised independently.
-      const error=(id==='storm'?14.8:targets[0]?.x??0)-game.x-game.vx*.22;
+      const error=(targets[0]?.x??0)-game.x-game.vx*.22;
       game.update(1/120,{pump:true,left:error<-.35,right:error>.35});
+      }
       assert.ok([game.x,game.y,game.time,game.danger].every(Number.isFinite));
     }
     if(id==='rush'){assert.equal(game.phase,'finished');assert.equal(game.resultReason,'RACE COMPLETE');assert.equal(game.gates,12);assert.ok(game.time>0);}

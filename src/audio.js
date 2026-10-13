@@ -1,20 +1,60 @@
-// Three original instrumentals: mellow rides, heavy menus and driving races.
+// Original procedural instrumentals for rides, sunset, Survival, menus and races.
 // Riptide Radio: 64 bars / 108 BPM. Afterhours: 32 bars / 138 BPM.
 // Overdrive: 32 bars / 152 BPM, with an extra boost layer and final-lap percussion.
 // All sounds are generated locally. No recordings or borrowed melodies.
 export const SURF_TRACK = "Riptide Radio '99";
 export const MENU_TRACK = 'Afterhours / Yard Circuit';
 export const RACE_TRACK = 'Overdrive / Sun Circuit';
+export const SUNSET_TRACK = 'Golden Hour / Last Light';
+export const SURVIVAL_TRACK = 'Undertow / Storm Run';
 export const MUSIC_BPM = 108;
 export const MENU_BPM = 138;
 export const RACE_BPM = 152;
+export const SUNSET_BPM = 84;
+export const SURVIVAL_BPM = 164;
 const STEP = 60 / MUSIC_BPM / 4;
 const TOTAL_STEPS = 64 * 16;
 const MENU_STEP = 60 / MENU_BPM / 4;
 const MENU_STEPS = 32 * 16;
 const RACE_STEP = 60 / RACE_BPM / 4;
 const RACE_STEPS = 32 * 16;
+const SUNSET_STEP = 60 / SUNSET_BPM / 4;
+const SURVIVAL_STEP = 60 / SURVIVAL_BPM / 4;
+const WEATHER_STEPS = 32 * 16;
 const frequency = midi => 440 * 2 ** ((midi - 69) / 12);
+
+export function resolveRideTrack({mode = 'surf', rulesId = 'surf', weatherId, isRace = false, isTimeTrial = false} = {}) {
+  if (mode !== 'surf' || isRace || isTimeTrial) return 'surf';
+  if (rulesId === 'storm') return 'survival';
+  return rulesId === 'surf' && weatherId === 'sunset' ? 'sunset' : 'surf';
+}
+const rideTitle = track => track === 'survival' ? SURVIVAL_TRACK : track === 'sunset' ? SUNSET_TRACK : SURF_TRACK;
+
+// Soft ninth/seventh voicings and a spacious melody, written for this score.
+const SUNSET_CHORDS = [
+  {root:41,notes:[57,60,64,67]}, {root:45,notes:[55,59,60,64]},
+  {root:38,notes:[53,57,60,64]}, {root:43,notes:[55,59,62,64]},
+  {root:41,notes:[57,60,64,67]}, {root:48,notes:[55,59,62,64]},
+  {root:38,notes:[53,57,60,65]}, {root:43,notes:[55,60,62,67]},
+];
+const SUNSET_MELODY = [
+  [[2,72,5],[10,69,5]], [[0,67,6],[9,64,5]],
+  [[3,65,4],[10,69,5]], [[1,67,7],[12,62,3]],
+  [[0,69,5],[8,72,6]], [[2,71,4],[10,67,5]],
+  [[1,65,5],[9,64,3],[14,62,2]], [[0,67,10]],
+];
+const SURVIVAL_ROOTS = [45,45,41,43,45,48,41,43,45,45,41,43,38,41,43,40,
+  41,43,45,45,41,38,43,40,45,48,41,43,38,41,43,45];
+const SURVIVAL_HOOK = [
+  [[0,76,2],[3,72,2],[8,69,3],[13,72,2]],
+  [[1,76,3],[6,79,2],[10,76,2],[14,72,2]],
+  [[0,77,3],[5,76,2],[10,72,3]],
+  [[2,74,2],[6,71,2],[10,67,2],[14,71,2]],
+  [[0,74,3],[6,69,2],[10,65,3]],
+  [[1,72,3],[6,69,2],[12,65,3]],
+  [[0,74,2],[4,79,2],[8,74,3],[13,71,2]],
+  [[0,76,5],[8,72,3],[13,69,2]],
+];
 
 // An original E-minor riff cycle: four-bar entrance, full rhythm section,
 // a half-time middle eight, then the final hook. Chug lengths leave actual space.
@@ -145,6 +185,8 @@ export class ArcadeAudio {
     this._strings = new Map(); this._persistent = []; this._persistentSources = [];
     this._sceneBeats = { ride: 0, menu: 0, race: 0 }; this._voiceScenes = new WeakMap();
     this.raceProgress = 0; this.raceBoost = 0;
+    this.rideTrack = 'surf'; this.survivalIntensity = 0;
+    this._rideBeats = {surf:0,sunset:0,survival:0};
   }
 
   _build(context = null) {
@@ -216,10 +258,14 @@ export class ArcadeAudio {
       this.slapSend, this.slapFeedback, echoTone, chorus, chorusSend, chorusPan, lfo, depth, roomSend, room, roomTone];
     this._buildMenu(random);
     this._buildRace();
+    this._buildWeatherMusic();
 
     // Cache physical-model string samples once. Playback uses only buffer voices,
     // rather than recalculating a pluck every frame or downloading sample files.
     const notes = new Set(Object.values(CHORDS).flatMap(chord => chord.notes));
+    for (const chord of SUNSET_CHORDS) for (const midi of chord.notes) notes.add(midi);
+    for (const phrase of SUNSET_MELODY) for (const [,midi] of phrase) notes.add(midi);
+    for (const root of SURVIVAL_ROOTS) for (const offset of [0,7,12]) notes.add(root+offset);
     for (const phrase of [...VERSE, ...BRIDGE, ...CHORUS]) for (const note of phrase) notes.add(note[1]);
     MENU_ROOTS.forEach((root, bar) => {
       for (const [, offset] of MENU_RIFFS[bar % 4]) for (const interval of [0,7,12]) notes.add(root + offset + interval);
@@ -311,6 +357,32 @@ export class ArcadeAudio {
     leadLevel.connect(delay); delay.connect(delayLevel); delayLevel.connect(delayPan); delayPan.connect(this.raceTone);
     this._persistent.push(this.raceTone,this.raceBass,bassShape,bassLevel,this.raceDrums,glue,
       this.raceLead,leadLevel,leadPan,delay,delayLevel,delayPan);
+  }
+
+  _buildWeatherMusic() {
+    const c = this.ctx;
+    this.sunsetKeys = c.createBiquadFilter(); this.sunsetKeys.type = 'lowpass';
+    this.sunsetKeys.frequency.value = 1250; this.sunsetKeys.Q.value = .35;
+    this.sunsetKeys.connect(this.music);
+    this.survivalGuitars = [-.54,.54].map((pan,index) => {
+      const input=c.createGain(),high=c.createBiquadFilter(),drive=c.createWaveShaper();
+      const cabinet=c.createBiquadFilter(),level=c.createGain(),stereo=c.createStereoPanner();
+      high.type='highpass';high.frequency.value=155;high.Q.value=.45;
+      drive.curve=saturationCurve(2.5+index*.15);drive.oversample='2x';
+      cabinet.type='lowpass';cabinet.frequency.value=3050;cabinet.Q.value=.5;
+      level.gain.value=.057;stereo.pan.value=pan;
+      input.connect(high);high.connect(drive);drive.connect(cabinet);cabinet.connect(level);
+      level.connect(stereo);stereo.connect(this.music);
+      this._persistent.push(input,high,drive,cabinet,level,stereo);return input;
+    });
+    this.survivalLead=c.createBiquadFilter();this.survivalLead.type='lowpass';
+    this.survivalLead.frequency.value=2350;this.survivalLead.Q.value=.45;
+    const leadLevel=c.createGain();leadLevel.gain.value=.46;
+    this.survivalLead.connect(leadLevel);leadLevel.connect(this.music);
+    this.survivalDrums=c.createBiquadFilter();this.survivalDrums.type='highshelf';
+    this.survivalDrums.frequency.value=5200;this.survivalDrums.gain.value=-6;
+    this.survivalDrums.connect(this.music);
+    this._persistent.push(this.sunsetKeys,this.survivalLead,leadLevel,this.survivalDrums);
   }
 
   _string(midi) {
@@ -443,16 +515,37 @@ export class ArcadeAudio {
     if (next === this.scene) return;
     const previous = this.scene;
     this._sceneBeats[previous] = this.beat;
-    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : next === 'race' ? RACE_TRACK : SURF_TRACK;
+    if(previous==='ride')this._rideBeats[this.rideTrack]=this.beat;
+    this.scene = next; this.trackName = next === 'menu' ? MENU_TRACK : next === 'race' ? RACE_TRACK : rideTitle(this.rideTrack);
     this.setRaceState({progress:0,boost:0});
     // Start the retained phrase at its bar boundary; do not resume mid-chug.
-    this.beat = Math.floor(this._sceneBeats[next] / 16) * 16;
+    this.beat = Math.floor((next==='ride'?this._rideBeats[this.rideTrack]:this._sceneBeats[next]) / 16) * 16;
     if (!this.ctx) return; // Merely selecting a menu never unlocks browser audio.
     const now = this.ctx.currentTime;
     for (const [bus,target] of [[this.music,next==='ride'?.82:0],[this.menuMusic,next==='menu'?.88:0],[this.raceMusic,next==='race'?.84:0]]) {
       bus.gain.cancelScheduledValues(now); bus.gain.setTargetAtTime(target,now,.13);
     }
     this._stopVoices(previous,.7); this.nextBeat = now + .045;
+  }
+
+  setRideContext(context = {}) {
+    const next=resolveRideTrack({mode:context.mode??this.mode,rulesId:context.rulesId,weatherId:context.weatherId,
+      isRace:context.isRace,isTimeTrial:context.isTimeTrial});
+    this.survivalIntensity=unit((Number.isFinite(context.elapsed)?context.elapsed:0)/240);
+    if(next===this.rideTrack)return;
+    if(this.scene==='ride')this._rideBeats[this.rideTrack]=this.beat;
+    this.rideTrack=next;
+    if(this.scene!=='ride')return;
+    this.trackName=rideTitle(next);
+    this.beat=Math.floor(this._rideBeats[next]/16)*16;
+    if(!this.ctx)return; // Selecting a track never grants browser audio permission.
+    const now=this.ctx.currentTime;
+    // Briefly fade the shared ride bus before changing the arrangement so old
+    // chord tails do not overlap a new key or tempo. SFX keep their own bus.
+    this.music.gain.cancelScheduledValues(now);
+    this.music.gain.setTargetAtTime(0,now,.012);
+    this.music.gain.setTargetAtTime(.82,now+.065,.055);
+    this._stopVoices('ride',.06);this.nextBeat=now+.085;
   }
 
   setRaceState({progress = 0, boost = 0} = {}) {
@@ -607,6 +700,58 @@ export class ArcadeAudio {
     }
   }
 
+  _scheduleSunsetStep(step, at) {
+    const bar=Math.floor(step/16)%32,s=step%16,chord=SUNSET_CHORDS[bar%8];
+    const middle=bar>=16&&bar<24,answer=bar>=8&&bar<16;
+    // Spacious backbeat, brushed snare and a soft shaker. No busy race layer.
+    if(s===0||(!middle&&s===10))this._kick(at,s===0?.58:.37);
+    if(s===4||s===12)this._snare(at+.024,middle?.24:.38);
+    if(s%2===0)this._noiseHit(at+(s%4?.027:.006),.095,s%4?.0045:.0065,3500,'bandpass',s%4?.32:-.32);
+    if(s===0) {
+      chord.notes.forEach((midi,i)=>this._guitar(midi,at+i*.033,1.45,.029,true,-.38));
+      for(const midi of chord.notes.slice(1))this._note(frequency(midi),at+.035,1.72,'sine',.009,this.sunsetKeys);
+    }
+    if(s===11&&!middle)this._guitar(chord.notes[2],at+.018,.69,.021,true,.38);
+    if(s===0||s===8)this._note(frequency(chord.root),at+.012,s===0?.96:.7,'sine',s===0?.076:.052,this.music);
+    const phrase=SUNSET_MELODY[bar%8];
+    for(const [position,midi,length] of phrase)if(position===s) {
+      this._guitar(midi,at+.025,length*SUNSET_STEP*.92+.12,middle?.065:.091,true,.22);
+      if(answer&&position===phrase.at(-1)[0])this._guitar(chord.notes[3],at+SUNSET_STEP*2,.64,.028,true,-.1);
+    }
+  }
+
+  _scheduleSurvivalStep(step, at) {
+    const bar=Math.floor(step/16)%32,s=step%16,root=SURVIVAL_ROOTS[bar];
+    const breath=bar>=16&&bar<20,hook=bar>=8&&!breath,build=bar>=20&&bar<24;
+    const urgent=this.survivalIntensity>=.5,peak=this.survivalIntensity>=.85;
+    const kickSteps=breath?[0,8]:bar%2?[0,6,8,14]:[0,3,8,11];
+    if(kickSteps.includes(s)) {
+      this._note(123,at,.17,'sine',s%8===0?.155:.113,this.survivalDrums,46);
+      this._noiseHit(at,.025,.014,2400,'lowpass',0,this.survivalDrums,.003);
+    }
+    if(s===4||s===12) {
+      this._noiseHit(at+.003,.13,breath?.053:.076,1900,'bandpass',-.08,this.survivalDrums,.003);
+      this._note(188,at,.09,'triangle',.028,this.survivalDrums,150);
+    }
+    if(s%2===0)this._noiseHit(at,.048,s%4?.01:.015,6100,'highpass',s%4?.28:-.26,this.survivalDrums,.003);
+    if(urgent&&!breath&&s%4===3)this._noiseHit(at+.007,.035,.0055,4800,'highpass',-.35,this.survivalDrums,.003);
+    if((bar%8===7||build)&&s===15)this._noiseHit(at,.11,.043,1400,'bandpass',.14,this.survivalDrums,.003);
+    if(peak&&!breath&&[2,10].includes(s))this._note(s===2?330:262,at,.05,'triangle',.012,this.survivalDrums);
+    // Tight picked octaves propel the track; different rhythms and melody from
+    // the race theme keep Survival recognisable even at its earliest stage.
+    const riff=breath?[0,8]:[0,2,6,8,10,14];
+    if(riff.includes(s)) {
+      const length=breath?SURVIVAL_STEP*5:SURVIVAL_STEP*(s%8===0?1.45:1.1);
+      for(let take=0;take<2;take++)for(const [i,offset] of [0,7,12].entries())
+        this._menuPluck(root+offset,at+take*.008+i*.004,length,[.32,.2,.17][i],this.survivalGuitars[take],take?-4:4);
+      this._note(frequency(root-12),at+.009,length,'triangle',.073,this.music);
+    }
+    if(hook||build)for(const [position,midi,length] of SURVIVAL_HOOK[bar%8])if(position===s) {
+      this._note(frequency(midi),at+.008,length*SURVIVAL_STEP*.86,'triangle',build?.045:.072,this.survivalLead);
+      if(urgent)this._note(frequency(midi-12),at+.014,length*SURVIVAL_STEP*.79,'sine',.034,this.survivalLead);
+    }
+  }
+
   _scheduleStep(step, at) {
     const bar = Math.floor(step / 16) % 64, s = step % 16;
     const chord = CHORDS[PROGRESSION[bar]], park = this.mode === 'park' || this.mode === 'wavepark';
@@ -679,11 +824,14 @@ export class ArcadeAudio {
     if (!this.active) return;
     if (this.nextBeat < now - .2) this.nextBeat = now + .04;
     const menu = this.scene === 'menu', race = this.scene === 'race';
-    const total = menu ? MENU_STEPS : race ? RACE_STEPS : TOTAL_STEPS;
-    const interval = menu ? MENU_STEP : race ? RACE_STEP : STEP;
+    const weatherRide=!menu&&!race&&this.rideTrack!=='surf';
+    const total = menu ? MENU_STEPS : race ? RACE_STEPS : weatherRide ? WEATHER_STEPS : TOTAL_STEPS;
+    const interval = menu ? MENU_STEP : race ? RACE_STEP : this.rideTrack==='sunset'?SUNSET_STEP:this.rideTrack==='survival'?SURVIVAL_STEP:STEP;
     while (this.nextBeat < now + .18) {
       if(menu)this._scheduleMenuStep(this.beat % total,this.nextBeat);
       else if(race)this._scheduleRaceStep(this.beat % total,this.nextBeat);
+      else if(this.rideTrack==='sunset')this._scheduleSunsetStep(this.beat % total,this.nextBeat);
+      else if(this.rideTrack==='survival')this._scheduleSurvivalStep(this.beat % total,this.nextBeat);
       else this._scheduleStep(this.beat % total,this.nextBeat);
       this.beat = (this.beat + 1) % total; this.nextBeat += interval;
     }

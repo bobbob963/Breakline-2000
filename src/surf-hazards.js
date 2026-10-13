@@ -1,7 +1,21 @@
 // One deterministic source for the obstacle meshes and swept collisions.
 // Driftwood sits just above the water; whirlpools occupy the gaps between curls.
-import { waveHeight,stormDifficulty } from './storm-waves.js';
+import { waveHeight,stormDifficulty,stormBarrelsNear } from './storm-waves.js';
+import { stormFunnelRows } from './storm-progression.js';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+export const REEF_BANK_SIDES=10;
+
+// Exactly the roof of the visible ten-sided low-poly bank, rather than a
+// cylinder around its bounding box. The open corridor has no collision shape.
+export function reefBankHeight(item,x,distance) {
+  const dx=(x-item.x)/item.radiusX,dz=(distance-item.distance)/item.radiusZ;
+  let edge=-Infinity;
+  for(let side=0;side<REEF_BANK_SIDES;side++){
+    const angle=(side+.5)/REEF_BANK_SIDES*Math.PI*2;
+    edge=Math.max(edge,(dx*Math.cos(angle)+dz*Math.sin(angle))/Math.cos(Math.PI/REEF_BANK_SIDES));
+  }
+  return edge>1?0:item.height*(1-Math.max(0,edge));
+}
 
 export function surfHazardsNear(distance,rulesId='surf',elapsed=0,behind=20,ahead=220) {
   // Hazards belong to Survival, even when a normal Surf Session rolls stormy weather.
@@ -19,6 +33,20 @@ export function surfHazardsNear(distance,rulesId='surf',elapsed=0,behind=20,ahea
     const at=300+i*230,difficulty=stormDifficulty(elapsed);
     result.push({id:`whirlpool-${i}`,type:'whirlpool',index:i,distance:at,z:-at,x:[-2,6,-7,3][i%4],
       radiusX:1.65,radiusZ:1.65,height:.62,rotation:0,pullRadius:7,pullStrength:4.5+difficulty*2});
+  }
+  for(const barrel of stormBarrelsNear(distance,behind+45,ahead+35)) {
+    const rows=stormFunnelRows(barrel.index);
+    for(let row=0;row<rows;row++){
+      const at=barrel.startDistance-18+row*25;
+      if(at<distance-behind-5||at>distance+ahead+5)continue;
+      // A broad gap from x=-9.8 to x=.8 follows the tube's visible opening.
+      // Layered staggered banks constrain the wide bypass without closing it
+      // with invisible sidewalls; sufficiently high air can clear the rock.
+      for(const [side,x,radiusX] of [['left',-13.5,3.7],['right',4.3,3.5],['outer',10.5,3.7],['edge',16,3.2]]){
+        result.push({id:`reefbank-${barrel.index}-${row}-${side}`,type:'reefbank',index:barrel.index,
+          distance:at,z:-at,x,radiusX,radiusZ:4,height:3.4,row,barrelIndex:barrel.index});
+      }
+    }
   }
   return result.sort((a,b)=>a.distance-b.distance);
 }
@@ -46,7 +74,8 @@ export function sweepSurfHazard(item,from,to,startTime,endTime) {
     if((ax+dx*f)**2+(az+dz*f)**2>1)continue;
     const x=from.x+(to.x-from.x)*f,distance=from.distance+(to.distance-from.distance)*f,time=startTime+(endTime-startTime)*f;
     const y=from.y+(to.y-from.y)*f,clearance=y-waveHeight(x,-distance,time);
-    if(clearance<item.height+.015)return {item,fraction:f,clearance};
+    const height=item.type==='reefbank'?reefBankHeight(item,x,distance):item.height;
+    if(height>0&&clearance<height+.015)return {item,fraction:f,clearance};
   }
   return null;
 }

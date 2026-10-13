@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { waveHeight,stormBarrel,barrelCrossSection,barrelClosureProgress,barrelSurfacePoint,barrelShellDistance,sampleStormBarrel,sweepStormBarrel } from '../src/storm-waves.js';
+import { waveHeight,stormBarrel,barrelCrossSection,barrelClosureProgress,barrelFallProgress,barrelSurfacePoint,barrelShellDistance,sampleStormBarrel,sweepStormBarrel } from '../src/storm-waves.js';
 import { renderedWaveHeight } from '../src/ocean-surface.js';
 import { BARREL_ARC_SEGMENTS,BARREL_LENGTH_SEGMENTS,createBarrelGeometry,updateBarrelGeometry,createStormBarrels,resolveBarrelCamera } from '../src/barrel-wave.js';
 
@@ -85,4 +85,81 @@ test('camera follows the lowering roof and barrel resources dispose cleanly',()=
   let disposed=0;for(const mesh of render.group.children)mesh.geometry.addEventListener('dispose',()=>disposed++);
   const count=render.group.children.length;render.dispose();
   assert.equal(disposed,count);assert.equal(render.group.children.length,0);
+});
+
+test('early curl starts visibly sooner but first wave finishes falling at the previous fully shut time',()=>{
+  const barrel=stormBarrel(0),legacy={index:0,deadline:14.45,closeDuration:1.2};
+  const run={index:0,triggerTime:10,closeStart:10.65,deadline:15.65,collapseDuration:1.2};
+  assert.equal(barrelClosureProgress(barrel,10.65,run),0);
+  assert.ok(barrelClosureProgress(barrel,11.1,run)>0);
+  assert.equal(barrelClosureProgress(barrel,11.1,legacy),0);
+  assert.equal(barrelFallProgress(barrel,14.4,run),0,'early rolling lip does not flatten the clear central roof');
+  for(const time of [14.45,14.7,15,15.3,15.65])assert.ok(Math.abs(barrelFallProgress(barrel,time,run)-barrelClosureProgress(barrel,time,legacy))<1e-12);
+  assert.equal(barrelClosureProgress(barrel,15.65,run),1);
+});
+
+test('untriggered waves have no standing curtain and new curls grow continuously from an anchored foot',()=>{
+  const barrel=stormBarrel(0),z=-barrel.centerDistance,run={index:0,triggerTime:10,closeStart:10.65,deadline:15.65,collapseDuration:1.2};
+  for(const time of [0,8,10.65]){
+    const timings=time===10.65?run:new Map();
+    for(const outer of [false,true])for(let i=0;i<=24;i++){
+      const p=barrelSurfacePoint(barrel,z,i/24,time,outer,timings);
+      assert.ok(Math.abs(p.y-waveHeight(p.x,z,time))<1e-12,'a wall exists before the curl starts');
+    }
+  }
+  let previous=-Infinity;
+  for(const elapsed of [.001,.1,.3,.6,1,1.45]){
+    const time=run.closeStart+elapsed,section=barrelCrossSection(barrel,z,time,run);
+    const top=Math.max(...Array.from({length:25},(_,i)=>{const p=barrelSurfacePoint(barrel,z,i/24,time,false,run);return p.y-waveHeight(p.x,z,time);}));
+    assert.ok(top>=previous-.025,'formation snaps backwards');previous=top;
+    assert.ok(section.formation>0&&section.formation<=1);
+    for(const outer of [false,true]){
+      const foot=barrelSurfacePoint(barrel,z,1,time,outer,run);
+      assert.ok(Math.abs(foot.y-waveHeight(foot.x,z,time))<1e-12);
+    }
+  }
+  assert.ok(previous>4,'the wave develops a real overhead hollow');
+});
+
+test('broad shoulders preserve a clear swept riding line through entry and exit',()=>{
+  const barrel=stormBarrel(0),run={index:0,triggerTime:0,closeStart:.5,deadline:20,collapseDuration:1.2},time=6;
+  let previous=null;
+  for(let distance=barrel.startDistance-1;distance<=barrel.endDistance+1;distance+=.25){
+    const z=-distance,s=barrelCrossSection(barrel,z,time,run),p={x:s.centerX,y:waveHeight(s.centerX,z,time),z};
+    if(previous)assert.equal(sweepStormBarrel(previous,p,time,time,run),null,'forming mouth acts as a low cap across the lane');
+    previous=p;
+  }
+});
+
+test('slow approach holds an open curl without rewinding when its actual entry starts the escape clock',()=>{
+  const barrel=stormBarrel(0),run={index:0,triggerTime:10,closeStart:10.1,deadline:15,collapseDuration:.07,escapeWindow:1.3,waitingForEntry:true};
+  assert.equal(barrelClosureProgress(barrel,20,run),.82);assert.equal(barrelFallProgress(barrel,20,run),0);
+  run.entryClosureProgress=barrelClosureProgress(barrel,20,run);run.enteredAt=20;run.deadline=21.3;run.waitingForEntry=false;
+  assert.equal(barrelClosureProgress(barrel,20,run),.82);
+  assert.ok(barrelClosureProgress(barrel,20.6,run)>.82);
+  assert.equal(barrelFallProgress(barrel,21.2,run),0);assert.equal(barrelFallProgress(barrel,21.3,run),1);
+  const z=-barrel.centerDistance,s=barrelCrossSection(barrel,z,21.2,run),p={x:s.centerX,y:waveHeight(s.centerX,z,21.2),z};
+  assert.equal(sampleStormBarrel(p.x,p.y,z,21.2,run).colliding,false);
+  const impact=sweepStormBarrel(p,p,21.2,21.3,run);assert.ok(impact?.colliding,'fast final crash remains a real swept contact');
+  assert.ok(impact.section.fallProgress>0&&impact.section.fallProgress<1);
+});
+
+test('new formation and early rolling lip use the same faceted surfaces for rendering and collision',()=>{
+  const barrel=stormBarrel(0),run={index:0,triggerTime:10,closeStart:10.65,deadline:15.65,collapseDuration:1.2};
+  const material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});let checked=0;
+  for(const time of [10.8,11.1,11.5,12.1,13.5,14.8,15.5]){
+    const geometry=updateBarrelGeometry(createBarrelGeometry(),barrel,time,run),mesh=new THREE.Mesh(geometry,material);mesh.updateMatrixWorld(true);
+    for(const fraction of [.125,.25,.5,.75,.875]){
+      const z=-barrel.startDistance-barrel.length*fraction,s=barrelCrossSection(barrel,z,time,run);
+      if(s.growth<.015)continue; // The shallow joining seam is deliberately non-solid.
+      for(const arc of [.18,.5,.82]){
+        const p=barrelSurfacePoint(barrel,z,arc,time,false,run);
+        const hits=new THREE.Raycaster(new THREE.Vector3(p.x,p.y+6,z),new THREE.Vector3(0,-1,0),0,14).intersectObject(mesh,false);
+        assert.ok(hits.length,'visible forming curl disappeared');
+        for(const hit of hits)assert.ok(barrelShellDistance(s,hit.point.x,hit.point.y)<1e-4,`forming mesh and physical sheet differ: ${time}/${fraction}/${arc}; growth ${s.growth}; distance ${barrelShellDistance(s,hit.point.x,hit.point.y)}`);checked++;
+      }
+    }
+    geometry.dispose();
+  }
+  material.dispose();assert.equal(checked,99);
 });

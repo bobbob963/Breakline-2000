@@ -103,7 +103,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
     game:null,tournamentProgress:sanitizeTournamentProgress(progress),createTournamentGame,sanitizeTournamentProgress,
     nextTournamentLadder,selectTournamentLadder,profile:{rewardBoard:null},
     selectedMode:'tournament',selectedParkStart:'filters',modalMode:null,workshopMode:null,bootReady:true,input:{},
-    soundPreference:'off',audio:{enabled:true,setScene:noOp,setMode:noOp},world:{setMode:noOp},special:{reset:noOp},wasted:{reset:noOp},timePowerScreen:{reset:noOp},
+    soundPreference:'off',audio:{enabled:true,setScene:noOp,setMode:noOp,setRideContext:noOp},world:{setMode:noOp},special:{reset:noOp},wasted:{reset:noOp},timePowerScreen:{reset:noOp},
     closeWorkshop:noOp,closeModal(){context.modalMode=null;},clearInput:noOp,updateModeMenu:noOp,updateSoundLabel:noOp,
     document:{body:element},$:()=>element,write:(key,value)=>saved.push([key,JSON.parse(value)]),
     onEvent(event){if(event.type==='finish'){context.tournamentProgress=context.game.getProgress();context.modalMode='results';}},

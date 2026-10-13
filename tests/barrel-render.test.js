@@ -11,7 +11,7 @@ test('visible inner water sheet follows physical barrel radius at early and late
     const barrel = stormBarrel(index), geometry = updateBarrelGeometry(createBarrelGeometry(), barrel, time);
     assert.ok([...geometry.attributes.position.array].every(Number.isFinite));
     const mesh = new THREE.Mesh(geometry, material);mesh.updateMatrixWorld(true);
-    for (const fraction of [.24, .43, .64, .78]) {
+    for (const fraction of [.3125, .4375, .5625, .6875]) {
       const z=-(barrel.startDistance+barrel.length*fraction),s=barrelCrossSection(barrel,z,time);
       for (const angle of [.16,.63,1.12,1.72,2.29,2.85]) {
         const origin=new THREE.Vector3(s.centerX,s.centerY,z),direction=new THREE.Vector3(Math.cos(angle),Math.sin(angle),0);

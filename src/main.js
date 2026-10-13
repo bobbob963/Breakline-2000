@@ -33,7 +33,7 @@ import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
 import { createAdminPanel } from './admin-panel.js';
 import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
 import { everythingUnlocked, persistAdminEntries, resetBreaklineSave } from './admin-save.js';
-import { chooseSurfWeather, getSurfWeather } from './surf-weather.js';
+import { chooseSurfWeather, getSurfWeather, getSurfSessionWeather } from './surf-weather.js';
 import { SECRET_STORAGE_KEY, sanitizeSecretProgress, awardSurvivalSecret } from './secret-progress.js';
 import { TimePowerScreen } from './time-power-screen.js';
 import './time-power-screen.css';
@@ -93,7 +93,7 @@ const modeInfo={
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Always a storm. Three lives, no time limit. Escape closing barrels, dodge whirlpools and hop driftwood. Land tricks for the boost you need to get clear.'},
-  surf:{name:'SURF SESSION',level:'OPEN COAST',description:'A new sky every run: dawn, midday, sunset, dusk or storm. Carve for air and land trick combos for a burst of speed.'},
+  surf:{name:'SURF SESSION',level:'OPEN COAST',description:'A new sky every run: dawn, midday, vibrant sunset or dusk. Carve for air and land trick combos for a burst of speed.'},
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread the rust tunnels and grind the old pipework.'},
 };
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
@@ -153,7 +153,7 @@ function onEvent(e){
   if(e.type==='timePowerReady')toast('DEADTIME RECHARGED · Q');
   if(e.type==='finish'){saveBest();if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();showResults();}else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
 }
-function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfWeather(lastSurfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfSessionWeather(lastSurfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
   $('mode-trials').disabled=!timeTrialsUnlocked(tournamentProgress);
   $('trial-lock').textContent=timeTrialsUnlocked(tournamentProgress)?`${trialProgress.completedTrials}/12 cleared. Rewards every three.`:'Clear all five Rival ladders to unlock.';
@@ -215,7 +215,7 @@ function startRun(kind='default'){
   }else{applyPlayerSettings();game.start(selectedMode==='park'?selectedParkStart:undefined);}
   if(selectedMode==='surf'){lastSurfWeather=chooseSurfWeather(lastSurfWeather);game.weatherId=lastSurfWeather;write('breakline99-weather',lastSurfWeather);}
   else if(selectedMode==='storm')game.weatherId='storm';
-  world.setMode(game.mode);audio.setMode(game.mode);audio.setScene(game.isRace?'race':'ride');updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
+  world.setMode(game.mode);audio.setMode(game.mode);audio.setRideContext(game);audio.setScene(game.isRace?'race':'ride');updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');document.body.classList.add('playing');$('stage').focus({preventScroll:true});
 }
 function restartRun(){startRun('retry');}
 function goHome(){
@@ -248,12 +248,12 @@ function showHelp(){
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   ${game.timePowerEnabled?'<span><kbd>Q</kbd></span><span>Toggle DEADTIME slow motion. You have six seconds of charge; switching off early keeps the remaining charge. Use the full charge to gain 50% more speed for three seconds. Recharges over twelve seconds of active play. Pausing freezes the power.</span>':''}
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
-  ${game.surfAdventureEnabled?`<span>TRICK BOOST</span><span>Land a completed trick from the lip or a cutback for an automatic speed burst. Link tricks in an unbanked combo for more speed and a longer boost. Flat hops do not earn a boost.</span>${selectedMode==='storm'?'<span>DRIFTWOOD</span><span>Tap and release Space before a low branch to hop over it. You can also steer around it. Watch the water ahead.</span><span>WHIRLPOOLS</span><span>The foam spiral pulls you toward its dark centre. Steer clear, or cross above it with enough air. The storm becomes harder the longer you survive.</span><span>CLOSING BARRELS</span><span>A countdown starts as you approach. Line up with the hollow wave, pump with W and use earned trick boosts to get out before the lip crashes down. The collapsing water can hit you; you can also stay outside the barrel.</span>':'<span>WEATHER + TIME</span><span>Each new Surf Session rolls a different sky and time of day. Pausing keeps the current conditions. Storm Rider always stays stormy.</span>'}`:''}
+  ${game.surfAdventureEnabled?`<span>TRICK BOOST</span><span>Land a completed trick from the lip or a cutback for an automatic speed burst. Link tricks in an unbanked combo for more speed and a longer boost. Flat hops do not earn a boost.</span>${selectedMode==='storm'?'<span>DRIFTWOOD</span><span>Tap and release Space before a low branch to hop over it. You can also steer around it. Watch the water ahead.</span><span>WHIRLPOOLS</span><span>The foam spiral pulls you toward its dark centre. Steer clear, or cross above it with enough air. The storm becomes harder the longer you survive.</span><span>CLOSING BARRELS</span><span>A countdown starts as you approach. Line up with the hollow wave, pump with W and use earned trick boosts to get out before the lip crashes down. Later reef banks funnel you into the opening. The escape window shrinks toward 1.3 seconds, so land tricks on the approach and carry the boost through. Only the visible water and obstacles can hit you.</span>':'<span>WEATHER + TIME</span><span>Each new Surf Session rolls a calm sky and time of day: dawn, midday, sunset or dusk. Sunset has its own chilled soundtrack. Pausing keeps the current conditions. Storm Rider always stays stormy.</span>'}`:''}
   ${game.isRace?`<span>SUN RINGS</span><span>Pass through each gold ring in order, then ${game.isTimeTrial?'beat the target time':'finish before your rival'}. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. ${game.isTimeTrial?'Missed ocean rings end the attempt. The timer stops while paused.':'There is no time limit.'}</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. ${game.isTimeTrial?'':'Rivals earn boosts with the same rules, so watch their tricks and boost trails. '}No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>`:''}
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
-  <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding and tighter barrels build as you survive.'}</p>
+  <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding, reef corridors and quicker-closing barrels build as you survive.'}</p>
 `,'GOT IT','CONTROLS');
 }
 function showResults(){
@@ -543,6 +543,7 @@ try{
     timePowerScreen.update(dt,{active:game.timePowerActive,paused:game.phase==='paused',origin:world.boardScreenOrigin()});
     if(!document.hidden&&!workshopMode&&!modalMode&&!$('intro').classList.contains('hidden'))menuSurfer.update(dt);
     if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});
+    audio.setRideContext(game);
     audio.update(!document.hidden&&(game.phase==='running'||game.phase==='ready'),game.mode);
     hudTime+=dt;if(hudTime>=.05){updateHud();hudTime=0;}
     if(toastTime>0&&game.phase==='running'){toastTime-=dt;if(toastTime<=0)$('toast').classList.remove('visible');}

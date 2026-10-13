@@ -12,6 +12,7 @@ export const STORM_BARREL_FIRST=180;
 export const STORM_BARREL_SPACING=230;
 export const STORM_BARREL_LENGTH=52;
 export const STORM_BARREL_ARC_SEGMENTS=24;
+export const STORM_BARREL_MOUTH_LENGTH=16;
 export const STORM_BARREL_CLOSE_DURATION=1.2;
 // Each later stage remains a little harder without exceeding safe speed,
 // current or tunnel-width limits. Half strength arrives at two minutes.
@@ -44,41 +45,65 @@ function barrelTiming(barrel,time,timings) {
   return timings?.[barrel.index]??timings?.[barrel.id]??null;
 }
 
-// A deadline starts the visible collapse; it is never itself a collision. A
-// surfer outside the falling sheet remains safe, even after the deadline.
+// New runs distinguish the beginning of a rolling curl from its fully shut
+// deadline. Older saved/review timings retain their deadline-as-fall-start form.
+// Neither timestamp is a collision: only the sheet's moving vertices can hit.
 export function barrelClosureProgress(barrel,time,timings) {
   const run=barrelTiming(barrel,time,timings);
   if(!run||!Number.isFinite(run.deadline))return 0;
+  if(Number.isFinite(run.closeStart)){
+    let progress=clamp((time-run.closeStart)/Math.max(.05,run.deadline-run.closeStart),0,1);
+    if(!run.waitingForEntry&&Number.isFinite(run.enteredAt)&&Number.isFinite(run.entryClosureProgress)){
+      const entry=clamp(run.entryClosureProgress,0,.82);
+      progress=entry+(1-entry)*clamp((time-run.enteredAt)/Math.max(.05,run.deadline-run.enteredAt),0,1);
+    }
+    return run.waitingForEntry?Math.min(.82,progress):progress;
+  }
   const duration=Number.isFinite(run.closeDuration)?Math.max(.2,run.closeDuration):STORM_BARREL_CLOSE_DURATION;
   return clamp((time-run.deadline)/duration,0,1);
+}
+
+export function barrelFallProgress(barrel,time,timings){
+  const run=barrelTiming(barrel,time,timings);
+  if(!run||!Number.isFinite(run.closeStart))return barrelClosureProgress(barrel,time,timings);
+  if(run.waitingForEntry)return 0;
+  const duration=Number.isFinite(run.collapseDuration)?Math.max(.05,run.collapseDuration):STORM_BARREL_CLOSE_DURATION;
+  return clamp((time-(run.deadline-duration))/duration,0,1);
 }
 
 export function barrelCrossSection(barrel,z,time,timings) {
   const distance=-z,progress=clamp((distance-barrel.startDistance)/barrel.length,0,1);
   const active=distance>=barrel.startDistance&&distance<=barrel.endDistance;
-  const envelope=active?smooth(Math.min(distance-barrel.startDistance,barrel.endDistance-distance)/8):0;
-  const innerRadius=4.6-.4*stormDifficulty(time),endAngle=3.36;
-  const centerX=waveCrest(z,time)+4.25,footX=centerX+Math.cos(endAngle)*innerRadius;
+  // The crest unfurls from its fixed wave foot, preserving a clear axial lane.
+  // A broad shoulder eases entry/exit into the swell without an end-wall cap.
+  const envelope=active?smooth(Math.min(distance-barrel.startDistance,barrel.endDistance-distance)/STORM_BARREL_MOUTH_LENGTH):0;
+  const run=barrelTiming(barrel,time,timings),newTiming=Number.isFinite(run?.closeStart);
+  const formation=timings===undefined||run&&!newTiming?1:newTiming?smooth((time-run.closeStart)/1.45):0;
+  const growth=envelope*formation,baseRadius=4.6-.4*stormDifficulty(time),endAngle=3.36;
+  const baseCenterX=waveCrest(z,time)+4.25,footX=baseCenterX+Math.cos(endAngle)*baseRadius;
   // Position the curl from its foot on the wave, instead of floating a tube at
   // a fixed height. Each skin has its own anchored foot (including the outer).
-  const centerY=waveHeight(footX,z,time)-Math.sin(endAngle)*innerRadius;
-  const closingProgress=barrelClosureProgress(barrel,time,timings),run=barrelTiming(barrel,time,timings);
-  return {active,progress,envelope,centerX,centerY,innerRadius,outerRadius:innerRadius+.38,z,time,
-    startAngle:endAngle-(endAngle+.25)*envelope,endAngle,closingProgress,
+  const baseCenterY=waveHeight(footX,z,time)-Math.sin(endAngle)*baseRadius;
+  const centerX=baseCenterX,centerY=baseCenterY;
+  const closingProgress=barrelClosureProgress(barrel,time,timings),fallProgress=barrelFallProgress(barrel,time,timings);
+  const lipAngle=newTiming?.42-.67*smooth(closingProgress):-.25;
+  return {active,progress,envelope,formation,growth,baseCenterX,baseCenterY,baseRadius,centerX,centerY,innerRadius:baseRadius,outerRadius:baseRadius+.38,z,time,
+    startAngle:endAngle-(endAngle-lipAngle)*growth,lipAngle,endAngle,closingProgress,fallProgress,
     timeRemaining:run&&Number.isFinite(run.deadline)?Math.max(0,run.deadline-time):null};
 }
 
 function sectionVertex(section,arc,outer=false) {
   const angle=section.startAngle+(section.endAngle-section.startAngle)*arc;
-  const radius=outer?section.outerRadius:section.innerRadius;
-  const x=section.centerX+Math.cos(angle)*radius;
-  const footX=section.centerX+Math.cos(section.endAngle)*radius;
-  const footOffset=waveHeight(footX,section.z,section.time)-(section.centerY+Math.sin(section.endAngle)*radius);
-  const rise=section.centerY+Math.sin(angle)*radius+footOffset*smooth((angle-2.86)/.5);
+  const radius=section.baseRadius+(outer?.38:0),fullX=section.baseCenterX+Math.cos(angle)*radius;
+  const footX=section.baseCenterX+Math.cos(section.endAngle)*radius;
+  const x=fullX;
+  const footOffset=waveHeight(footX,section.z,section.time)-(section.baseCenterY+Math.sin(section.endAngle)*radius);
+  const fullRise=section.baseCenterY+Math.sin(angle)*radius+footOffset*smooth((angle-2.86)/.5);
   const floor=waveHeight(x,section.z,section.time);
+  const rise=fullRise;
   // The roof and lip fold down onto the existing face. Anchored feet do not
   // move, and the tube keeps open axial ends throughout the collapse.
-  const y=rise+(floor-rise)*smooth(section.closingProgress)*.985;
+  const y=rise+(floor-rise)*smooth(section.fallProgress)*.985;
   return {x,y,z:section.z};
 }
 
@@ -107,7 +132,7 @@ function shellPolygon(section) {
 // Distance to the actual faceted sheet. No lower semicircle or axial caps are
 // invented by collision, and closure uses the very same falling vertices.
 export function barrelShellDistance(section,x,y) {
-  if(!section.active||section.envelope<.015)return Infinity;
+  if(!section.active||section.growth<.015)return Infinity;
   const polygon=shellPolygon(section);let nearest=Infinity,inside=false;
   for(let i=0,j=polygon.length-1;i<polygon.length;j=i++) {
     const a=polygon[j],b=polygon[i],dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
@@ -116,6 +141,19 @@ export function barrelShellDistance(section,x,y) {
     if((a.y>y)!==(b.y>y)&&x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x)inside=!inside;
   }
   return inside?0:nearest;
+}
+
+/** Highest intersection with the faceted inner sheet, shared by camera and
+ * rider clearance. Partial shoulders need not be perfect circular arcs. */
+export function barrelRoofHeight(section,x){
+  let roof=-Infinity;
+  for(let i=0;i<STORM_BARREL_ARC_SEGMENTS;i++){
+    const a=sectionVertex(section,i/STORM_BARREL_ARC_SEGMENTS),b=sectionVertex(section,(i+1)/STORM_BARREL_ARC_SEGMENTS);
+    if(x<Math.min(a.x,b.x)||x>Math.max(a.x,b.x))continue;
+    const t=Math.abs(b.x-a.x)<1e-9?0:(x-a.x)/(b.x-a.x);
+    roof=Math.max(roof,a.y+(b.y-a.y)*t);
+  }
+  return roof;
 }
 
 export function sampleStormBarrel(x,y,z,time,timings) {
@@ -129,9 +167,8 @@ export function sampleStormBarrel(x,y,z,time,timings) {
   let clearance=Infinity;
   for(const height of [.24,.65,1.05,1.45,1.70])clearance=Math.min(clearance,barrelShellDistance(section,x,y+height)-.22);
   const dx=x-section.centerX;
-  const openCeiling=section.centerY+Math.sqrt(Math.max(0,section.innerRadius**2-dx**2));
-  const ceiling=openCeiling+(waveHeight(x,z,time)-openCeiling)*smooth(section.closingProgress)*.985;
-  const inside=section.envelope>.72&&Math.abs(dx)<section.innerRadius-1&&y+1.7<ceiling-.22&&clearance>0;
+  const ceiling=barrelRoofHeight(section,x);
+  const inside=section.growth>.72&&Math.abs(dx)<section.innerRadius-1&&y+1.7<ceiling-.22&&clearance>0;
   return {barrel,section,inside,colliding:clearance<0,clearance};
 }
 

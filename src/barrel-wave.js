@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { barrelCrossSection, barrelSectionPoint, stormBarrelsNear, waveHeight, STORM_BARREL_ARC_SEGMENTS } from './storm-waves.js';
+import { barrelCrossSection, barrelSectionPoint, barrelRoofHeight, stormBarrelsNear, waveHeight, STORM_BARREL_ARC_SEGMENTS } from './storm-waves.js';
 import { renderedWaveHeight } from './ocean-surface.js';
 
 // A breaking wave is an open sheet: the left foot joins the existing face,
@@ -112,8 +112,8 @@ function updateLip(geometry, descriptor, time, timings) {
     const {x,y}=point;
     // A ragged, falling fringe, not a sealed side wall. It dissolves below
     // the physical lip and never blocks the view down the hollow barrel.
-    const fall=s.envelope*(.48+.36*(.5+.5*Math.sin(z*1.9+time*5.2)));
-    p.setXYZ(row*2,x,y,z);p.setXYZ(row*2+1,x+.16*s.envelope,y-fall,z);
+    const fall=s.growth*(.28+.32*(.5+.5*Math.sin(z*1.9+time*5.2)))*(.45+.55*s.closingProgress);
+    p.setXYZ(row*2,x,y,z);p.setXYZ(row*2+1,x+.16*s.growth,y-fall,z);
   }
   p.needsUpdate=true;geometry.computeBoundingSphere();
 }
@@ -159,18 +159,13 @@ export function createStormBarrels() {
 export function resolveBarrelCamera(candidate,distance,time,timings) {
   for(const barrel of stormBarrelsNear(distance,12,12)) {
     const section=barrelCrossSection(barrel,candidate.z,time,timings);
-    if(!section.active||section.envelope<.75)continue;
+    if(!section.active||section.growth<.75)continue;
     const dx=candidate.x-section.centerX,dy=candidate.y-section.centerY;
     if(Math.abs(dx)>section.innerRadius+1||dy<-.8*section.innerRadius)continue;
     const radius=Math.hypot(dx,dy),limit=section.innerRadius-.55;
     if(radius>limit){candidate.x=section.centerX+dx/radius*limit;candidate.y=section.centerY+dy/radius*limit;}
-    if(section.closingProgress>0){
-      const floor=waveHeight(candidate.x,candidate.z,time);
-      const openRoof=section.centerY+Math.sqrt(Math.max(0,section.innerRadius**2-(candidate.x-section.centerX)**2));
-      const progress=THREE.MathUtils.smoothstep(section.closingProgress,0,1);
-      const roof=THREE.MathUtils.lerp(openRoof,floor,progress*.985);
-      candidate.y=Math.max(floor+.65,Math.min(candidate.y,roof-.5));
-    }
+    const floor=waveHeight(candidate.x,candidate.z,time),roof=barrelRoofHeight(section,candidate.x);
+    if(Number.isFinite(roof))candidate.y=Math.max(floor+.65,Math.min(candidate.y,roof-.5));
   }
   return candidate;
 }

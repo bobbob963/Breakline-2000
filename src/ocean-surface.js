@@ -1,4 +1,4 @@
-import { waveHeight } from './storm-waves.js';
+import { waveHeight,STORM_BARREL_MOUTH_LENGTH } from './storm-waves.js';
 
 export const OCEAN_MESH = Object.freeze({ width: 340, length: 450, columns: 68, rows: 100 });
 
@@ -31,13 +31,13 @@ export function alignRiderToOcean(x, y, z, time, oceanZ) {
 
 // Outside a barrel the board follows the actual coarse water triangles, just
 // like race riders. Within the solid curl its drawn capsule must keep matching
-// the analytic roof/lip collisions. Taper the correction over the same eight
-// metre open mouths as the curl, avoiding a snap on entering or leaving it.
+// the analytic roof/lip collisions. Taper correction over the curl's shared
+// open-mouth length, avoiding a snap on entering or leaving it.
 export function alignSurfRiderToOcean(x,y,z,time,oceanZ,barrel=null) {
   let strength=1;
   if(Number.isFinite(barrel?.startDistance)&&Number.isFinite(barrel?.endDistance)){
     const distance=-z,edge=Math.min(distance-barrel.startDistance,barrel.endDistance-distance);
-    const u=Math.max(0,Math.min(1,edge/8));strength=1-u*u*(3-2*u);
+    const u=Math.max(0,Math.min(1,edge/STORM_BARREL_MOUTH_LENGTH));strength=1-u*u*(3-2*u);
   }
   return y+(alignRiderToOcean(x,y,z,time,oceanZ)-y)*strength;
 }

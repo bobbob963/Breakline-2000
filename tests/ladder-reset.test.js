@@ -9,7 +9,7 @@ import { createKeydownHandler } from '../src/keyboard.js';
 import { validateProfile } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked, REWARD_BOARD_ORDER } from '../src/board-rewards.js';
 import { sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
-import { chooseSurfWeather,getSurfWeather } from '../src/surf-weather.js';
+import { chooseSurfWeather,getSurfWeather,getSurfSessionWeather } from '../src/surf-weather.js';
 import { SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret } from '../src/secret-progress.js';
 import {
   createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
@@ -41,7 +41,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
   const context = {
     secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     SECRET_STORAGE_KEY,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),updateCustomizationChoices:noOp,
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
     $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
     SurfGame, WaveParkGame, tournamentProgress: sanitizeTournamentProgress(progress),
@@ -49,7 +49,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
     profile: validateProfile({ rewardBoard, character: 'reef', outfit: 'raglan' }),
     modalMode: null, resumeAfterModal: false, workshopMode: null, pressed: new Set(),
     input: { left: false, right: false, jump: false, pump: false }, special: new SpecialMeter(),
-    world: { setMode: noOp, onEvent: noOp }, audio: { enabled: true, setMode: noOp, setScene: scene => scenes.push(scene), event: noOp },
+    world: { setMode: noOp, onEvent: noOp }, audio: { enabled: true, setMode: noOp, setRideContext: noOp, setScene: scene => scenes.push(scene), event: noOp },
     wasted: { reset: noOp }, soundPreference: 'off', document: { body: $('body') },
     write: (key, value) => saved.push([key, JSON.parse(value)]), saveBest: noOp, loadBest: noOp,
     updateModeMenu: noOp, updateSoundLabel: noOp, fmt: n => String(Math.round(n)), toast: noOp,
