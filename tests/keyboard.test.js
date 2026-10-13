@@ -99,7 +99,7 @@ function tournamentRoute(progress={version:1,completedRounds:0}) {
   const noOp=()=>{},saved=[],calls=[];
   const element={classList:{add:noOp,remove:noOp},focus:noOp};
   const context={
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,
     game:null,tournamentProgress:sanitizeTournamentProgress(progress),createTournamentGame,sanitizeTournamentProgress,
     nextTournamentLadder,selectTournamentLadder,profile:{rewardBoard:null},
     selectedMode:'tournament',selectedParkStart:'filters',modalMode:null,workshopMode:null,bootReady:true,input:{},

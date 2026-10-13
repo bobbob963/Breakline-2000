@@ -10,6 +10,12 @@
 .home-art{padding-top:8px}
 .home-tagline{margin-top:70px;font-size:clamp(27px,3vw,43px)}
 .home-menu{padding:0}
+/* Keep wheel, trackpad and keyboard scrolling without the native menu gutter. */
+#intro,#intro .home-layout,#intro .home-menu{scrollbar-width:none}
+#intro::-webkit-scrollbar,#intro .home-layout::-webkit-scrollbar,#intro .home-menu::-webkit-scrollbar{display:none}
+/* The same unobtrusive scrolling applies inside the game menus and wardrobe. */
+.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll{scrollbar-width:none}
+.modal-card::-webkit-scrollbar,.workshop .custom-options::-webkit-scrollbar,#wardrobe .outfit-options::-webkit-scrollbar,#admin-panel .admin-scroll::-webkit-scrollbar{display:none}
 .mode-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mode-card{min-height:134px;display:flex;flex-direction:column;position:relative;overflow:hidden;transform:none;box-shadow:3px 3px #070e12}
 .mode-card .mode-picture{position:absolute;inset:0;width:100%;height:100%;opacity:.34;filter:saturate(.7)}

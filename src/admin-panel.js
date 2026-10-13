@@ -19,7 +19,7 @@ function fieldMarkup(field, scope, value) {
 }
 
 /** The panel owns an unsaved draft; only Apply changes riding stats and conditions. */
-export function createAdminPanel({ getState, onApply, onGiveEverything, onFullReset, onClose = () => {} }) {
+export function createAdminPanel({ getState, onApply, onGiveEverything, onFullReset, onTutorial = () => {}, onClose = () => {} }) {
   const overlay = document.createElement('div');
   overlay.id = 'admin-panel';
   overlay.className = 'admin-overlay';
@@ -45,6 +45,10 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
           <div><h3 id="admin-cheats-title">CHEATS</h3><label class="admin-enabled"><input type="checkbox" id="admin-slow-motion" aria-describedby="admin-slow-motion-description"> <span>SLOW MOTION / Q</span></label></div>
           <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Press Q to toggle a 6-second charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
         </section>
+        <section class="admin-tutorial" aria-labelledby="admin-tutorial-title">
+          <div><h3 id="admin-tutorial-title">RIDER GUIDE</h3><p id="admin-tutorial-description">Replay the tutorial and change your rider name. Keeps your progress and unlocks. Unapplied tuning changes will be discarded.</p></div>
+          <button type="button" data-admin-action="tutorial" aria-describedby="admin-tutorial-description">SHOW TUTORIAL <span>▶</span></button>
+        </section>
         <div class="admin-columns">
           <section class="admin-stat-section" aria-labelledby="admin-character-title"><div class="admin-section-heading"><span>01 / CHARACTER</span><h3 id="admin-character-title"></h3></div><div id="admin-character-fields"></div></section>
           <section class="admin-stat-section" aria-labelledby="admin-board-title"><div class="admin-section-heading"><span>02 / BOARD</span><h3 id="admin-board-title"></h3></div><div id="admin-board-fields"></div></section>
@@ -54,11 +58,11 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
           <div class="admin-section-heading"><span>03 / SAVE FILE</span><h3 id="admin-save-title">UNLOCKS + RESET</h3></div>
           <div class="admin-save-grid">
             <div><button type="button" data-admin-action="give" class="admin-unlock">GIVE ME EVERYTHING <span>↗</span></button><p>Unlock every ladder, Time Trial, outfit, board style and reward board.</p></div>
-            <div><button type="button" data-admin-action="reset" class="admin-reset">FULL RESET <span>↺</span></button><p>Start fresh: erase game progress, saved scores, custom stats and session settings.</p></div>
+            <div><button type="button" data-admin-action="reset" class="admin-reset">FULL RESET <span>↺</span></button><p>Start fresh: erase game progress, saved scores, custom stats, session settings, rider name and tutorial completion.</p></div>
           </div>
           <div class="admin-reset-confirm" hidden role="group" aria-labelledby="admin-reset-title">
             <strong id="admin-reset-title">ERASE YOUR BREAKLINE SAVE?</strong>
-            <p>This removes all game progress, unlocks, personal bests, custom stats and session settings from this browser. It cannot be undone.</p>
+            <p>This removes all game progress, unlocks, personal bests, custom stats, session settings, your rider name and tutorial completion from this browser. It cannot be undone.</p>
             <div><button type="button" data-admin-action="confirm-reset">YES, RESET EVERYTHING</button><button type="button" data-admin-action="cancel-reset">KEEP MY SAVE</button></div>
           </div>
         </section>
@@ -155,6 +159,10 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     if (!button || busy) return;
     const name = button.dataset.adminAction;
     if (name === 'close') close();
+    if (name === 'tutorial') {
+      close();
+      onTutorial();
+    }
     if (name === 'defaults') {
       draft = resetAdminScope(draft, profile);
       renderFields();

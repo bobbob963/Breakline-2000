@@ -40,7 +40,7 @@ function fixture() {
     audio:{enabled:false,setMode:noOp,setRideContext:noOp,setScene:noOp,event:noOp},preview:null,menuSurfer:null,
     loadBest:noOp,updateHud:()=>calls.hud++,updateModeMenu:()=>calls.mode++,updateCustomizationChoices:()=>calls.choices++,
     clearInput:()=>calls.clear++,bootReady:true,modalMode:null,workshopMode:null,
-    adminPanel:{isOpen:false,open:()=>calls.opened++},$:()=>element,document:{body:element},
+    adminPanel:{isOpen:false,open:()=>calls.opened++},tutorial:{isOpen:false},$:()=>element,document:{body:element},
     special:new SpecialMeter(),toast:noOp,fmt:String,saveBest:noOp,showResults:noOp,
     isParkMode:()=>context.game.mode==='park',trialTime:String,
     wasted:{reset:noOp},closeWorkshop:noOp,closeModal:noOp,soundPreference:'off',updateSoundLabel:noOp,

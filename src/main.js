@@ -31,6 +31,8 @@ import { loadCharacterTextures } from './character-textures.js';
 import { createLoadingScreen, paintLoadingStage } from './loading-screen.js';
 import { CONTROL_KEYS as keyMap, createKeydownHandler } from './keyboard.js';
 import { createAdminPanel } from './admin-panel.js';
+import { createTutorial } from './tutorial.js';
+import { loadRiderIdentity, saveRiderIdentity, sanitizeRiderName } from './rider-identity.js';
 import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
 import { everythingUnlocked, persistAdminEntries, resetBreaklineSave } from './admin-save.js';
 import { chooseSurfWeather, getSurfWeather, getSurfSessionWeather } from './surf-weather.js';
@@ -48,6 +50,7 @@ const pad=n=>Math.round(n).toString().padStart(6,'0');
 const clockText=n=>{const seconds=Math.max(0,Math.floor(Number.isFinite(n)?n:0));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
 const read=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catch{return fallback;}};
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage is optional. */}};
+let riderIdentity=loadRiderIdentity({getItem:key=>read(key,null)});
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
 let adminSettings;try{adminSettings=sanitizeAdminSettings(JSON.parse(read(ADMIN_STORAGE_KEY,'null')));}catch{adminSettings=sanitizeAdminSettings(null);}
 let lastSurfWeather=read('breakline99-weather','');
@@ -83,7 +86,7 @@ const audio=new ArcadeAudio();
 const input={left:false,right:false,pump:false,brake:false,jump:false,action:false,grind:false};
 const special=new SpecialMeter();
 const pressed=new Set();
-let world,game,preview,menuSurfer,parkMap,adminPanel,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
 let best=0,newBest=false,secretUnlockedThisRun=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 const timePowerScreen=new TimePowerScreen({reducedMotion:window.matchMedia('(prefers-reduced-motion: reduce)').matches});
 let portraitKey='';
@@ -106,8 +109,15 @@ const modeInfo={
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
 function clearInput(){pressed.clear();for(const k in input)input[k]=false;keydownHandler?.resetAdminSequence();}
 function applyPlayerSettings(){game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
-function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
+function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!tutorial?.isOpen&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
 function openAdmin(){if(!adminHomeScreen())return;clearInput();adminPanel.open();}
+function openTutorial(replay=true){if(!adminHomeScreen())return;clearInput();tutorial.open({replay});}
+function completeTutorial(name,{persist=true}={}){
+  const cleanName=sanitizeRiderName(name);
+  if(!cleanName)throw new Error('Enter a name for your rider.');
+  const next=persist?saveRiderIdentity(localStorage,cleanName):{name:cleanName,tutorialComplete:true};
+  riderIdentity=next;menuSurfer?.setName(next.name);
+}
 function applyAdminSettings(next){
   const safe=sanitizeAdminSettings(next);
   persistAdminEntries(localStorage,[[ADMIN_STORAGE_KEY,JSON.stringify(safe)]]);
@@ -213,7 +223,7 @@ function updateSoundLabel(){
 }
 async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?'on':'off';write('breakline99-sound',soundPreference);updateSoundLabel();}
 function startRun(kind='default'){
-  if(adminPanel?.isOpen)return;
+  if(adminPanel?.isOpen||tutorial?.isOpen)return;
   wasted.reset();timePowerScreen.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;secretUnlockedThisRun=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
   if(game.isTimeTrial){
@@ -486,9 +496,10 @@ function updateHud(){
   }
 }
 
-adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onClose:clearInput});
+tutorial=createTutorial({getName:()=>riderIdentity.name,onComplete:completeTutorial,onClose:()=>{clearInput();$('start').focus({preventScroll:true});}});
+adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onTutorial:()=>openTutorial(true),onClose:clearInput});
 keydownHandler=createKeydownHandler(
-  ()=>({bootReady:bootReady&&!wasted.active,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen}),
+  ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen}),
   {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,openAdmin,
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
     hideWardrobe:()=>$('wardrobe').classList.add('hidden'),
@@ -496,10 +507,10 @@ keydownHandler=createKeydownHandler(
     pressControl:code=>{pressed.add(code);syncInput();}}
 );
 window.addEventListener('keydown',keydownHandler);
-window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||adminPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
+window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||tutorial.isOpen||adminPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(e.code==='Space'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
 window.addEventListener('blur',()=>{clearInput();if(game?.phase==='running')pause();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(game?.phase==='running')pause();}});
-document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
+document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||event.target.closest('#sound'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
 $('race-ladders').addEventListener('click',showLadder);
@@ -539,6 +550,7 @@ try{
   await paintLoadingStage();
   world=new SurfWorld($('viewport'),profile);
   menuSurfer=new MenuSurferPreview($('home-surfer-preview'),profile);
+  menuSurfer.setName(riderIdentity.name);
   loading.set(78,'SETTING YOUR LINE','Getting your surfer, board and session ready.');
   await paintLoadingStage();
   parkMap=new ParkMap($('park-map-canvas'));makeGame();updateModeMenu();renderCustomizationChoices();updateSoundLabel();
@@ -548,6 +560,7 @@ try{
   await paintLoadingStage();
   bootReady=await loading.finish();
   if(!bootReady)throw new Error('Startup stopped before the menu was ready.');
+  if(!riderIdentity.tutorialComplete)openTutorial(false);
   let previous=performance.now(),accumulator=0,hudTime=0,animationId;
   const frame=now=>{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
@@ -565,5 +578,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}

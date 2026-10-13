@@ -13,7 +13,7 @@ function fixture(selectedMode='surf',prior='sunset') {
   const element={classList:{add:noop,remove:noop},focus:noop};
   const context={selectedMode,lastSurfWeather:saved.get('breakline99-weather'),chooseSurfWeather,getSurfWeather,getSurfSessionWeather,adminSettings:sanitizeAdminSettings(null),
     secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
-    game:new SurfGame(noop,selectedMode),adminPanel:{isOpen:false},wasted:{reset:noop},
+    game:new SurfGame(noop,selectedMode),adminPanel:{isOpen:false},tutorial:{isOpen:false},wasted:{reset:noop},
     closeWorkshop:noop,closeModal:noop,clearInput:noop,applyPlayerSettings:noop,
     special:{reset:noop},soundPreference:'off',audio:{setMode:noop,setScene:noop,setRideContext:noop},world:{setMode:noop},
     updateModeMenu:noop,updateSoundLabel:noop,$:()=>element,document:{body:element},

@@ -11,7 +11,7 @@ const noOp=()=>{};
 // A small DOM adapter exercises the panel's actual event handlers and unsaved draft.
 // Browser rendering is checked separately; these tests cover save/cancel semantics.
 function panelFixture(initial={}) {
-  const calls={applied:[],give:0,reset:0,closed:0};
+  const calls={applied:[],give:0,reset:0,closed:0,tutorial:0,tutorialPanelOpen:null,tutorialCloseCount:0};
   let settings=sanitizeAdminSettings(initial),overlay;
   const document={activeElement:null,body:{append:noOp},createElement:()=>overlay=new Element()};
   class Element {
@@ -44,6 +44,7 @@ function panelFixture(initial={}) {
     getState:()=>({settings,profile:{character:'kai',rewardBoard:null}}),
     onApply:value=>{calls.applied.push(value);settings=value;},
     onGiveEverything:()=>{calls.give++;},onFullReset:()=>{calls.reset++;settings=sanitizeAdminSettings(null);},onClose:()=>{calls.closed++;},
+    onTutorial:()=>{calls.tutorial++;calls.tutorialPanelOpen=panel.isOpen;calls.tutorialCloseCount=calls.closed;},
   });
   const query=selector=>overlay.querySelector(selector);
   return {panel,calls,query,document,get settings(){return settings;},
@@ -133,4 +134,24 @@ test('weather select stays in the keyboard focus cycle and describes its limits'
   assert.match(source,/Surf Session weather \/ time/);
   assert.match(source,/This works with custom stats switched off/);
   assert.match(source,/Survival always stays stormy/);
+});
+
+test('Show Tutorial closes admin before replay and preserves saved settings without applying the draft',async()=>{
+  const f=panelFixture({environment:{surfWeather:'sunset'}});
+  f.panel.open();await f.select('dusk');await f.check('#admin-slow-motion',true);
+  await f.click('tutorial');
+  assert.equal(f.calls.tutorial,1);assert.equal(f.calls.tutorialPanelOpen,false);
+  assert.equal(f.calls.tutorialCloseCount,1,'the admin close callback runs before the tutorial takes focus');
+  assert.equal(f.calls.applied.length,0);assert.equal(f.calls.give,0);assert.equal(f.calls.reset,0);
+  assert.equal(f.settings.environment.surfWeather,'sunset');assert.equal(f.settings.cheats.slowMotion,false);
+  f.panel.open();
+  assert.equal(f.query('#admin-surf-weather').value,'sunset');assert.equal(f.query('#admin-slow-motion').checked,false);
+  assert.match(source,/<button type="button" data-admin-action="tutorial"/);
+});
+
+test('replaying the tutorial repeatedly does not reset or unlock progression',async()=>{
+  const f=panelFixture();
+  for(let index=0;index<3;index++){f.panel.open();await f.click('tutorial');}
+  assert.equal(f.calls.tutorial,3);assert.equal(f.calls.closed,3);
+  assert.equal(f.calls.reset,0);assert.equal(f.calls.give,0);assert.equal(f.calls.applied.length,0);
 });

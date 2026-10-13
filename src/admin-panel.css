@@ -21,6 +21,11 @@
 .admin-cheats>div{display:flex;align-items:center;justify-content:space-between;gap:24px}
 .admin-cheats h3{margin:0;color:#bce4a7;font:italic 25px/1.1 var(--display,Impact,sans-serif);letter-spacing:.7px}
 .admin-cheats p{color:#bbccba;font-size:12px;line-height:1.5;margin:10px 0 0;max-width:820px}
+.admin-tutorial{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px;padding:15px 16px;border:1px solid #8c9478;background:repeating-linear-gradient(-35deg,#283432 0 25px,#233030 25px 50px)}
+.admin-tutorial h3{margin:0 0 7px;color:#e8d598;font:italic 25px/1.1 var(--display,Impact,sans-serif);letter-spacing:.7px}
+.admin-tutorial p{max-width:600px;margin:0;color:#c2cec3;font-size:12px;line-height:1.5}
+.admin-tutorial button{display:flex;align-items:center;justify-content:space-between;gap:22px;flex-shrink:0;padding:13px 16px;background:#dec467;border:1px solid #fff0a0;color:#17232a;font:italic 22px var(--display,Impact,sans-serif);letter-spacing:.5px}
+.admin-tutorial button span{font-size:15px}
 .admin-columns{display:grid;grid-template-columns:1fr 1fr;gap:25px}
 .admin-stat-section{border:1px solid #617a79;background:#13232b}
 .admin-section-heading{padding:13px 16px;background:#23353b;border-bottom:1px solid #617a79}

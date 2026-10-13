@@ -41,7 +41,7 @@ function fixture(progress = { version: 2, ladderIndex: 2, completedRounds: 3, co
   const context = {
     secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
     SECRET_STORAGE_KEY,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),updateCustomizationChoices:noOp,
-    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
+    adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,keydownHandler:null,lastSurfWeather:'sunset',chooseSurfWeather,getSurfWeather,getSurfSessionWeather,
     $, saved, createTournamentGame, sanitizeTournamentProgress, selectTournamentLadder, nextTournamentLadder,
     TOURNAMENT_LADDERS, TOURNAMENT_RIVALS, tournamentRivalsForLadder, tournamentCourseLength, getRewardBoard,
     SurfGame, WaveParkGame, tournamentProgress: sanitizeTournamentProgress(progress),

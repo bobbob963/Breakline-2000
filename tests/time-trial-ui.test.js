@@ -43,7 +43,7 @@ test('actual mode selection cannot enter locked trials and ladder resets keep th
 
 function equipmentFixture(clears=0){
   const writes=[],renders=[],context={...dependencies,profile:validateProfile({character:'jax',outfit:'yardcrew',rewardBoard:'sky'}),tournamentProgress:tournament(5),trialProgress:progress(clears),
-    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
+    adminSettings:sanitizeAdminSettings(null),adminPanel:null,tutorial:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     game:createTimeTrialGame(),write:(key,value)=>writes.push([key,JSON.parse(value)]),world:{setProfile:value=>renders.push(value),onEvent:noop},preview:{setProfile:noop},menuSurfer:{setProfile:noop},updateCustomizationChoices:noop,modalMode:null};
   vm.runInNewContext(block('function applyPlayerSettings(','function adminHomeScreen('),context);
   vm.runInNewContext(block('function cosmeticAvailable(','if(!cosmeticAvailable(OUTFITS'),context);
@@ -165,7 +165,7 @@ test('the actual trial prize button equips Afterburner and refreshes the correct
 
 test('production start/next/retry keeps trial identity correct and preserves equipped board perks',()=>{
   const element={classList:{add:noop,remove:noop},focus:noop},context={...dependencies,createTimeTrialGame,game:createTimeTrialGame(noop,progress(2)),trialProgress:progress(2),profile:validateProfile({rewardBoard:'sky'}),
-    adminSettings:sanitizeAdminSettings(null),adminPanel:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
+    adminSettings:sanitizeAdminSettings(null),adminPanel:null,tutorial:null,selectedMode:'trials',secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     wasted:{reset:noop},closeWorkshop:noop,closeModal:noop,clearInput:noop,special:{reset:noop},soundPreference:'off',audio:{enabled:false,setMode:noop,setRideContext:noop,setScene:noop},world:{setMode:noop},updateModeMenu:noop,updateSoundLabel:noop,onEvent:noop,$:()=>element,document:{body:element}};
   vm.runInNewContext(block('function applyPlayerSettings(','function adminHomeScreen('),context);
   vm.runInNewContext(block('function startRun(','function goHome('),context);

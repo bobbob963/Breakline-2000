@@ -8,6 +8,8 @@
 .home-surfer-stage::after{content:'';position:absolute;left:15%;right:15%;bottom:12%;height:1px;z-index:-1;background:linear-gradient(90deg,transparent,#d7c38666,transparent);transform:rotate(-3deg)}
 #home-surfer-preview{position:absolute;inset:0;z-index:1}
 #home-surfer-preview canvas{display:block;width:100%;height:100%}
+.home-rider-nametag{position:absolute;z-index:2;max-width:calc(100% - 20px);padding:7px 12px 6px;border:1px solid #bca66a;background:#14232bed;box-shadow:3px 3px 0 #07101580;transform:translate(-50%,-100%);color:#f2e7be;font:700 11px/1.1 var(--mono);letter-spacing:1px;text-align:center;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
+.home-rider-nametag[hidden]{display:none}
 .home-surfer-watermark{position:absolute;top:14%;left:7%;font:italic clamp(85px,10vw,152px)/.77 Impact,'Arial Black',sans-serif;letter-spacing:-3px;color:#b8c5b3;opacity:.06;transform:rotate(-7deg);pointer-events:none}
 .home-surfer-caption{position:absolute;bottom:6%;left:0;font:7px var(--mono);letter-spacing:2px;color:#9aa9a2;writing-mode:vertical-rl;transform:rotate(180deg)}
 .home-surfer-footer{display:flex;align-items:end;justify-content:space-between;gap:16px;padding:13px 0 4px;border-top:1px solid #93a19a40;flex-shrink:0}
