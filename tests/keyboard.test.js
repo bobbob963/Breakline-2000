@@ -85,6 +85,8 @@ test('the shared router preserves movement, session shortcuts and workshop focus
   route.calls.length=0;route.state.workshopMode=null;route.state.modalMode='help';route.press('Enter');
   assert.deepEqual(route.calls,[['closeModal']]);route.calls.length=0;route.state.modalMode='results';route.press('Enter');
   assert.deepEqual(route.calls,[['startRun']]);
+  route.calls.length=0;route.state.modalMode='trials';route.press('Enter');
+  assert.deepEqual(route.calls,[['startRun']], 'Enter starts a selected solo trial as it does a ladder');
 });
 
 // Execute the application's real session actions as well as its shared keyboard

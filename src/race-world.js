@@ -130,6 +130,7 @@ export function createRaceWorld(playerProfile) {
 
   function prepare(game) {
     clear(); race = game;
+    if(game.opponent){
     surfer = createSurfer(rivalProfile(game.rival, player)); surfer.rig.name = 'race-opponent'; group.add(surfer.rig);
     name = label(game.rival?.name || 'RIVAL'); name.name = 'race-opponent-name'; name.scale.set(1.35,.3375,1); group.add(name);
     action = label('', '#ffc95c'); action.name = 'race-opponent-action'; action.scale.set(1.7,.34,1); group.add(action);
@@ -146,19 +147,22 @@ export function createRaceWorld(playerProfile) {
       const streak = addMesh(group, streakGeometry, streakMaterial); streak.name = `race-opponent-boost-${i}`;
       streak.rotation.x = -Math.PI / 2; boostTrail.push(streak);
     }
+    }
     gates = game.course.checkpoints.map(makeSunRing);
     if (game.mode !== 'park') gates.push(makeGate({ index: game.course.checkpoints.length, distance: game.course.length, x: .5 }, true));
     for (const gate of gates) group.add(gate.group);
   }
 
   function update(game, time, oceanZ = Math.floor(-game.distance / 30) * 30 - 90) {
-    if (!game.isRace || game.phase === 'ready' || !game.opponent || !game.course) {
+    if (!game.isRace || game.phase === 'ready' || !game.course) {
       if (race) clear();
       return;
     }
     if (race !== game) prepare(game);
     group.visible = true;
-    const park = game.mode === 'park', opponent = game.opponent, air = !!opponent.airborne, bail = opponent.bailTime > 0;
+    const park = game.mode === 'park';
+    if(game.opponent){
+    const opponent = game.opponent, air = !!opponent.airborne, bail = opponent.bailTime > 0;
     const x = opponent.x, z = park ? opponent.z : -opponent.distance, heading = park ? opponent.heading || 0 : 0;
     const terrain = park ? opponent.surface || parkSurface(x,z) : null;
     const surface = park ? terrain.height : renderedWaveHeight(x, z, time, oceanZ);
@@ -213,6 +217,7 @@ export function createRaceWorld(playerProfile) {
       streak.position.set(sx, air ? y + .1 : ground + .12, sz); streak.rotation.z = -heading;
       streak.scale.set(1 - phase * .5, .5 + phase * 1.7, 1);
       streak.visible = boosting && !opponent.pipeRide && opponent.speed > 2;
+    }
     }
     for (const gate of gates) {
       const checkpoint = gate.checkpoint, gz = park ? checkpoint.z : -checkpoint.distance;

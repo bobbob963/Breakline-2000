@@ -28,6 +28,40 @@ export function createParkRaceCourse(id='moxie') {
     laps,start,checkpoints:Object.freeze(checkpoints),finish:checkpoints.at(-1),length:distance});
 }
 
+// Solo trials use the whole treatment plant: the far collection bowl, outer
+// service channels and south return basin, rather than repeating a rival lap.
+// These coordinates remain inside the original physical walls and use the
+// existing collision surface; nothing about the rival routes is changed.
+const TRIAL_PLANT=[[-52,30],[-52,-10],[-48,-34],[-28,-55],[-30,-100],[-35,-137],[-47,-158],[-85,-161],[-105,-147],
+  [-108,-111],[-108,-68],[-107,-18],[-96,2],[-84,22],[-81,66],[-84,111],[-79,137],[-47,140],[0,137],
+  [47,140],[79,137],[84,111],[81,66],[84,22],[96,2],[107,-18],[108,-68],[108,-111],[105,-147],[85,-161],
+  [47,-158],[35,-137],[30,-100],[29,-55],[35,-42],[35,-8],[35,30],[39,61],[22,78],[0,71],[0,55],[0,-9],
+  [-25,-25],[-38,0],[-34,40],[-40,72],[-52,58]];
+const TRIAL_FINAL=[...TRIAL_PLANT.slice(0,42).map(([x,z])=>[-x,z]),
+  [25,-25],[30,-65],[32,-105],[30,-139],[0,-140],[-30,-139],[-32,-105],[-30,-65],[-25,-25],
+  [-36,10],[-35,42],[-20,65],[0,72],[20,70],[40,72],[52,58]];
+
+export function createParkTrialCourse(stage=0) {
+  const finale=stage===1;
+  const coordinates=finale?TRIAL_FINAL:TRIAL_PLANT;
+  const start=Object.freeze({x:finale?52:-52,z:58,heading:0});
+  let previous=start,distance=0;
+  const checkpoints=coordinates.map(([x,z],index)=>{
+    distance+=Math.hypot(x-previous.x,z-previous.z);
+    const rotation=Math.atan2(previous.x-x,previous.z-z);
+    const pipe=PARK_PIPES.find(pipe=>Math.abs(x-pipe.x)<.01&&Math.abs(z-pipe.z)<pipe.length/2);
+    const gate=Object.freeze({index,x,z,y:parkRideSurface(x,z,parkHeight(x,z)).height+1.5,
+      radius:pipe?3.8:5.5,rotation,distance,finish:index===coordinates.length-1});
+    previous=gate;return gate;
+  });
+  return Object.freeze({id:finale?'trial-final-treatment':'trial-full-plant',
+    name:finale?'FINAL TREATMENT / GRAND TOUR':'FULL PLANT / ENDURANCE',laps:1,start,
+    checkpoints:Object.freeze(checkpoints),finish:checkpoints.at(-1),length:distance,
+    // Verified with ordinary pumping/steering in approximately 76 / 92 seconds;
+    // clean trick boosts create extra room against the later, tighter target.
+    recommendedTime:finale?98:94});
+}
+
 const normal=gate=>({x:-Math.sin(gate.rotation),z:-Math.cos(gate.rotation)});
 const signedDistance=(point,gate)=>{const n=normal(gate);return (point.x-gate.x)*n.x+(point.z-gate.z)*n.z;};
 const gatePipe=gate=>PARK_PIPES.find(pipe=>Math.abs(gate.x-pipe.x)<.01&&Math.abs(gate.z-pipe.z)<pipe.length/2);

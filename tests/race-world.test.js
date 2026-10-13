@@ -7,6 +7,7 @@ import { OCEAN_MESH, renderedWaveHeight, alignRiderToOcean } from '../src/ocean-
 import { surfRaceRingY } from '../src/surf-race.js';
 import { WaveParkGame } from '../src/park.js';
 import { ParkMap } from '../src/park-map.js';
+import { createTimeTrialGame } from '../src/time-trials.js';
 
 const canvasContext = new Proxy({}, {
   get: (_, key) => ['createLinearGradient', 'createRadialGradient'].includes(key) ? () => ({ addColorStop() {} }) : () => {},
@@ -27,6 +28,28 @@ function raceState() {
     course: { length: 960, checkpoints: [{ index: 0, distance: 150, x: -4, radius: 5.7 }, { index: 1, distance: 330, x: 5, radius: 5.7 }] } });
   return game;
 }
+
+test('solo time trials render mandatory sun rings without rival geometry, and switch venues cleanly', () => withWorld(world => {
+  for (const selectedTrial of [0, 5, 11]) {
+    const game = createTimeTrialGame(() => {}, {completedTrials: 12, selectedTrial});
+    game.start(); world.update(game, 0);
+    assert.equal(world.group.visible, true);
+    assert.equal(world.group.getObjectByName('race-opponent'), undefined);
+    assert.equal(world.group.getObjectByName('race-opponent-name'), undefined);
+    const gate = world.group.getObjectByName('race-sun-ring-0');
+    assert.ok(gate.visible, 'The first required ring is visible in a solo run');
+    assert.equal(gate.position.x, game.course.checkpoints[0].x);
+    assert.equal(gate.position.z, game.mode === 'park' ? game.course.checkpoints[0].z : -game.course.checkpoints[0].distance);
+    game.nextCheckpoint = 1; world.update(game, 1);
+    assert.equal(gate.visible, false);
+    assert.ok(world.group.getObjectByName('race-sun-ring-1').visible);
+    assert.equal(!!world.group.getObjectByName('race-finish-banner'), game.mode === 'surf');
+  }
+  const race = raceState(); world.update(race, 0);
+  assert.ok(world.group.getObjectByName('race-opponent'), 'Returning to rivals restores their body');
+  world.update(new SurfGame(), 0);
+  assert.equal(world.group.children.length, 0);
+}));
 
 test('rival geometry follows actual simulation position and supports the existing grab pose', () => withWorld(world => {
   const game = raceState();

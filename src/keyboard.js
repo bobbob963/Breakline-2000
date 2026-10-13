@@ -23,7 +23,7 @@ export function createKeydownHandler(getState, actions) {
       return;
     }
     if (e.code === 'Enter') {
-      if (['results','ladder'].includes(modalMode)) actions.startRun();
+      if (['results','ladder','trials'].includes(modalMode)) actions.startRun();
       else if (modalMode) actions.closeModal();
       else if (game.phase === 'ready' || game.phase === 'finished') actions.startRun();
       else game.bank();

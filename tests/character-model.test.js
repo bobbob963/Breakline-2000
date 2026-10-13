@@ -110,7 +110,7 @@ const poses = [
   { standing: false, lipGrab: 1, time: 15, mode: 'park' },
 ];
 
-test('all 48 authored character/outfit combinations have measured adult standing silhouettes', t => {
+test('all authored character/outfit combinations have measured adult standing silhouettes', t => {
   const reports = [];
   for (const character of Object.keys(CHARACTERS)) for (const outfit of Object.keys(OUTFITS)) {
     const model = makeModel(character, outfit), label = `${character}/${outfit}`;
@@ -145,12 +145,12 @@ test('all 48 authored character/outfit combinations have measured adult standing
       reports.push({ character, outfit, H, faceHeightRatio, shoulder: actualShoulderWidth / measurement.height, baggy });
     } finally { disposeModel(model); }
   }
-  assert.equal(reports.length, 48);
+  assert.equal(reports.length, Object.keys(CHARACTERS).length * Object.keys(OUTFITS).length);
   const range = (key, rows = reports) => `${Math.min(...rows.map(row => row[key])).toFixed(4)}–${Math.max(...rows.map(row => row[key])).toFixed(4)}`;
   t.diagnostic(`Measured geometry: standing height ${range('H')}m; face height/body ${range('faceHeightRatio')}; actual baggy shoulder slice/body ${range('shoulder', reports.filter(row => row.baggy))}.`);
 });
 
-test('all 48 characters keep finite authored geometry and normals through 9 demanding poses', () => {
+test('all characters keep finite authored geometry and normals through 9 demanding poses', () => {
   let checked = 0;
   for (const character of Object.keys(CHARACTERS)) for (const outfit of Object.keys(OUTFITS)) {
     const model = makeModel(character, outfit);
@@ -169,7 +169,7 @@ test('all 48 characters keep finite authored geometry and normals through 9 dema
       }
     } finally { disposeModel(model); }
   }
-  assert.equal(checked, 432);
+  assert.equal(checked, Object.keys(CHARACTERS).length * Object.keys(OUTFITS).length * 9);
 });
 
 test('authored torso armholes and the branching trouser seat remain joined through actual posed mesh vertices', t => {
@@ -345,7 +345,7 @@ test('grounded charging hinges an adult rider forward without collapsing into a 
       }
     }finally{disposeModel(model);}
   }
-  t.diagnostic(`48 full-charge bodies: hip height ${Math.min(...rows.map(r=>r.height)).toFixed(3)}m; minimum hip-to-knee rise ${Math.min(...rows.map(r=>r.kneeGap)).toFixed(3)}m; torso hinge ${Math.min(...rows.map(r=>r.hinge)).toFixed(1)}–${Math.max(...rows.map(r=>r.hinge)).toFixed(1)} degrees. All 240 charge poses retain four fixed limb lengths and planted feet.`);
+  t.diagnostic(`${rows.length} full-charge bodies: hip height ${Math.min(...rows.map(r=>r.height)).toFixed(3)}m; minimum hip-to-knee rise ${Math.min(...rows.map(r=>r.kneeGap)).toFixed(3)}m; torso hinge ${Math.min(...rows.map(r=>r.hinge)).toFixed(1)}–${Math.max(...rows.map(r=>r.hinge)).toFixed(1)} degrees. All ${rows.length*5} charge poses retain four fixed limb lengths and planted feet.`);
 });
 
 test('loose torso meshes retain a shaped waist and uneven open hem rather than a rectangular shell', t => {
@@ -462,7 +462,7 @@ test('all outfits keep covered thighs concealed and the intended lower legs visi
       }
     } finally { disposeModel(model); }
   }
-  assert.equal(combinations, 384);
+  assert.equal(combinations, Object.keys(CHARACTERS).length * Object.keys(OUTFITS).length * 8);
   t.diagnostic(`${combinations} character/outfit/pose combinations: ${calfSurfaces} actual exposed calf surfaces and ${coveredHipRays} surrounding covered-hip rays checked.`);
 });
 
@@ -565,7 +565,7 @@ test('production grab timing holds the deck for a readable interval rather than 
   assert.equal('roll' in tweak,false,'B no longer drives a whole-rider barrel roll');
 });
 
-test('production surfer hierarchy keeps actual hand-to-deck contact throughout air and lip grab holds for all48 models', t => {
+test('production surfer hierarchy keeps actual hand-to-deck contact throughout air and lip grab holds for all models', t => {
   let contacts = 0;
   const progressFrames = [0, .1, .22, .3, .5, .7, .8, .9, 1];
   for (const character of Object.keys(CHARACTERS)) for (const outfit of Object.keys(OUTFITS)) {
@@ -595,7 +595,7 @@ test('production surfer hierarchy keeps actual hand-to-deck contact throughout a
       verifyActualHeldDeck(surfer, `${character}/${outfit}: independently rotated deck`); contacts++;
     } finally { disposeSurfer(surfer); }
   }
-  assert.equal(contacts, 1248);
+  assert.equal(contacts, Object.keys(CHARACTERS).length * Object.keys(OUTFITS).length * 26);
   t.diagnostic(`${contacts} held frames measured against actual transformed deck triangles; each hand/arm retains its physical length.`);
 });
 
@@ -633,7 +633,7 @@ test('tweaked grabs keep both visible feet on the banked deck with fixed tucked 
       verifyActualHeldDeck(surfer,`${character}/${outfit}: held tweaked pose`);
     }finally{disposeSurfer(surfer);}
   }
-  assert.equal(checked,336);t.diagnostic(`${checked} entry/hold/release poses keep actual foot geometry on both transformed bindings without stretching legs.`);
+  assert.equal(checked,Object.keys(CHARACTERS).length*Object.keys(OUTFITS).length*7);t.diagnostic(`${checked} entry/hold/release poses keep actual foot geometry on both transformed bindings without stretching legs.`);
 });
 
 test('ground cutbacks visibly lower and turn the rider while preserving planted feet and limb lengths', () => {

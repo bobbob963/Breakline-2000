@@ -8,6 +8,11 @@ import './tournament.css';
 import './wasted.css';
 import './rewards.css';
 import './menu-surfer.css';
+import './time-trials.css';
+import { createTimeTrialGame, TIME_TRIALS } from './time-trials.js';
+import { sanitizeTimeTrialProgress, timeTrialsUnlocked, selectTimeTrial } from './time-trial-progress.js';
+import { TRIAL_COSMETIC_SETS, getTrialCosmeticSet, trialCosmeticUnlocked } from './trial-cosmetics.js';
+import { trialTime, trialListMarkup, trialRewardCards } from './time-trial-ui.js';
 import { createTournamentGame, TOURNAMENT_RIVALS, TOURNAMENT_LADDERS, sanitizeTournamentProgress, tournamentCourseLength, tournamentRivalsForLadder, selectTournamentLadder, nextTournamentLadder } from './tournament.js';
 import { REWARD_BOARD_ORDER, getRewardBoard, rewardBoardUnlocked } from './board-rewards.js';
 import { createWastedSequence } from './wasted.js';
@@ -37,15 +42,21 @@ const read=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catc
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{/* Storage is optional. */}};
 let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{}')));}catch{profile=validateProfile();}
 let selectedMode=read('breakline99-mode','surf');
-if(!['surf','park','rush','storm','tournament'].includes(selectedMode))selectedMode='surf';
+if(!['surf','park','rush','storm','tournament','trials'].includes(selectedMode))selectedMode='surf';
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v2',read('breakline99-tournament-v1','null'))));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
 if(!rewardBoardUnlocked(profile.rewardBoard,tournamentProgress))profile.rewardBoard=null;
+let trialProgress;try{trialProgress=sanitizeTimeTrialProgress(JSON.parse(read('breakline99-trials-v1','null')));}catch{trialProgress=sanitizeTimeTrialProgress(null);}
+if(selectedMode==='trials'&&!timeTrialsUnlocked(tournamentProgress))selectedMode='tournament';
+function cosmeticAvailable(entry){return !entry?.trialReward||(timeTrialsUnlocked(tournamentProgress)&&trialCosmeticUnlocked(entry.trialReward,trialProgress.completedTrials));}
+if(!cosmeticAvailable(OUTFITS[profile.outfit]))profile.outfit='riptide';
+if(!cosmeticAvailable(BOARD_DESIGNS[profile.boardDesign]))profile.boardDesign='bolt';
 const isParkMode=()=>game?.mode==='park';
 $('loading-tip').textContent={
   surf:'Hold SHIFT while turning to cut back. Earn air at the lip, then stick the landing.',
   park:'Hold SHIFT while turning for a sharp cutback. At a ramp lip, SHIFT catches the coping. E rides pipe walls.',
   rush:'Every checkpoint adds eight seconds. Keep your line and leave room to turn.',
   tournament:'Five ladders. Five prize boards. Beat every rival in a ladder to unlock its board and perk.',
+  trials:'Beat the clock through every sun ring. Three new clears unlock a matching outfit and board graphic.',
   storm:'Stay beneath the curling lip and ride out cleanly. Three lives. The swell keeps building.',
 }[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
@@ -64,6 +75,7 @@ let best=0,bestSurvival=Math.max(0,Number(read('breakline99-survival-time','0'))
 let portraitKey='';
 const wasted=createWastedSequence({stage:$('stage'),onStart:clearInput,onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();}});
 const modeInfo={
+  trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears.'},
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Three lives. No time limit. Ride inside curling barrels as the swell builds, the current strengthens and the storm closes in.'},
@@ -95,13 +107,16 @@ function onEvent(e){
   if(e.type==='grind')toast('WATER SLIDE!');
   if(e.type==='land')toast(e.assisted?'SAVED LANDING!':game.mode==='surf'&&game.airLaunchSource==='flat'?'BACK ON THE FACE':'LANDED! KEEP IT GOING');
   if(e.type==='barrelExit'){toast(`BARREL RIDE · +${fmt(e.points||0)}`);saveBest();}
-  if(e.type==='start')toast(game?.isRace?`${game.rival.name} · FIRST TO THE FINISH`:isParkMode()?'THE WATERWORKS · DROP IN':'DROP IN!');
+  if(e.type==='start')toast(game?.isTimeTrial?`${game.trial.name} · BEAT ${trialTime(game.trial.timeLimit)}`:game?.isRace?`${game.rival.name} · FIRST TO THE FINISH`:isParkMode()?'THE WATERWORKS · DROP IN':'DROP IN!');
   if(e.type==='airJump')toast('SKYBOUND · SECOND AIR!');
-  if(e.type==='finish'){saveBest();if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
+  if(e.type==='finish'){saveBest();if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();showResults();}else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
 }
-function makeGame(){game=selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);game.setRewardBoard(profile.rewardBoard);world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);game.setRewardBoard(profile.rewardBoard);world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
-  document.querySelectorAll('[data-mode]').forEach(b=>{const active=b.dataset.mode===selectedMode;b.classList.toggle('is-selected',active);b.setAttribute('aria-pressed',String(active));const label=b.querySelector('.mode-status');if(label)label.textContent=active?'▶ SELECTED':'▶ SELECT MODE';});
+  $('mode-trials').disabled=!timeTrialsUnlocked(tournamentProgress);
+  $('trial-lock').textContent=timeTrialsUnlocked(tournamentProgress)?`${trialProgress.completedTrials}/12 cleared. Rewards every three.`:'Clear all five Rival ladders to unlock.';
+  $('trial-button').classList.toggle('hidden',selectedMode!=='trials');
+  document.querySelectorAll('[data-mode]').forEach(b=>{const active=b.dataset.mode===selectedMode;b.classList.toggle('is-selected',active);b.setAttribute('aria-pressed',String(active));const label=b.querySelector('.mode-status');if(label)label.textContent=b.disabled?'LOCKED':active?'▶ SELECTED':'▶ SELECT MODE';});
   if($('selected-mode-name'))$('selected-mode-name').textContent=modeInfo[selectedMode].name;
   if($('mode-description'))$('mode-description').textContent=modeInfo[selectedMode].description;
   if($('level-name'))$('level-name').textContent=modeInfo[selectedMode].level;
@@ -112,25 +127,31 @@ function updateModeMenu(){
   document.body.classList.toggle('park-mode',isParkMode());
   document.body.dataset.session=selectedMode;
   $('session-badge').textContent={surf:'2 MIN. / SCORE ATTACK',park:'2 MIN. / FREESTYLE',rush:'12 CHECKPOINTS / +8 SEC',storm:'ENDLESS / 3 LIVES'}[selectedMode];
-  $('timer-label').textContent=game.isRace?'RACE TIME':selectedMode==='storm'?'SURVIVED':'TIME';
+  $('timer-label').textContent=game.isTimeTrial?'TIME LEFT':game.isRace?'RACE TIME':selectedMode==='storm'?'SURVIVED':'TIME';
   $('surf-condition').classList.toggle('hidden',isParkMode()&&!game.isRace);
-  $('rival-hud').classList.toggle('hidden',!game.isTournament);
-  document.querySelector('.goals').classList.toggle('hidden',game.isTournament);
+  $('rival-hud').classList.toggle('hidden',!game.isTournament&&!game.isTimeTrial);
+  document.querySelector('.goals').classList.toggle('hidden',game.isTournament||game.isTimeTrial);
   $('ladder-button').classList.toggle('hidden',!game.isTournament);
-  $('start').querySelector('span').textContent=game.isTournament?(game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`):'DROP IN';
+  $('start').querySelector('span').textContent=game.isTimeTrial?`START ${game.trial.name}`:game.isTournament?(game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`):'DROP IN';
   $('rival-hud').classList.toggle('race-hud',!!game.isRace);
-  $('rival-hud').querySelector('small').textContent=game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
+  $('rival-hud').querySelector('small').textContent=game.isTimeTrial?'TIME TRIAL / SOLO AGAINST THE CLOCK':game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
   $('race-progress').classList.toggle('hidden',!game.isRace);
-  $('rival-action').classList.toggle('hidden',!game.isRace);
+  $('rival-action').classList.toggle('hidden',!game.isRace||game.isTimeTrial);
   $('race-boost').classList.toggle('hidden',!game.isRace);
+  if(game.isTimeTrial){
+    $('session-badge').textContent=`TRIAL ${game.trialIndex+1}/12 · ${trialProgress.completedTrials} CLEARED`;
+    $('level-name').textContent=isParkMode()?`WATERWORKS / ${game.course.name}`:'CHAMPION COAST / TIME TRIAL';
+    $('mode-description').textContent=`${game.trial.name} · ${fmt(game.course.length)}m · Target ${trialTime(game.trial.timeLimit)}. Pass every sun ring. Land tricks for boosts. ${Math.min(3,3-trialProgress.completedTrials%3)} new clears to the next outfit and deck set.`;
+    if(trialProgress.completedTrials===TIME_TRIALS.length)$('mode-description').textContent=`ALL TRIALS CLEARED · All four outfit and deck sets unlocked. Replay ${game.trial.name} and improve your best time.`;
+  }
   if(game.isTournament){
     $('session-badge').textContent=`LADDER ${game.ladderIndex+1}/5 · ${game.complete?'CLEARED':`RANK #${game.rival.rank}`}`;
     $('level-name').textContent=isParkMode()?`WATERWORKS / ${game.course.name}`:'SUNSET POINT / RIVAL RACE';
-    $('mode-description').textContent=game.complete?`${game.ladder.name} cleared. ${getRewardBoard(game.ladder.rewardId).name} is yours. ${game.allLaddersComplete?'All five boards unlocked. Replay any ladder from the rival list.':'Equip it in the board shop, then take on the next ladder.'}`:`${game.ladder.name} · Beat all five rivals to unlock ${getRewardBoard(game.ladder.rewardId).name}. Race ${game.rival.name} through every sun ring to the ${fmt(game.course.length)}m finish.`;
+    $('mode-description').textContent=game.complete?`${game.ladder.name} cleared. ${getRewardBoard(game.ladder.rewardId).name} is yours. ${game.allLaddersComplete?'All five boards unlocked. TIME TRIALS are now open: race the clock for exclusive clothes and board styles.':'Equip it in the board shop, then take on the next ladder.'}`:`${game.ladder.name} · Beat all five rivals to unlock ${getRewardBoard(game.ladder.rewardId).name}. Race ${game.rival.name} through every sun ring to the ${fmt(game.course.length)}m finish.`;
   }
 
 }
-function selectMode(mode){if(!modeInfo[mode])return;selectedMode=mode;write('breakline99-mode',mode);clearInput();makeGame();updateModeMenu();updateSoundLabel();}
+function selectMode(mode){if(!modeInfo[mode]||(mode==='trials'&&!timeTrialsUnlocked(tournamentProgress)))return;selectedMode=mode;write('breakline99-mode',mode);clearInput();makeGame();updateModeMenu();updateSoundLabel();}
 function updateSoundLabel(){
   $('sound').textContent=audio.enabled?'SOUND ON':'SOUND OFF';$('sound').setAttribute('aria-label',audio.enabled?'Mute audio':'Enable audio');
   if($('music-track'))$('music-track').textContent=audio.enabled?`♫ ${audio.trackName.toUpperCase()}`:'M · TURN UP THE RADIO';
@@ -139,7 +160,10 @@ async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?
 function startRun(kind='default'){
   wasted.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
-  if(game.isTournament){
+  if(game.isTimeTrial){
+    if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game=createTimeTrialGame(onEvent,trialProgress);
+    game.setRewardBoard(profile.rewardBoard);game.retry();
+  }else if(game.isTournament){
     if(kind!=='retry'&&game.complete&&(game.phase==='ready'||game.result==='win')){
       tournamentProgress=nextTournamentLadder(game.getProgress())||selectTournamentLadder(game.getProgress(),game.ladderIndex);
       write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));game=createTournamentGame(onEvent,tournamentProgress);
@@ -155,13 +179,14 @@ function goHome(){
 }
 function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
   $('modal').dataset.mode=mode;
+  $('race-trials').classList.toggle('hidden',!game.isTimeTrial||!['pause','results'].includes(mode));
   $('race-ladders').classList.toggle('hidden',!game.isTournament||!['pause','results'].includes(mode));
   const active=game.phase==='running';if(active){game.pause();clearInput();}if(!modalMode)resumeAfterModal=active;
   modalMode=mode;$('modal-title').textContent=title;$('modal-kicker').textContent=kicker;$('modal-content').innerHTML=content;$('modal-action').textContent=action;
   $('modal').classList.remove('hidden');$('modal-action').focus({preventScroll:true});
 }
 function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;$('stage').focus({preventScroll:true});}
-function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
+function pause(){if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'||modalMode==='trials'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED','<p>The clock is stopped. Your line is waiting.</p><p><kbd>P</kbd> / <kbd>ESC</kbd> resume · <kbd>R</kbd> restart</p>','KEEP RIDING','TIME OUT');}
 function showHelp(){
   if(modalMode==='help'){closeModal();return;}
   openModal('help','HOW TO RIDE',`<div class="controls-grid">
@@ -176,7 +201,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within 3.8 seconds to link another air.</span>
-  ${game.isRace?'<span>SUN RINGS</span><span>Pass through each gold ring in order, then finish before your rival. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. There is no time limit.</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. Rivals earn boosts with the same rules, so watch their tricks and boost trails. No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>':''}
+  ${game.isRace?`<span>SUN RINGS</span><span>Pass through each gold ring in order, then ${game.isTimeTrial?'beat the target time':'finish before your rival'}. Skipping a ring or flying over it does not count. In Waterworks, follow the route on the map and turn back for missed rings. ${game.isTimeTrial?'Missed ocean rings end the attempt. The timer stops while paused.':'There is no time limit.'}</span><span>RACE BOOST</span><span>Land a completed aerial trick for an automatic speed burst. Link more tricks in an unbanked combo for a stronger, longer boost. ${game.isTimeTrial?'':'Rivals earn boosts with the same rules, so watch their tricks and boost trails. '}No extra boost key. Braking eases off the boost; a wipeout or missed checkpoint clears it.</span>`:''}
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / music. ESC also pauses.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
@@ -184,11 +209,29 @@ function showHelp(){
 `,'GOT IT','CONTROLS');
 }
 function showResults(){
+  if(game.isTimeTrial){showTrialResults();return;}
   if(game.isTournament){showTournamentResults();return;}
   clearInput();const complete=completedGoals(),stars=complete.filter(Boolean).length;const rank=['GROM','LOCAL','LINEUP LEGEND','COAST ROYALTY'][stars];
   openModal('results',game.resultReason||'SESSION OVER',`<div class="results-score">${fmt(game.score)}</div><p>${newBest?'NEW RECORD! · ':''}${rank} · ${stars}/3 CHALLENGES</p>
   <div class="results-stats"><span>BEST COMBO<b>${fmt(game.bestCombo)}</b></span><span>TRICKS BANKED<b>${game.landedTricks}</b></span><span>${isParkMode()?'RAMPS / SLIDES':'SUN RINGS'}<b>${isParkMode()?`${game.visitedRamps.size} / ${game.grindCount}`:game.gates}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span></div>
   <div class="result-goals">${goalNames().map((name,i)=>`${complete[i]?'◆':'◇'} ${name}`).join('<br>')}</div>${selectedMode==='storm'?`<p class="survival-result">SURVIVED <b>${clockText(game.elapsed)}</b> · SWELL ${game.stormStage||1}<br>BEST SURVIVAL: ${clockText(bestSurvival)} · BARRELS: ${game.barrelsSurvived||0}</p>`:''}<p>PERSONAL BEST SCORE: ${fmt(best)}</p>`,'RIDE AGAIN',modeInfo[selectedMode].name);
+}
+
+function showTrials(){
+  if(!game.isTimeTrial)return;
+  openModal('trials','BEAT THE CLOCK',trialListMarkup(trialProgress),`START ${TIME_TRIALS[trialProgress.selectedTrial].name}`,'CHAMPION CIRCUIT / TIME TRIALS');
+}
+function showTrialResults(){
+  clearInput();const win=game.result==='win',earned=game.unlockedSet;
+  const set=typeof earned==='string'?getTrialCosmeticSet(earned):earned;
+  const best=trialProgress.bestTimes?.[game.trial.id]??trialProgress.bestTimes?.[game.trialIndex];
+  openModal('results',win?'TIME BEATEN':game.resultReason||'TIME UP',`<p>TRIAL ${game.trialIndex+1} / 12 · ${game.trial.name}</p><div class="trial-result-time">${trialTime(game.finishTime??game.elapsed)}</div><p>TARGET ${trialTime(game.trial.timeLimit)} · BEST ${trialTime(best)}</p><div class="results-stats"><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>TRIALS CLEARED<b>${trialProgress.completedTrials} / 12</b></span></div>${set?`<div class="trial-unlock"><strong>NEW SET: ${set.name}</strong><p>Outfit and deck graphic unlocked. Equip them here or in the wardrobe and board shop.</p><button type="button" data-trial-equip="${set.id}">EQUIP ${set.name}</button></div>`:''}<p>${win?(trialProgress.completedTrials===12?'ALL TRIALS CLEARED. FOUR COMPLETE COSMETIC SETS EARNED.':'CLEARED. The next run demands a faster line. Replays improve your best time without awarding duplicate clears.'):'Pass every sun ring before the target time. Land tricks for boosts and keep a clean line.'}</p>`,win&&trialProgress.selectedTrial!==game.trialIndex?'NEXT TIME TRIAL':'RETRY TIME TRIAL','CHAMPION CIRCUIT / SOLO RUN');
+}
+function equipTrialSet(id){
+  const set=getTrialCosmeticSet(id);if(!set||!timeTrialsUnlocked(tournamentProgress)||!trialCosmeticUnlocked(id,trialProgress.completedTrials))return false;
+  if(!setProfile({outfit:set.outfit,boardDesign:set.boardDesign,rewardBoard:null}))return false;
+  if(modalMode==='results')showTrialResults();else if(modalMode==='trials')showTrials();
+  return true;
 }
 
 const rewardIcons={guitar:'♫',lightning:'ϟ',vortex:'◎',solar:'☀',sky:'↟'};
@@ -212,21 +255,25 @@ function resetCurrentLadder(){
 function showTournamentResults(){
   clearInput();const win=game.result==='win',venue=isParkMode()?'WATERWORKS RACE':'SURF RACE';
   const finished=game.finishTime!=null,opponentFinished=game.opponentFinishTime!=null;
-  const message=win?(game.complete?(game.allLaddersComplete?'ALL FIVE LADDERS CLEARED. EVERY PRIZE BOARD IS YOURS.':'ALL FIVE RIVALS DEFEATED. LADDER CLEARED.'):`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):'FOLLOW THE SUN RINGS. LAND TRICKS TO BOOST. FINISH FIRST.';
+  const message=win?(game.complete?(game.allLaddersComplete?'ALL FIVE LADDERS CLEARED. TIME TRIALS UNLOCKED — NEW OUTFITS AND DECK STYLES TO WIN.':'ALL FIVE RIVALS DEFEATED. LADDER CLEARED.'):`RANK CLAIMED. NEXT UP: ${TOURNAMENT_RIVALS[game.roundIndex+1].name}.`):'FOLLOW THE SUN RINGS. LAND TRICKS TO BOOST. FINISH FIRST.';
   const reward=win&&game.complete?getRewardBoard(game.ladder.rewardId):null;
-  openModal('results',game.unlockedBoardId?'NEW BOARD UNLOCKED':game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name} · ${venue}</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${finished?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m TO FINISH`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${opponentFinished?clockText(game.opponentFinishTime):`${fmt(Math.max(0,game.course.length-game.opponentRaceProgress))}m TO FINISH`}</small></section></div><p>${message}</p></div>${reward?rewardCard(reward.id,{unlocked:true,equipped:profile.rewardBoard===reward.id,result:true}):''}<div class="results-stats"><span>COURSE<b>${fmt(game.course.length)}m</b></span><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>LADDER<b>${game.ladderIndex+1} / 5</b></span><span>BOARDS WON<b>${tournamentProgress.completedLadders} / 5</b></span></div><p class="rival-footnote">Every ring is required · First across the finish wins.</p>`,win?(game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):'NEXT RIVAL'):'RETRY RIVAL',`THE HIT LIST / ${game.ladder.name}`);
+  openModal('results',game.unlockedBoardId?'NEW BOARD UNLOCKED':game.resultReason,`<div class="showdown-result ${win?'won':'lost'}"><span>RANK #${game.rival.rank} / ${game.rival.name} · ${venue}</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${finished?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m TO FINISH`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${opponentFinished?clockText(game.opponentFinishTime):`${fmt(Math.max(0,game.course.length-game.opponentRaceProgress))}m TO FINISH`}</small></section></div><p>${message}</p></div>${reward?rewardCard(reward.id,{unlocked:true,equipped:profile.rewardBoard===reward.id,result:true}):''}${win&&game.allLaddersComplete?'<button type="button" class="trial-menu-button secondary-button" data-open-trials>ENTER TIME TRIALS</button>':''}<div class="results-stats"><span>COURSE<b>${fmt(game.course.length)}m</b></span><span>SUN RINGS<b>${game.nextCheckpoint} / ${game.course.checkpoints.length}</b></span><span>LADDER<b>${game.ladderIndex+1} / 5</b></span><span>BOARDS WON<b>${tournamentProgress.completedLadders} / 5</b></span></div><p class="rival-footnote">Every ring is required · First across the finish wins.</p>`,win?(game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):'NEXT RIVAL'):'RETRY RIVAL',`THE HIT LIST / ${game.ladder.name}`);
 }
 
 function renderCustomizationChoices(){
-  $('outfit-options').innerHTML=Object.entries(OUTFITS).map(([key,v])=>`<button class="outfit-button" data-outfit="${key}" aria-pressed="false"><strong>${v.name}</strong><span>${v.description}</span></button>`).join('');
+  $('outfit-options').innerHTML=Object.entries(OUTFITS).map(([key,v])=>`<button class="outfit-button" data-outfit="${key}" aria-pressed="false"><strong>${v.name}</strong><span>${v.description}</span>${v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
   const icons={bolt:'ϟ',checker:'▦',flames:'♨',tribal:'≋',hibiscus:'✿',skull:'☠',sunburst:'✺',pinstripe:'///'};
-  $('board-design-options').innerHTML=Object.entries(BOARD_DESIGNS).map(([key,v])=>`<button class="design-button" data-board-design="${key}" aria-pressed="false"><span class="design-symbol">${icons[key]}</span><strong>${v.name}</strong></button>`).join('');
+  $('board-design-options').innerHTML=Object.entries(BOARD_DESIGNS).map(([key,v])=>`<button class="design-button" data-board-design="${key}" aria-pressed="false"><span class="design-symbol">${icons[key]||'◈'}</span><strong>${v.name}</strong>${v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
   updateCustomizationChoices();
 }
 function updateCustomizationChoices(){
   for(const [selector,field] of [['[data-character]','character'],['[data-outfit]','outfit'],['[data-board-color]','boardColor'],['[data-board-design]','boardDesign']]){
     document.querySelectorAll(selector).forEach(b=>{const active=b.getAttribute(selector.slice(1,-1))===profile[field];b.classList.toggle('is-selected',active);b.setAttribute('aria-pressed',String(active));});
   }
+  for(const [selector,catalog]of [['[data-outfit]',OUTFITS],['[data-board-design]',BOARD_DESIGNS]])document.querySelectorAll(selector).forEach(button=>{
+    const key=button.getAttribute(selector.slice(1,-1)),entry=catalog[key];button.disabled=!cosmeticAvailable(entry);
+    const note=button.querySelector('.cosmetic-lock');if(note)note.textContent=button.disabled?`CLEAR ${getTrialCosmeticSet(entry.trialReward).requiredClears} TIME TRIALS`:'TIME TRIAL REWARD · UNLOCKED';
+  });
   $('character-name').textContent=`${CHARACTERS[profile.character].name} / ${OUTFITS[profile.outfit].name}`;
   $('board-name').textContent=getRewardBoard(profile.rewardBoard)?.name||BOARD_DESIGNS[profile.boardDesign].name;
   $('home-surfer-name').textContent=CHARACTERS[profile.character].name;
@@ -255,6 +302,7 @@ function cycleCharacter(direction){
 function setProfile(patch){
   const next=validateProfile({...profile,...patch});
   if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress))return false;
+  if(!cosmeticAvailable(OUTFITS[next.outfit])||!cosmeticAvailable(BOARD_DESIGNS[next.boardDesign]))return false;
   profile=next;write('breakline99-profile',JSON.stringify(profile));game.setRewardBoard(profile.rewardBoard);world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
 }
 function openWorkshop(mode){
@@ -274,7 +322,7 @@ function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game
 function tryPop(){if(game.jump())return;if(game.rewardBoard==='sky'&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE SECOND AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);
-  $('timer').textContent=clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&!game.isRace&&game.time<=20);
+  $('timer').textContent=game.isTimeTrial?trialTime(game.time):clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&(!game.isRace||game.isTimeTrial)&&game.time<=20);
   const counting=game.isRace&&game.phase==='running'&&game.countdownRemaining>0;
   $('race-countdown').classList.toggle('hidden',!counting);
   if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
@@ -313,8 +361,16 @@ function updateHud(){
   else if(followups.length&&!game.trick&&!game.pipeRide&&!game.lipMove&&!game.grinding)$('combo-caption').textContent=`${game.airborne?'NEXT':'NEXT AIR'}: ${followups.map(combo=>combo.keys[1]).join(' / ')} · ${followups.length===1?followups[0].name:'COMBO MOVES'}`;
   $('special-fill').style.width=`${special.value*100}%`;$('special-fill').parentElement.classList.toggle('is-full',special.ready);
   if($('special-label'))$('special-label').textContent=special.ready?'100% READY · I':`SPECIAL ${Math.floor(special.value*100)}%`;
-  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTournament&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
+  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTournament&&!game.isTimeTrial&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
   $('goal-gates').querySelector('span').textContent=isParkMode()?`Hit 5 ramps (${Math.min(5,game.visitedRamps.size)}/5)`:selectedMode==='rush'?`Checkpoints (${Math.min(12,game.gates)}/12)`:selectedMode==='storm'?`Barrel rides (${Math.min(3,game.barrelsSurvived||0)}/3)`:`Sun rings (${Math.min(6,game.gates)}/6)`;
+  if(game.isTimeTrial){
+    $('rival-name').textContent=`${String(game.trialIndex+1).padStart(2,'0')} / ${game.trial.name}`;
+    $('rival-score').textContent=`TARGET ${trialTime(game.trial.timeLimit)}`;
+    $('rival-target').textContent=`${fmt(game.distanceRemaining)}m TO FINISH · SUN RINGS ${game.nextCheckpoint}/${game.course.checkpoints.length}`;
+    $('rival-gap').textContent=`ELAPSED ${trialTime(game.elapsed)}`;
+    $('rival-hud').classList.toggle('ahead',game.time>0);
+    $('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.raceProgress/game.course.length*100))}%`;
+  }
   if(game.isTournament){
     $('rival-name').textContent=`L${game.ladderIndex+1} · #${game.rival.rank} ${game.rival.name}`;
     const gap=game.isRace?game.lead:game.score-game.rivalScore;
@@ -333,7 +389,7 @@ function updateHud(){
   }
   if(isParkMode())parkMap?.update(game);
   if(!isParkMode()||game.isRace) {
-    $('surf-objective').textContent=game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
+    $('surf-objective').textContent=game.isTimeTrial?`BEAT ${trialTime(game.trial.timeLimit)} · EVERY SUN RING REQUIRED`:game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
     const tube=game.barrel,barrelHint=tube?.inside?'BARREL RIDE · HOLD THE OPEN LINE':tube&&tube.startDistance-game.distance<70?(game.x>tube.x+1.5?'BARREL AHEAD · CARVE LEFT':game.x<tube.x-1.5?'BARREL AHEAD · CARVE RIGHT':'BARREL AHEAD · HOLD YOUR LINE'):'';
     const nextGate=game.isRace?game.course.checkpoints[game.nextCheckpoint]:null;
     let raceHint=nextGate?`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
@@ -363,9 +419,14 @@ document.addEventListener('pointerdown',event=>{if(!bootReady||event.target.clos
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
 $('race-ladders').addEventListener('click',showLadder);
+$('trial-button').addEventListener('click',showTrials);
+$('race-trials').addEventListener('click',showTrials);
 $('standard-board').addEventListener('click',()=>setProfile({rewardBoard:null}));
 $('modal-content').addEventListener('click',event=>{
   const button=event.target.closest('button');if(!button||button.disabled)return;
+  if(button.dataset.openTrials!==undefined){selectMode('trials');goHome();showTrials();return;}
+  if(button.dataset.trialEquip){equipTrialSet(button.dataset.trialEquip);return;}
+  if(button.dataset.trial!==undefined){const next=selectTimeTrial(trialProgress,Number(button.dataset.trial));if(next){trialProgress=next;write('breakline99-trials-v1',JSON.stringify(next));goHome();showTrials();}return;}
   if(button.dataset.resetLadder!==undefined){resetCurrentLadder();return;}
   if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard}))showTournamentResults();
   if(button.dataset.ladder!==undefined){
@@ -374,7 +435,7 @@ $('modal-content').addEventListener('click',event=>{
   }
 });
 $('modal-home').addEventListener('click',goHome);
-$('modal-action').addEventListener('click',()=>['results','ladder'].includes(modalMode)?startRun():modalMode==='graphics'?location.reload():closeModal());
+$('modal-action').addEventListener('click',()=>['results','ladder','trials'].includes(modalMode)?startRun():modalMode==='graphics'?location.reload():closeModal());
 $('quality').addEventListener('click',()=>{$('quality').textContent=world.toggleQuality()?'VIDEO: 1999':'VIDEO: CLEAN';});
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();goHome();});
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>selectMode(b.dataset.mode)));
@@ -385,7 +446,7 @@ $('previous-character').addEventListener('click',()=>cycleCharacter(-1));$('next
 $('rotate-left').addEventListener('click',()=>preview?.rotate(-.5));$('rotate-right').addEventListener('click',()=>preview?.rotate(.5));
 $('wardrobe-toggle').addEventListener('click',()=>$('wardrobe').classList.toggle('hidden'));$('wardrobe-close').addEventListener('click',()=>$('wardrobe').classList.add('hidden'));
 document.querySelectorAll('[data-workshop]').forEach(b=>b.addEventListener('click',()=>openWorkshop(b.dataset.workshop)));
-$('workshop').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.character)setProfile({character:b.dataset.character});if(b.dataset.outfit)setProfile({outfit:b.dataset.outfit});if(b.dataset.boardColor)setProfile({boardColor:b.dataset.boardColor,rewardBoard:null});if(b.dataset.boardDesign)setProfile({boardDesign:b.dataset.boardDesign,rewardBoard:null});if(b.dataset.rewardBoard)setProfile({rewardBoard:b.dataset.rewardBoard});});
+$('workshop').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;if(b.dataset.character)setProfile({character:b.dataset.character});if(b.dataset.outfit)setProfile({outfit:b.dataset.outfit});if(b.dataset.boardColor)setProfile({boardColor:b.dataset.boardColor,rewardBoard:null});if(b.dataset.boardDesign)setProfile({boardDesign:b.dataset.boardDesign,rewardBoard:null});if(b.dataset.rewardBoard)setProfile({rewardBoard:b.dataset.rewardBoard});});
 
 try{
   await paintLoadingStage();

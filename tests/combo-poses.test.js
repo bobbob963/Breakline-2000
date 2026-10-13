@@ -91,7 +91,7 @@ test('Crosscut visibly changes the ordinary B hold without adding a body roll or
   }finally{disposeSurfer(s);}
 });
 
-test('all 48 riders keep sewn cloth, fixed limbs, real grab contact and planted board feet in combo moves',t=>{
+test('all riders keep sewn cloth, fixed limbs, real grab contact and planted board feet in combo moves',t=>{
   let frames=0,contacts=0,seams=0;
   const bindings=[['left',[-.035,.215,-.34],[.163,.181,-.36]],['right',[-.069,.215,.36],[.128,.181,.395]]];
   for(const character of Object.keys(CHARACTERS))for(const outfit of Object.keys(OUTFITS)){
@@ -120,7 +120,8 @@ test('all 48 riders keep sewn cloth, fixed limbs, real grab contact and planted 
       }
     }finally{disposeSurfer(s);}
   }
-  assert.equal(frames,2160);assert.equal(contacts,576);t.diagnostic(`${frames} combo frames, ${contacts} actual held deck contacts, ${seams} joined cloth vertices and both transformed foot bindings checked.`);
+  const riderCount=Object.keys(CHARACTERS).length*Object.keys(OUTFITS).length;
+  assert.equal(frames,riderCount*45);assert.equal(contacts,riderCount*12);t.diagnostic(`${frames} combo frames, ${contacts} actual held deck contacts, ${seams} joined cloth vertices and both transformed foot bindings checked.`);
 });
 
 test('combo entry and release converge continuously to ordinary geometry including foot orientation',()=>{

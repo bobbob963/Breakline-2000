@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCharacter } from './character-model.js';
 import { getRewardBoard } from './board-rewards.js';
+import { getTrialCosmeticSet } from './trial-cosmetics.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export const CHARACTERS = {
@@ -22,11 +23,19 @@ export const OUTFITS = {
   neon: { name: 'HIGH TIDE', description: 'Long-sleeve blue rashguard and fluorescent panel shorts.', top: 'rashguard', shirt: '#234c75', shorts: '#303940', accent: '#b0cf52', pattern: 'rashguard', shortPattern: 'panel', sleeves: 'long' },
   yardcrew: { name: 'YARD CREW', description: 'Loose grey sweatshirt, full-length baggy cargo trousers, white cap and trainers.', top: 'sweatshirt', bottom: 'trousers', shirt: '#aeb1af', shorts: '#757b7a', accent: '#d5b448', pattern: 'yardbadge', shortPattern: 'cargo', sleeves: 'long', hat: 'whitecap', footwear: 'trainers' },
   suncrew: { name: 'SUN CREW', description: 'Faded yellow sweatshirt, wide navy trousers, white cap and trainers.', top: 'sweatshirt', bottom: 'trousers', shirt: '#c0b252', shorts: '#34445d', accent: '#456874', pattern: 'crewbolt', shortPattern: 'cargo', sleeves: 'long', hat: 'whitecap', footwear: 'trainers' },
+  afterhours: { name: 'AFTERHOURS', trialReward: 'afterhours', description: 'Ink-black oversized surf tee, violet panel shorts and a backwards cap. Time Trials prize.', top: 'oversized', shirt: '#252634', shorts: '#614966', accent: '#d88fbe', pattern: 'static', shortPattern: 'panel', hat: 'cap', sleeves: 'short' },
+  ripcurrent: { name: 'RIP CURRENT', trialReward: 'ripcurrent', description: 'Seafoam long-sleeve rashguard, deep teal striped shorts and pale coral detailing. Time Trials prize.', top: 'rashguard', shirt: '#81b8af', shorts: '#244d59', accent: '#e3b69c', pattern: 'rashguard', shortPattern: 'stripe', sleeves: 'long' },
+  furnace: { name: 'FURNACE', trialReward: 'furnace', description: 'Rust-red crew sweatshirt, full-length charcoal cargo trousers, cream cap and trainers. Time Trials prize.', top: 'sweatshirt', bottom: 'trousers', shirt: '#9e4e38', shorts: '#393b3b', accent: '#dab762', pattern: 'crewbolt', shortPattern: 'cargo', hat: 'whitecap', sleeves: 'long', footwear: 'trainers' },
+  chronocrew: { name: 'CHRONO CREW', trialReward: 'chronocrew', description: 'Cream racing raglan with forest-green sleeves, checked shorts and a shell necklace. Time Trials champion prize.', top: 'raglan', shirt: '#ded7bf', shorts: '#b4b99e', accent: '#355b50', pattern: 'badge', shortPattern: 'checker', sleeves: 'threequarter', necklace: true },
 };
 export const BOARD_DESIGNS = {
   bolt: { name: 'LIGHTNING' }, checker: { name: 'CHECKER RIP' }, flames: { name: 'HOT ROD' },
   tribal: { name: 'BLACK TIDE' }, hibiscus: { name: 'HIBISCUS' }, skull: { name: 'SKULL REEF' },
   sunburst: { name: 'SOLAR FLARE' }, pinstripe: { name: 'PINSTRIPE' },
+  afterhours: { name: 'AFTERHOURS', trialReward: 'afterhours', description: 'Magenta night-slash graphics, mint orbit and checker tail.' },
+  ripcurrent: { name: 'RIP CURRENT', trialReward: 'ripcurrent', description: 'Layered curling surf, contour lines and coral sun.' },
+  furnace: { name: 'FURNACE', trialReward: 'furnace', description: 'Industrial pressure dial, copper pipes and hazard stripes.' },
+  chronocrew: { name: 'CHRONO CREW', trialReward: 'chronocrew', description: 'Championship stopwatch, racing stripes and finish-line checks.' },
 };
 export const DEFAULT_PROFILE = { character: 'kai', outfit: 'riptide', boardColor: '#f5d329', boardDesign: 'bolt', rewardBoard: null };
 const colors = ['#f5d329', '#e95b39', '#24c5ba', '#8755bb', '#f5ede0'];
@@ -164,6 +173,7 @@ function fabricTexture(outfit, shorts = false) {
 }
 function boardTexture(profile) {
   if (getRewardBoard(profile.rewardBoard)) return rewardBoardTexture(profile.rewardBoard);
+  if (getTrialCosmeticSet(profile.boardDesign)) return trialBoardTexture(profile.boardDesign);
   const c = document.createElement('canvas'); c.width = 64; c.height = 256;
   const ctx = c.getContext('2d'); ctx.fillStyle = profile.boardColor; ctx.fillRect(0, 0, 64, 256);
   ctx.fillStyle = '#182637';
@@ -207,6 +217,65 @@ function boardTexture(profile) {
   ctx.globalAlpha = .06;
   for (let i = 0; i < 340; i++) { ctx.fillStyle = i % 2 ? '#fff' : '#071322'; ctx.fillRect((i * 37) % 64, (i * 71) % 256, 1, i % 7 === 0 ? 4 : 1); }
   return canvasTexture(c);
+}
+// Four screen-printed Time Trials decks with different compositions and motifs,
+// not alternate colours of the ladder boards. Keep the same PS1 texture density.
+export function trialBoardTexture(id) {
+  const set = getTrialCosmeticSet(id);
+  if (!set) return null;
+  const c=document.createElement('canvas');c.width=64;c.height=256;
+  const ctx=c.getContext('2d');
+  const palettes={afterhours:['#222637','#cc709c','#9ed3bd'],ripcurrent:['#194956','#95d2c3','#edb893'],furnace:['#333b3a','#c27646','#e5c782'],chronocrew:['#e0d7b8','#2f5d50','#ad4935']};
+  const [base,ink,accent]=palettes[id];
+  const polygon=(points,color)=>{ctx.fillStyle=color;ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill();};
+  const line=(points,color,width=2)=>{ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();};
+  ctx.fillStyle=base;ctx.fillRect(0,0,64,256);
+  if(id==='afterhours') {
+    // A sharp night-surf slash across a long orbit, with an offset checker tail.
+    polygon([[0,17],[29,17],[62,70],[42,95],[63,181],[36,181],[13,114],[32,82]],ink);
+    ctx.strokeStyle=accent;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(31,100,23,74,-.15,0,Math.PI*2);ctx.stroke();
+    polygon([[4,156],[21,109],[36,91],[26,131],[54,114],[35,156],[19,181]],'#eee0c5');
+    for(let y=182;y<212;y+=6)for(let x=0;x<64;x+=6)if((x/6+y/6)%2<1){ctx.fillStyle=ink;ctx.fillRect(x,y,6,6);}
+    line([[8,23],[21,43],[14,49]],accent,2);
+    ctx.fillStyle=accent;ctx.fillRect(47,163,3,29);ctx.fillRect(42,173,13,3);
+  } else if(id==='ripcurrent') {
+    // Stacked hooked wave crests flow down the full length of the deck.
+    ctx.fillStyle=accent;ctx.beginPath();ctx.arc(37,48,17,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<3;i++){
+      const y=40+i*54;
+      ctx.fillStyle=i%2?'#468e99':ink;ctx.beginPath();ctx.moveTo(0,y+69);ctx.bezierCurveTo(14,y+33,32,y+11,59,y+30);ctx.bezierCurveTo(44,y+19,23,y+46,33,y+57);ctx.bezierCurveTo(47,y+36,63,y+60,64,y+79);ctx.lineTo(64,y+95);ctx.lineTo(0,y+95);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='#d8e8ca';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(3,y+66);ctx.bezierCurveTo(17,y+38,35,y+17,54,y+27);ctx.stroke();
+    }
+    for(let i=0;i<4;i++)line([[9+i*3,10],[9+i*3,24],[4+i*3,35]],'#9abbaa',1);
+    ctx.fillStyle='#e9d7b6';for(const [x,y]of [[46,64],[54,71],[22,112],[41,171]])ctx.fillRect(x,y,2,3);
+  } else if(id==='furnace') {
+    // Copper pipe runs surround a circular industrial pressure dial.
+    line([[13,0],[13,67],[5,76],[5,186],[20,202]],'#111f27',10);
+    line([[13,0],[13,67],[5,76],[5,186],[20,202]],ink,6);
+    line([[51,0],[51,53],[58,61],[58,177],[44,192],[44,209]],ink,7);
+    for(const y of [24,46,150,171]){ctx.fillStyle=accent;ctx.fillRect(8,y,10,4);ctx.fillRect(53,y+8,10,4);}
+    ctx.fillStyle=ink;ctx.beginPath();ctx.arc(32,114,24,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=accent;ctx.beginPath();ctx.arc(32,114,19,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<9;i++){const a=Math.PI*.78+i*Math.PI*1.44/8;line([[32+Math.cos(a)*13,114+Math.sin(a)*13],[32+Math.cos(a)*17,114+Math.sin(a)*17]],'#283431',2);}
+    line([[32,119],[39,101]],'#ae4231',3);ctx.fillStyle='#2e3934';ctx.fillRect(28,122,8,4);
+    for(const y of [67,182]){ctx.fillStyle=accent;ctx.fillRect(17,y,30,13);for(let x=15;x<47;x+=12)polygon([[x,y],[x+6,y],[x+13,y+13],[x+7,y+13]],'#2a3434');}
+  } else {
+    // Stopwatch face at the nose, racing stripes and a flowing finish ribbon.
+    ctx.fillStyle=ink;ctx.fillRect(10,0,9,256);ctx.fillRect(44,0,3,256);
+    ctx.fillStyle=accent;ctx.fillRect(22,0,3,256);
+    ctx.fillStyle=ink;ctx.fillRect(28,35,10,7);ctx.fillRect(31,42,4,8);
+    ctx.beginPath();ctx.arc(33,74,23,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ece2c5';ctx.beginPath();ctx.arc(33,74,18,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<12;i++){const a=i*Math.PI/6;line([[33+Math.cos(a)*13,74+Math.sin(a)*13],[33+Math.cos(a)*16,74+Math.sin(a)*16]],ink,1);}
+    line([[25,82],[33,74],[33,60]],accent,2);ctx.fillStyle=ink;ctx.fillRect(31,72,4,4);
+    polygon([[0,132],[64,112],[64,167],[0,187]],ink);
+    for(let y=0;y<4;y++)for(let x=0;x<9;x++)if((x+y)%2===0)polygon([[x*8,136+y*10-x*2.5],[x*8+8,133.5+y*10-x*2.5],[x*8+8,143.5+y*10-x*2.5],[x*8,146+y*10-x*2.5]],'#e2d9b9');
+    ctx.fillStyle=accent;ctx.font='bold italic 24px monospace';ctx.textAlign='center';ctx.fillText('99',35,207);
+  }
+  ctx.fillStyle='#172b32';ctx.fillRect(7,217,50,20);ctx.strokeStyle=accent;ctx.lineWidth=1;ctx.strokeRect(7,217,50,20);
+  ctx.fillStyle='#f2e5c9';ctx.textAlign='center';ctx.font='bold 5px monospace';ctx.fillText(set.name,32,225);ctx.font='bold 5px monospace';ctx.fillText('TIME TRIALS / 99',32,233);
+  ctx.globalAlpha=.06;for(let i=0;i<170;i++){ctx.fillStyle=i%2?'#fff4d3':'#111b22';ctx.fillRect((i*37)%64,(i*71)%256,1,i%7?1:3);}ctx.globalAlpha=1;
+  const texture=canvasTexture(c);texture.name='trial-deck-'+id;return texture;
 }
 // Five original screen-printed decks. Art stays crisp and angular at the same
 // texture density as the standard board; reward gear never changes rider shape.

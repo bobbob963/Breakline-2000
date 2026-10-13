@@ -8,7 +8,7 @@ const ctx=new Proxy({},{get:(_,key)=>['createLinearGradient','createRadialGradie
 function withSurfer(profile,run){const saved=globalThis.document;globalThis.document={createElement:()=>({getContext:()=>ctx})};let surfer;try{surfer=createSurfer(profile);return run(surfer);}finally{if(surfer)disposeSurfer(surfer);if(saved===undefined)delete globalThis.document;else globalThis.document=saved;}}
 function points(object){const attribute=object.geometry.attributes.position;return Array.from({length:attribute.count},(_,i)=>object.localToWorld(new THREE.Vector3().fromBufferAttribute(attribute,i)));}
 
-test('all48 menu riders rest actual hands on upright board with fixed limbs and grounded feet',t=>{
+test('all menu riders rest actual hands on upright board with fixed limbs and grounded feet',t=>{
   let count=0,maxContact=0,minWristDot=1;
   for(const character of Object.keys(CHARACTERS))for(const outfit of Object.keys(OUTFITS))withSurfer({character,outfit},surfer=>{
     arrangeMenuSurfer(surfer);let feet;
@@ -24,7 +24,7 @@ test('all48 menu riders rest actual hands on upright board with fixed limbs and 
       const bounds=new THREE.Box3().setFromObject(surfer.boardPivot);assert.ok(Math.abs(bounds.min.y-.013)<1e-6,'Upright board tail stays on the floor');count++;
     }
   });
-  assert.equal(count,192);t.diagnostic(`192 poses: maximum hand/board target gap ${(maxContact*1000).toFixed(6)}mm; minimum forward wrist alignment ${minWristDot.toFixed(3)}.`);
+  assert.equal(count,Object.keys(CHARACTERS).length*Object.keys(OUTFITS).length*4);t.diagnostic(`${count} poses: maximum hand/board target gap ${(maxContact*1000).toFixed(6)}mm; minimum forward wrist alignment ${minWristDot.toFixed(3)}.`);
 });
 
 test('menu lean keeps shirt sleeves and trouser seat sewn and all vertices finite',()=>{

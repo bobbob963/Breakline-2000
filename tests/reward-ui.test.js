@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { validateProfile } from '../src/appearance.js';
+import { validateProfile, OUTFITS, BOARD_DESIGNS } from '../src/appearance.js';
 import { getRewardBoard, rewardBoardUnlocked } from '../src/board-rewards.js';
 import { SurfGame, COMBO_WINDOW, MIN_X, MAX_X, waveCrest } from '../src/game.js';
 import { WaveParkGame, PARK_BOUNDS } from '../src/park.js';
 import { createTournamentGame, sanitizeTournamentProgress, nextTournamentLadder, selectTournamentLadder } from '../src/tournament.js';
 import { COMBO_ANIMATIONS } from '../src/combo-animations.js';
+import { sanitizeTimeTrialProgress,timeTrialsUnlocked } from '../src/time-trial-progress.js';
+import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const noOp = () => {};
@@ -21,12 +23,14 @@ function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 
   const context = {
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
+    trialProgress:sanitizeTimeTrialProgress(null),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
     game: new SurfGame(), write: (key, value) => writes.push([key, JSON.parse(value)]),
     world: { setProfile: profile => visual.push({ ...profile }) },
     preview: { setProfile: profile => previews.push({ ...profile }) },
     menuSurfer: { setProfile: profile => menuPreviews.push({ ...profile }) },
     updateCustomizationChoices: () => updates.push(true),
   };
+  vm.runInNewContext(block('function cosmeticAvailable(', 'if(!cosmeticAvailable(OUTFITS'), context);
   vm.runInNewContext(block('function setProfile(', 'function openWorkshop('), context);
   return { context, writes, visual, previews, menuPreviews, updates };
 }
@@ -61,7 +65,7 @@ test('boot restoration strips a locked board but restores an earned board and mi
       ['breakline99-profile', JSON.stringify({ rewardBoard: scenario.reward })],
       [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
     ]);
-    const context = { validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, read: (key, fallback) => values.get(key) ?? fallback };
+    const context = { validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
     vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
     assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
     if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);
