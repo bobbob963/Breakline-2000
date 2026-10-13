@@ -14,6 +14,7 @@ import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,updateAdminScope } from '../src/admin-settings.js';
 import { everythingUnlocked,persistAdminEntries,resetBreaklineSave } from '../src/admin-save.js';
 import { chooseSurfWeather,getSurfWeather,getSurfSessionWeather } from '../src/surf-weather.js';
+import { resolveRideTrack } from '../src/audio.js';
 import { SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret } from '../src/secret-progress.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
@@ -57,6 +58,32 @@ function customSettings(profile) {
   settings=updateAdminScope(settings,profile,'character',{jumpPower:1.7,specialGain:2,scoreMultiplier:2});
   return updateAdminScope(settings,profile,'board',{baseSpeed:1.5,boostPower:2,popRecovery:0});
 }
+
+test('admin weather applies independently of stats and persists through reload, new sessions and retries',()=>{
+  for(const weather of ['dawn','noon','sunset','dusk']) {
+    const {context:c,saved}=fixture();
+    c.applyAdminSettings(sanitizeAdminSettings({enabled:false,environment:{surfWeather:weather}}));
+    assert.equal(c.game.weatherId,weather,'home preview uses chosen conditions');
+    assert.equal(c.game.baseSpeedMultiplier,1);
+    c.adminSettings=sanitizeAdminSettings(JSON.parse(saved.getItem(ADMIN_STORAGE_KEY)));
+    c.makeGame();c.startRun();assert.equal(c.game.weatherId,weather);
+    assert.equal(resolveRideTrack(c.game),weather==='sunset'?'sunset':'surf');
+    c.restartRun();assert.equal(c.game.weatherId,weather);
+    assert.equal(saved.getItem('breakline99-weather'),weather);
+  }
+});
+
+test('returning admin weather to random rerolls without allowing storms, while Survival stays stormy',()=>{
+  const {context:c}=fixture();
+  c.applyAdminSettings(sanitizeAdminSettings({environment:{surfWeather:'sunset'}}));
+  c.startRun();assert.equal(c.game.weatherId,'sunset');
+  c.applyAdminSettings(sanitizeAdminSettings(null));c.restartRun();
+  assert.notEqual(c.game.weatherId,'sunset');assert.notEqual(c.game.weatherId,'storm');
+  c.selectedMode='storm';c.makeGame();
+  c.applyAdminSettings(sanitizeAdminSettings({environment:{surfWeather:'noon'}}));
+  assert.equal(c.game.weatherId,'storm');
+  c.startRun();assert.equal(c.game.weatherId,'storm');c.restartRun();assert.equal(c.game.weatherId,'storm');
+});
 
 test('actual Apply saves validated tuning before updating the selected rider and reports storage failure without partial state',()=>{
   const {context:c,saved,calls}=fixture(),custom=customSettings(c.profile);
@@ -126,7 +153,7 @@ test('Give Me Everything opens every reward and course without inventing persona
   for(const entry of [...Object.values(OUTFITS),...Object.values(BOARD_DESIGNS)])assert.ok(c.cosmeticAvailable(entry));
   assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40]);assert.ok(c.trialProgress.bestTimes.slice(3).every(time=>time===null));
   assert.deepEqual(c.profile,beforeProfile);assert.equal(c.adminSettings,beforeSettings);assert.equal(saved.getItem('breakline99-best-surf'),'12000');
-  assert.equal(JSON.parse(saved.getItem('breakline99-trials-v1')).completedTrials,12);assert.equal(calls.mode,1);assert.equal(calls.choices,1);
+  assert.equal(JSON.parse(saved.getItem('breakline99-trials-v1')).completedTrials,12);assert.equal(calls.mode,2);assert.equal(calls.choices,1);
   assert.equal(c.secretProgress.deadtimeUnlocked,true);assert.equal(JSON.parse(saved.getItem(SECRET_STORAGE_KEY)).deadtimeUnlocked,true);
   assert.equal(saved.getItem('breakline99-survival-time'),null,'unlock-all does not fabricate a five-minute record');
   c.giveEverything();assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40],'repeating unlock does not change earned times');

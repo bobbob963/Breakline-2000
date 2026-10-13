@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from '../src/admin-settings.js';
+import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from '../src/admin-settings.js';
 import { getRewardBoard } from '../src/board-rewards.js';
 
 const source=readFileSync(new URL('../src/admin-panel.js',import.meta.url),'utf8');
@@ -24,7 +24,12 @@ function panelFixture(initial={}) {
       if(!this.children.has(selector))this.children.set(selector,new Element(selector));
       return this.children.get(selector);
     }
-    querySelectorAll(){return [];}
+    querySelectorAll(selector){
+      if(!selector.includes(':disabled'))return [];
+      return [this.querySelector('[data-admin-action="close"]'),this.querySelector('#admin-enabled'),
+        ...(selector.includes('select:not(:disabled)')?[this.querySelector('#admin-surf-weather')]:[]),this.querySelector('.admin-apply')];
+    }
+    closest(){return null;}
     addEventListener(name,handler){this.events.set(name,handler);}
     removeEventListener(name){this.events.delete(name);}
     setAttribute(){} removeAttribute(){} remove(){} scrollIntoView(){}
@@ -32,19 +37,21 @@ function panelFixture(initial={}) {
     reportValidity(){return true;}
     async dispatch(name,event){await this.events.get(name)?.(event);}
   }
-  const context={document,CHARACTERS:{kai:{name:'KAI'}},getRewardBoard,ADMIN_CHARACTER_FIELDS,ADMIN_BOARD_FIELDS,
+  const context={document,CHARACTERS:{kai:{name:'KAI'}},getRewardBoard,ADMIN_CHARACTER_FIELDS,ADMIN_BOARD_FIELDS,ADMIN_SURF_WEATHER_OPTIONS,
     getAdminScope,updateAdminScope,resetAdminScope,sanitizeAdminSettings};
   vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace('export function createAdminPanel','function createAdminPanel'),context);
   const panel=context.createAdminPanel({
     getState:()=>({settings,profile:{character:'kai',rewardBoard:null}}),
     onApply:value=>{calls.applied.push(value);settings=value;},
-    onGiveEverything:()=>{calls.give++;},onFullReset:()=>{calls.reset++;},onClose:()=>{calls.closed++;},
+    onGiveEverything:()=>{calls.give++;},onFullReset:()=>{calls.reset++;settings=sanitizeAdminSettings(null);},onClose:()=>{calls.closed++;},
   });
   const query=selector=>overlay.querySelector(selector);
-  return {panel,calls,query,get settings(){return settings;},
+  return {panel,calls,query,document,get settings(){return settings;},
     async check(selector,value){const input=query(selector);input.checked=value;await overlay.dispatch('input',{target:input});},
     async click(name){await overlay.dispatch('click',{target:{closest:()=>({dataset:{adminAction:name}})}});},
     async apply(){await query('form').dispatch('submit',{preventDefault:noOp});},
+    async select(value){const input=query('#admin-surf-weather');input.value=value;await overlay.dispatch('input',{target:input});},
+    async key(event){await overlay.dispatch('keydown',{stopPropagation:noOp,preventDefault:noOp,...event});},
   };
 }
 
@@ -86,4 +93,44 @@ test('Full Reset remains an explicit two-step action, while the cheat control ex
   assert.match(source,/id="admin-slow-motion" aria-describedby="admin-slow-motion-description"/);
   assert.match(source,/Use slow motion with any board, even with custom stats switched off/);
   assert.match(source,/6-second charge/);assert.match(source,/\+50% speed for 3 seconds/);assert.match(source,/12 seconds/);
+});
+
+test('weather applies with custom stats disabled and reopens at the saved setting',async()=>{
+  const f=panelFixture();f.panel.open();
+  assert.equal(f.query('#admin-surf-weather').value,'random');
+  await f.select('sunset');assert.equal(f.settings.environment.surfWeather,'random','selection is draft only');
+  await f.apply();assert.equal(f.settings.enabled,false);assert.equal(f.settings.environment.surfWeather,'sunset');
+  assert.equal(f.panel.isOpen,false);
+  f.panel.open();assert.equal(f.query('#admin-surf-weather').value,'sunset');
+  await f.select('random');await f.apply();assert.equal(f.settings.environment.surfWeather,'random');
+});
+
+test('cancel discards weather while rider defaults and unlocks preserve an unapplied weather choice',async()=>{
+  const f=panelFixture({environment:{surfWeather:'dusk'}});f.panel.open();
+  await f.select('dawn');await f.click('close');assert.equal(f.calls.applied.length,0);
+  f.panel.open();assert.equal(f.query('#admin-surf-weather').value,'dusk');
+  await f.select('noon');await f.click('defaults');await f.click('give');
+  assert.equal(f.query('#admin-surf-weather').value,'noon');assert.equal(f.settings.environment.surfWeather,'dusk');
+  assert.equal(f.calls.give,1);assert.equal(f.calls.applied.length,0);
+  await f.apply();assert.equal(f.settings.environment.surfWeather,'noon');
+});
+
+test('Full Reset clears a stored weather choice and the unsaved weather draft',async()=>{
+  const f=panelFixture({environment:{surfWeather:'sunset'}});f.panel.open();await f.select('dusk');
+  await f.click('reset');await f.click('cancel-reset');
+  assert.equal(f.settings.environment.surfWeather,'sunset');assert.equal(f.query('#admin-surf-weather').value,'dusk');
+  await f.click('reset');await f.click('confirm-reset');
+  assert.equal(f.calls.reset,1);assert.equal(f.settings.environment.surfWeather,'random');
+  f.panel.open();assert.equal(f.query('#admin-surf-weather').value,'random');
+});
+
+test('weather select stays in the keyboard focus cycle and describes its limits',async()=>{
+  const f=panelFixture();f.panel.open();const weather=f.query('#admin-surf-weather');weather.focus();
+  let prevented=0;
+  await f.key({key:'Tab',preventDefault:()=>prevented++});
+  assert.equal(prevented,0,'Tab should naturally advance from the included select, rather than resetting to the first control');
+  assert.equal(f.document.activeElement,weather);
+  assert.match(source,/Surf Session weather \/ time/);
+  assert.match(source,/This works with custom stats switched off/);
+  assert.match(source,/Survival always stays stormy/);
 });

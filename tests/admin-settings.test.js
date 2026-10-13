@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sanitizeAdminSettings, getAdminScope, updateAdminScope, resetAdminScope,
-  resolveAdminStats, sanitizeResolvedAdminStats,
+  resolveAdminStats, sanitizeResolvedAdminStats, ADMIN_SURF_WEATHER_OPTIONS,
 } from '../src/admin-settings.js';
 
 test('missing and malformed admin saves start disabled with no overrides',()=>{
   for (const value of [undefined,null,false,[],42,'enabled',{enabled:'true',characters:[],boards:'sky'}]) {
-    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{},cheats:{slowMotion:false}});
+    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{},cheats:{slowMotion:false},environment:{surfWeather:'random'}});
   }
   assert.equal(sanitizeAdminSettings({enabled:true}).enabled,true);
 });
@@ -18,14 +18,14 @@ test('saved stats reject nonfinite values and unknown fields, while clamping saf
     boards:{sky:{baseSpeed:-3,boostPower:99,extraJumps:2.9,popRecovery:0,glideGravity:-Infinity,boostDuration:null,unknown:1},unknown:{baseSpeed:3}},
   });
   assert.deepEqual(saved,{
-    version:1,enabled:true,cheats:{slowMotion:false},
+    version:1,enabled:true,cheats:{slowMotion:false},environment:{surfWeather:'random'},
     characters:{kai:{jumpPower:3,gravity:.25,comboWindow:5}},
     boards:{sky:{baseSpeed:.25,boostPower:4,popRecovery:0,extraJumps:2}},
   });
   const inherited = Object.create({kai:{jumpPower:2}});
   const inheritedStats = Object.create({boostPower:4});
   assert.deepEqual(sanitizeAdminSettings({characters:inherited,boards:{standard:inheritedStats}}),{
-    version:1,enabled:false,characters:{},boards:{standard:{}},cheats:{slowMotion:false},
+    version:1,enabled:false,characters:{},boards:{standard:{}},cheats:{slowMotion:false},environment:{surfWeather:'random'},
   });
 });
 
@@ -165,4 +165,43 @@ test('slow motion round-trips through save JSON and rider tuning without sharing
   loaded.cheats.slowMotion=false;
   assert.equal(saved.cheats.slowMotion,true);
   assert.equal(source.cheats.slowMotion,true);
+});
+
+test('legacy admin saves gain random calm weather without changing saved tuning',()=>{
+  const saved=sanitizeAdminSettings({version:1,enabled:true,characters:{kai:{jumpPower:1.5}},boards:{sky:{extraJumps:2}},cheats:{slowMotion:true}});
+  assert.deepEqual(saved.environment,{surfWeather:'random'});
+  assert.equal(saved.characters.kai.jumpPower,1.5);assert.equal(saved.boards.sky.extraJumps,2);
+  assert.equal(saved.cheats.slowMotion,true);assert.equal(saved.enabled,true);
+});
+
+test('weather admits only explicit own calm presets and rejects storm and malformed saves',()=>{
+  assert.deepEqual(ADMIN_SURF_WEATHER_OPTIONS.map(option=>option.value),['random','dawn','noon','sunset','dusk']);
+  for(const {value} of ADMIN_SURF_WEATHER_OPTIONS) {
+    for(const enabled of [false,true]) {
+      const saved=sanitizeAdminSettings({enabled,environment:{surfWeather:value,unknown:'storm'}});
+      assert.deepEqual(saved.environment,{surfWeather:value});assert.equal(saved.enabled,enabled);
+    }
+  }
+  for(const value of ['storm','SUNSET','__proto__','constructor',undefined,null,0,true,{},[],new String('sunset')]) {
+    assert.deepEqual(sanitizeAdminSettings({environment:{surfWeather:value}}).environment,{surfWeather:'random'});
+  }
+  for(const source of [
+    {environment:true},{environment:'sunset'},{environment:[]},
+    {environment:Object.create({surfWeather:'sunset'})},Object.create({environment:{surfWeather:'sunset'}}),
+  ]) assert.deepEqual(sanitizeAdminSettings(source).environment,{surfWeather:'random'});
+});
+
+test('weather persists through JSON and rider-default resets without sharing its object',()=>{
+  const profile={character:'kai',rewardBoard:null};
+  const original={enabled:false,environment:{surfWeather:'sunset'}};
+  const tuned=updateAdminScope(original,profile,'board',{boostPower:2});
+  const reset=resetAdminScope(tuned,profile);
+  assert.equal(reset.environment.surfWeather,'sunset');assert.equal(reset.enabled,false);
+  const loaded=sanitizeAdminSettings(JSON.parse(JSON.stringify(reset)));
+  assert.equal(loaded.environment.surfWeather,'sunset');
+  loaded.environment.surfWeather='dawn';
+  assert.equal(reset.environment.surfWeather,'sunset');
+  reset.environment.surfWeather='dusk';
+  assert.equal(tuned.environment.surfWeather,'sunset');assert.equal(original.environment.surfWeather,'sunset');
+  assert.equal(sanitizeAdminSettings(null).environment.surfWeather,'random','a fresh full-reset save returns to random');
 });

@@ -160,10 +160,17 @@ export class SurfGame {
   }
   // Race mixins own their own boosts and courses, including their AI riders.
   get surfAdventureEnabled() {return this.mode==='surf'&&(this.rulesId==='surf'||this.rulesId==='storm')&&typeof this.clearRaceBoost!=='function';}
-  get forwardSpeedBonus() {return this.surfAdventureEnabled&&this.surfBoostTime>0?this.surfBoostSpeed:0;}
+  // Waterworks shares landed-trick rewards without opting into ocean hazards.
+  get trickBoostEnabled() {return (this.surfAdventureEnabled||this.mode==='park')&&typeof this.clearRaceBoost!=='function';}
+  get forwardSpeedBonus() {return this.trickBoostEnabled&&this.surfBoostTime>0?this.surfBoostSpeed:0;}
   clearSurfBoost() {this.surfBoostTime=0;this.surfBoostDuration=0;this.surfBoostSpeed=0;this.surfBoostCombo=false;this.surfBoostLabel='';}
+  drainSurfBoost(dt) {
+    if(this.surfBoostTime<=0)return;
+    this.surfBoostTime=Math.max(0,this.surfBoostTime-dt);
+    if(this.surfBoostTime<1e-9)this.clearSurfBoost();
+  }
   awardSurfBoost() {
-    if(!this.surfAdventureEnabled||this.surfBoostAwarded||this.launchTricks<1||this.bailTime>0)return false;
+    if(!this.trickBoostEnabled||this.surfBoostAwarded||this.launchTricks<1||this.pendingTricks<1||this.bailTime>0)return false;
     this.surfBoostAwarded=true;
     const tricks=this.pendingTricks,combo=tricks>1;
     const speed=(combo?Math.min(14,10+(tricks-2)*2):7)*(this.rewardBoardDefinition?.boostPowerMultiplier??1);
@@ -290,7 +297,7 @@ export class SurfGame {
   stepSurf(dt,input) {
     const previousDistance=this.distance,previousX=this.x,previousY=this.y;
     this.elapsed += dt; this.time = this.rules.endless?this.elapsed:Math.max(0,this.time-dt);
-    if(this.surfBoostTime>0){this.surfBoostTime=Math.max(0,this.surfBoostTime-dt);if(this.surfBoostTime<1e-9)this.clearSurfBoost();}
+    this.drainSurfBoost(dt);
     if(this.rulesId==='storm') {
       this.stormDifficulty=stormDifficulty(this.elapsed);
       const stage=1+Math.floor(this.elapsed/30);

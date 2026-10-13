@@ -1,6 +1,13 @@
 import { ALL_REWARD_BOARD_ORDER, getRewardBoard } from './board-rewards.js';
 
 export const ADMIN_STORAGE_KEY = 'breakline99-admin-v1';
+export const ADMIN_SURF_WEATHER_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'random', label: 'Random each session' }),
+  Object.freeze({ value: 'dawn', label: 'Dawn / first light' }),
+  Object.freeze({ value: 'noon', label: 'Noon / clear skies' }),
+  Object.freeze({ value: 'sunset', label: 'Sunset / golden hour' }),
+  Object.freeze({ value: 'dusk', label: 'Dusk / blue hour' }),
+]);
 const field = (key, label, min, max, step, initial, unit, description) => Object.freeze({ key, label, min, max, step, default: initial, unit, description });
 export const ADMIN_CHARACTER_FIELDS = Object.freeze([
   field('jumpPower', 'Jump power', .25, 3, .05, 1, '×', 'Height from pops, ramps and extra air jumps.'),
@@ -14,10 +21,10 @@ export const ADMIN_CHARACTER_FIELDS = Object.freeze([
   field('specialGain', 'Special charge', 0, 5, .1, 1, '×', 'How quickly tricks and banked points fill SPECIAL.'),
 ]);
 export const ADMIN_BOARD_FIELDS = Object.freeze([
-  field('baseSpeed', 'Base speed', .25, 3, .05, 1, '×', 'Riding speed before earned race boosts.'),
+  field('baseSpeed', 'Base speed', .25, 3, .05, 1, '×', 'Riding speed before earned trick boosts.'),
   field('acceleration', 'Acceleration', .25, 4, .05, 1, '×', 'How quickly the board reaches its riding speed.'),
-  field('boostPower', 'Bonus boost speed', 0, 4, .05, 1, '×', 'Extra race speed from landed tricks and combos.'),
-  field('boostDuration', 'Boost duration', .1, 5, .05, 1, '×', 'How long earned race boosts last.'),
+  field('boostPower', 'Bonus boost speed', 0, 4, .05, 1, '×', 'Extra speed from landed tricks and combos, including Waterworks.'),
+  field('boostDuration', 'Boost duration', .1, 5, .05, 1, '×', 'How long earned trick boosts last.'),
   field('popRecovery', 'Pop cooldown', 0, 3, .05, 1, '×', 'Lower values recover faster. Zero removes the cooldown.'),
   field('extraJumps', 'Extra air jumps', 0, 5, 1, 0, 'jumps', 'Additional Space press-and-release jumps before landing.'),
   field('glideGravity', 'Glide gravity', .1, 1, .01, 1, '×', 'Gravity during descent when a glide fall speed is set.'),
@@ -30,6 +37,11 @@ const defaults = fields => Object.fromEntries(fields.map(item => [item.key, item
 const plain = value => !!value && typeof value === 'object' && !Array.isArray(value);
 const cleanCheats = value => ({ slowMotion: plain(value) && Object.hasOwn(value, 'slowMotion') && value.slowMotion === true });
 const ownCheats = value => plain(value) && Object.hasOwn(value, 'cheats') ? value.cheats : null;
+function cleanEnvironment(value) {
+  const environment = plain(value) && Object.hasOwn(value, 'environment') ? value.environment : null;
+  const candidate = plain(environment) && Object.hasOwn(environment, 'surfWeather') ? environment.surfWeather : null;
+  return { surfWeather: ADMIN_SURF_WEATHER_OPTIONS.some(option => option.value === candidate) ? candidate : 'random' };
+}
 function cleanScope(value, fields, fill = false) {
   const result = fill ? defaults(fields) : {};
   if (!plain(value)) return result;
@@ -51,6 +63,7 @@ export function sanitizeAdminSettings(value) {
     characters: cleanMap(value?.characters, characterIds, ADMIN_CHARACTER_FIELDS),
     boards: cleanMap(value?.boards, boardIds, ADMIN_BOARD_FIELDS),
     cheats: cleanCheats(ownCheats(value)),
+    environment: cleanEnvironment(value),
   };
 }
 function scopeIds(profile) {

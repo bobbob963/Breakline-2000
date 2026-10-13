@@ -417,7 +417,7 @@ export class WaveParkGame extends SurfGame {
     this.cancelCutback();
     this.lastJump = this.elapsed;
     this.rampReturn=null;
-    this.popRecovery=this.popRecoveryDuration;this.airLaunchSource='ramp';this.launchTricks=0;this.airJumpsUsed=0;
+    this.popRecovery=this.popRecoveryDuration;this.airLaunchSource='ramp';this.launchTricks=0;this.airJumpsUsed=0;this.surfBoostAwarded=false;
     this.airborne = true;
     this.airtime = 0;
     this.trick = null;
@@ -452,6 +452,7 @@ export class WaveParkGame extends SurfGame {
 
   stepPark(dt, input) {
     this.elapsed += dt;
+    this.drainSurfBoost(dt);
     this.recoverPop(dt);
     this.time = this.rules.endless?this.elapsed:Math.max(0, RUN_SECONDS - this.elapsed);
     this.railCooldown = Math.max(0, this.railCooldown - dt);
@@ -570,10 +571,14 @@ export class WaveParkGame extends SurfGame {
     // Ordinary terrain intersections are resolved by the sweep before this.
     if(!this.pipeRide){this.y=Math.max(this.y,rideHeight(this.x,this.z,this.y).height);this.surface=parkRideSurface(this.x,this.z,this.y);}
     this.distance = -this.z;
+    // Commit the reward after the landing/collision pass. A hop without a
+    // completed trick, an unfinished landing or a bailout cannot grant speed.
+    if(!this.airborne&&!this.trick&&this.bailTime<=0)this.awardSurfBoost();
     if (!this.rules.endless&&this.time <= 0) {
       if (this.airborne || this.grinding ||this.pipeRide||this.lipMove||this.cutbackActive) this.clearCombo(); else this.bank();
       this.cancelCutback();
       this.grinding = null;
+      this.clearSurfBoost();
       this.phase = 'finished';
       this.onEvent({ type: 'finish' });
     }
@@ -673,7 +678,8 @@ export class WaveParkGame extends SurfGame {
     if(ride.releasePending&&Math.abs(normalized)<.035) {
       ride.angle-=normalized;this.applyPipeRide();this.endPipeRide();return;
     }
-    const targetSpeed=input.brake?3:(input.pump?11:8.5)*this.baseSpeedMultiplier*this.timePowerSpeedMultiplier;
+    const trickBonus=this.trickBoostEnabled?this.forwardSpeedBonus:0;
+    const targetSpeed=input.brake?3:((input.pump?11:8.5)*this.baseSpeedMultiplier+trickBonus)*this.timePowerSpeedMultiplier;
     this.speed+=(targetSpeed-this.speed)*(1-Math.exp(-dt*4*this.accelerationMultiplier));
     const angular=ride.releasePending?-Math.sign(normalized)*2.4:((input.right?1:0)-(input.left?1:0))*ride.dir*(input.pump?2.6:2.25)*(this.characterStats?.steering??1);
     const change=ride.releasePending?Math.sign(angular)*Math.min(Math.abs(angular*dt),Math.abs(normalized)):angular*dt;
@@ -762,7 +768,9 @@ export class WaveParkGame extends SurfGame {
       this.faceIntoRamp(rail.rampId);this.grinding=null;this.railCooldown=1;
       this.launch(2.6,'COPING DROP-IN',160);return;
     }
-    this.speed += ((input.pump ? 17 : 11)*this.baseSpeedMultiplier*this.timePowerSpeedMultiplier - this.speed) * (1 - Math.exp(-dt * 2*this.accelerationMultiplier));
+    const trickBonus=this.trickBoostEnabled?this.forwardSpeedBonus:0;
+    const targetSpeed=input.brake&&this.trickBoostEnabled?3.5:((input.pump?17:11)*this.baseSpeedMultiplier+trickBonus)*this.timePowerSpeedMultiplier;
+    this.speed += (targetSpeed-this.speed) * (1 - Math.exp(-dt * 2*this.accelerationMultiplier));
     grind.local += grind.dir * this.speed * dt;
     grind.age += dt;
     this.heading = rail.rotation + (grind.dir < 0 ? Math.PI : 0);

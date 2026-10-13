@@ -1,7 +1,7 @@
 import './admin-panel.css';
 import { CHARACTERS } from './appearance.js';
 import { getRewardBoard } from './board-rewards.js';
-import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from './admin-settings.js';
+import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from './admin-settings.js';
 
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const fieldsByScope = { character: ADMIN_CHARACTER_FIELDS, board: ADMIN_BOARD_FIELDS };
@@ -18,7 +18,7 @@ function fieldMarkup(field, scope, value) {
   </div>`;
 }
 
-/** The panel owns an unsaved draft; only Apply changes riding stats. */
+/** The panel owns an unsaved draft; only Apply changes riding stats and conditions. */
 export function createAdminPanel({ getState, onApply, onGiveEverything, onFullReset, onClose = () => {} }) {
   const overlay = document.createElement('div');
   overlay.id = 'admin-panel';
@@ -36,6 +36,11 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
           <label class="admin-enabled"><input type="checkbox" id="admin-enabled"> <span>ENABLE CUSTOM STATS</span></label>
           <p class="admin-enabled-note">Switch this off to ride with the normal stats. Your custom values stay saved.</p>
         </div>
+        <section class="admin-environment" aria-labelledby="admin-environment-title">
+          <div><h3 id="admin-environment-title">SESSION CONDITIONS</h3><label for="admin-surf-weather">Surf Session weather / time</label></div>
+          <select id="admin-surf-weather" aria-describedby="admin-surf-weather-description">${ADMIN_SURF_WEATHER_OPTIONS.map(option => `<option value="${option.value}">${escapeHTML(option.label)}</option>`).join('')}</select>
+          <p id="admin-surf-weather-description">Choose the sky and time of day for Surf Session. Random picks a different calm sky each session. Sunset includes its chilled soundtrack. This works with custom stats switched off. Survival always stays stormy.</p>
+        </section>
         <section class="admin-cheats" aria-labelledby="admin-cheats-title">
           <div><h3 id="admin-cheats-title">CHEATS</h3><label class="admin-enabled"><input type="checkbox" id="admin-slow-motion" aria-describedby="admin-slow-motion-description"> <span>SLOW MOTION / Q</span></label></div>
           <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Press Q to toggle a 6-second charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
@@ -49,11 +54,11 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
           <div class="admin-section-heading"><span>03 / SAVE FILE</span><h3 id="admin-save-title">UNLOCKS + RESET</h3></div>
           <div class="admin-save-grid">
             <div><button type="button" data-admin-action="give" class="admin-unlock">GIVE ME EVERYTHING <span>↗</span></button><p>Unlock every ladder, Time Trial, outfit, board style and reward board.</p></div>
-            <div><button type="button" data-admin-action="reset" class="admin-reset">FULL RESET <span>↺</span></button><p>Start fresh: erase game progress, saved scores and custom stats.</p></div>
+            <div><button type="button" data-admin-action="reset" class="admin-reset">FULL RESET <span>↺</span></button><p>Start fresh: erase game progress, saved scores, custom stats and session settings.</p></div>
           </div>
           <div class="admin-reset-confirm" hidden role="group" aria-labelledby="admin-reset-title">
             <strong id="admin-reset-title">ERASE YOUR BREAKLINE SAVE?</strong>
-            <p>This removes all game progress, unlocks, personal bests and custom stats from this browser. It cannot be undone.</p>
+            <p>This removes all game progress, unlocks, personal bests, custom stats and session settings from this browser. It cannot be undone.</p>
             <div><button type="button" data-admin-action="confirm-reset">YES, RESET EVERYTHING</button><button type="button" data-admin-action="cancel-reset">KEEP MY SAVE</button></div>
           </div>
         </section>
@@ -84,6 +89,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     query('#admin-board-title').textContent = getRewardBoard(profile.rewardBoard)?.name || 'STANDARD BOARD';
     query('#admin-enabled').checked = draft.enabled;
     query('#admin-slow-motion').checked = draft.cheats.slowMotion;
+    query('#admin-surf-weather').value = draft.environment.surfWeather;
     overlay.classList.toggle('admin-tuning-off', !draft.enabled);
   }
 
@@ -117,6 +123,11 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
 
   function handleInput(event) {
     const input = event.target;
+    if (input.id === 'admin-surf-weather') {
+      draft = sanitizeAdminSettings({ ...draft, environment: { ...draft.environment, surfWeather: input.value } });
+      status(draft.environment.surfWeather === 'random' ? 'Surf Session will choose a different calm sky each session after you apply.' : 'Your chosen sky and time of day will be used in Surf Session after you apply.');
+      return;
+    }
     if (input.id === 'admin-slow-motion') {
       draft = { ...draft, cheats: { ...draft.cheats, slowMotion: input.checked === true } };
       status(input.checked ? 'Slow motion will work with any board after you apply.' : 'The slow motion cheat will switch off after you apply.');
@@ -172,6 +183,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     }
     draft.enabled = query('#admin-enabled').checked;
     draft.cheats.slowMotion = query('#admin-slow-motion').checked === true;
+    draft.environment.surfWeather = query('#admin-surf-weather').value;
     if (await action(() => onApply(sanitizeAdminSettings(draft)))) close();
   }
 
@@ -186,7 +198,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
       } else close();
     }
     if (event.key === 'Tab') {
-      const focusable = [...overlay.querySelectorAll('button:not(:disabled), input:not(:disabled)')].filter(element => !element.closest('[hidden]'));
+      const focusable = [...overlay.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled)')].filter(element => !element.closest('[hidden]'));
       const first = focusable[0], last = focusable.at(-1);
       if (!focusable.includes(document.activeElement) || (event.shiftKey && document.activeElement === first)) {
         event.preventDefault(); (event.shiftKey ? last : first)?.focus();

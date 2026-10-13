@@ -381,9 +381,9 @@ export class SurfWorld {
     this.surfHazards.update(game,t,oceanZ,{attract});
     this.waterMat.uniforms.uWhirlpoolCount.value=this.surfHazards.maskCount;
     for(let i=0;i<this.surfHazards.maskCount;i++)this.waterMat.uniforms.uWhirlpools.value[i].copy(this.surfHazards.masks[i]);
-    const surfBoost=!attract&&!isPark&&!game.isRace&&!game.bailTime&&(game.surfBoostTime||0)>0;
+    const surfBoost=!attract&&!game.isRace&&!game.bailTime&&(game.surfBoostTime||0)>0;
     this.surfBoost.visible=surfBoost&&!this.reducedMotion;
-    if(surfBoost){this.surfBoost.position.set(x,y+.14,z);this.surfBoost.scale.set(1,1,game.surfBoostCombo?1.65:1);this.surfBoost.material.opacity=.30+.2*Math.min(1,game.surfBoostTime/.25);}
+    if(surfBoost){this.surfBoost.position.set(x,y+.14,z);this.surfBoost.rotation.y=heading;this.surfBoost.scale.set(1,1,game.surfBoostCombo?1.65:1);this.surfBoost.material.opacity=.30+.2*Math.min(1,game.surfBoostTime/.25);}
     this.ocean.position.z = oceanZ;
     this.coast.position.z = -d - 80; this.sky.position.z = isPark?0:-d;
     if(this.parkUpdate)this.parkUpdate(t);

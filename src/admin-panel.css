@@ -12,6 +12,11 @@
 .admin-enabled{display:flex;gap:10px;align-items:center;padding:11px 14px;background:#263e3e;border:1px solid #8fbdb2;color:#d7ead2;font:bold 11px var(--mono,'Courier New',monospace);letter-spacing:.5px;cursor:pointer}
 .admin-enabled input{width:17px;height:17px;margin:0;accent-color:#eac963;cursor:pointer}
 .admin-enabled-note{grid-column:1/-1;margin:8px 0 0;font:10px/1.5 var(--mono,'Courier New',monospace);color:#93aaa8}
+.admin-environment{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px 24px;padding:14px 16px;margin-bottom:20px;border:1px solid #a59172;background:linear-gradient(115deg,#3b3031,#22373d)}
+.admin-environment h3{margin:0 0 6px;color:#edcc90;font:italic 25px/1.1 var(--display,Impact,sans-serif);letter-spacing:.7px}
+.admin-environment label{color:#e0e4d8;font:bold 11px var(--mono,'Courier New',monospace)}
+.admin-environment select{min-width:240px;max-width:100%;border:1px solid #c6ac72;background:#14242e;color:#f0dfb5;border-radius:0;padding:11px 30px 11px 12px;font:bold 12px var(--mono,'Courier New',monospace);cursor:pointer}
+.admin-environment p{grid-column:1/-1;color:#cbc6b7;font-size:12px;line-height:1.5;margin:0;max-width:850px}
 .admin-cheats{padding:14px 16px;margin-bottom:20px;border:1px solid #739785;background:#172f2d}
 .admin-cheats>div{display:flex;align-items:center;justify-content:space-between;gap:24px}
 .admin-cheats h3{margin:0;color:#bce4a7;font:italic 25px/1.1 var(--display,Impact,sans-serif);letter-spacing:.7px}
@@ -30,7 +35,7 @@
 .admin-stat input[type=number]{width:84px;flex-shrink:0;border:1px solid #7caaa4;background:#0e1a23;color:#eadea6;padding:6px 5px 6px 9px;font:bold 14px var(--mono,'Courier New',monospace);border-radius:0}
 .admin-stat input[type=number]:invalid{border-color:#ec8065;color:#ffb595}
 .admin-stat p{color:#9eb3ae;font-size:11px;line-height:1.45;margin:6px 0 0;min-height:16px}
-.admin-overlay input:focus-visible,.admin-overlay button:focus-visible{outline:2px solid #f1d273;outline-offset:3px}
+.admin-overlay input:focus-visible,.admin-overlay button:focus-visible,.admin-overlay select:focus-visible{outline:2px solid #f1d273;outline-offset:3px}
 .admin-tuning-off .admin-stat-section{border-color:#526466}
 .admin-tuning-off .admin-stat input[type=range]{accent-color:#809994}
 .admin-default-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:16px 0 22px}

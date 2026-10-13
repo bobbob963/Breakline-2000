@@ -101,7 +101,7 @@ test('the production start chooses the correct theme after the run weather is se
   const noop=()=>{},element={classList:{add:noop,remove:noop},focus:noop};
   for(const [selectedMode,expected] of [['surf',SUNSET_TRACK],['storm',SURVIVAL_TRACK]]) {
     const audio=new ArcadeAudio(),game=new SurfGame(noop,selectedMode);
-    const context={selectedMode,game,audio,adminPanel:null,wasted:{reset:noop},timePowerScreen:{reset:noop},
+    const context={selectedMode,game,audio,adminSettings:{environment:{surfWeather:'random'}},adminPanel:null,wasted:{reset:noop},timePowerScreen:{reset:noop},
       closeWorkshop:noop,closeModal:noop,clearInput:noop,special:{reset:noop},soundPreference:'off',
       applyPlayerSettings:noop,chooseSurfWeather:()=>'sunset',lastSurfWeather:'noon',write:noop,
       world:{setMode:noop},updateModeMenu:noop,updateSoundLabel:noop,$:()=>element,document:{body:element}};

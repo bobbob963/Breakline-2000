@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { SurfGame } from '../src/game.js';
-import { chooseSurfWeather, getSurfWeather, SURF_SESSION_WEATHER_IDS } from '../src/surf-weather.js';
+import { chooseSurfWeather, getSurfWeather, getSurfSessionWeather, SURF_SESSION_WEATHER_IDS } from '../src/surf-weather.js';
+import { sanitizeAdminSettings } from '../src/admin-settings.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const startCode=source.slice(source.indexOf('function startRun('),source.indexOf('function goHome('));
 function fixture(selectedMode='surf',prior='sunset') {
   const noop=()=>{},saved=new Map([['breakline99-weather',prior]]);
   const element={classList:{add:noop,remove:noop},focus:noop};
-  const context={selectedMode,lastSurfWeather:saved.get('breakline99-weather'),chooseSurfWeather,getSurfWeather,
+  const context={selectedMode,lastSurfWeather:saved.get('breakline99-weather'),chooseSurfWeather,getSurfWeather,getSurfSessionWeather,adminSettings:sanitizeAdminSettings(null),
     secretUnlockedThisRun:false,timePowerScreen:{reset:noop,onEvent:noop,update:noop},
     game:new SurfGame(noop,selectedMode),adminPanel:{isOpen:false},wasted:{reset:noop},
     closeWorkshop:noop,closeModal:noop,clearInput:noop,applyPlayerSettings:noop,
