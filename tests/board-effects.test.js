@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createBoardEffects,BOARD_EFFECT_POOL_SIZE,BOARD_EFFECT_LIFETIME } from '../src/board-effects.js';
+import { createBoardEffects,BOARD_EFFECT_POOL_SIZE,BOARD_EFFECT_LIFETIME,GRAFFITI_EFFECT_LIFETIME } from '../src/board-effects.js';
 import { REWARD_BOARD_ORDER,REWARD_BOARDS } from '../src/board-rewards.js';
 import { validateProfile,createSurfer,disposeSurfer,rewardBoardTexture } from '../src/appearance.js';
 import { SurfRaceGame } from '../src/surf-race.js';
@@ -34,16 +34,16 @@ test('reward burst comes only from actual completed tricks, never trick starts o
 test('all five motifs stay local, freeze when paused and expire without resource growth',()=>withCanvas(()=>{
   const effects=createBoardEffects();surfer.rig.position.set(100,7,-240);
   const objectCount=effects.group.getObjectsByProperty('isObject3D',true).length;
-  for(const id of REWARD_BOARD_ORDER){effects.setProfile({rewardBoard:id});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);const burst=effects.group.children.find(x=>x.visible);assert.equal(burst.userData.effect,REWARD_BOARDS[id].vfx);assert.deepEqual(burst.position.toArray(),[100,7.75,-240]);const position=burst.children[0].position.toArray();effects.update(.1,surfer,camera,{paused:true});assert.deepEqual(burst.children[0].position.toArray(),position);for(let t=0;t<BOARD_EFFECT_LIFETIME+.1;t+=.05)effects.update(.05,surfer,camera);assert.equal(effects.activeCount,0);}
+  for(const id of REWARD_BOARD_ORDER){effects.setProfile({rewardBoard:id});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);const burst=effects.group.children.find(x=>x.visible);assert.equal(burst.userData.effect,REWARD_BOARDS[id].vfx);assert.deepEqual(burst.position.toArray(),[100,7.75,-240]);const position=burst.children[0].position.toArray();effects.update(.1,surfer,camera,{paused:true});assert.deepEqual(burst.children[0].position.toArray(),position);for(let t=0;t<(id==='lightning'?GRAFFITI_EFFECT_LIFETIME:BOARD_EFFECT_LIFETIME)+.1;t+=.05)effects.update(.05,surfer,camera);assert.equal(effects.activeCount,0);}
   for(let i=0;i<200;i++)effects.trigger({type:'trick'});
   assert.equal(effects.activeCount,BOARD_EFFECT_POOL_SIZE);assert.equal(effects.group.getObjectsByProperty('isObject3D',true).length,objectCount);
   effects.update(.01,surfer,camera,{finished:true});assert.equal(effects.activeCount,0);effects.dispose();
 }));
 
-test('reduced motion omits impact flash and uses four static accents',()=>withCanvas(()=>{
+test('reduced motion omits Lightning impact flash and uses two static accents',()=>withCanvas(()=>{
   const effects=createBoardEffects({reducedMotion:true});effects.setProfile({rewardBoard:'lightning'});effects.trigger({type:'trick'});effects.update(.01,surfer,camera);
   const burst=effects.group.children.find(x=>x.visible),sprites=burst.children.filter(o=>o.isSprite&&o.visible);
-  assert.equal(sprites.length,4);assert.equal(burst.getObjectByName('local-impact-frame').visible,false);assert.equal(burst.children.filter(o=>o.isMesh&&o.visible).length,0);
+  assert.equal(sprites.length,2);assert.equal(burst.getObjectByName('local-impact-frame').visible,false);assert.equal(burst.children.filter(o=>o.isMesh&&o.visible).length,0);
   const positions=sprites.map(o=>o.position.toArray());effects.update(.1,surfer,camera);assert.deepEqual(sprites.map(o=>o.position.toArray()),positions);effects.dispose();
 }));
 
@@ -128,13 +128,97 @@ test('reduced motion keeps new motifs and wings static with no extra impact fram
   effects.update(.1,surfer,camera,{gliding:true});assert.deepEqual(wings.children.map(o=>o.rotation.toArray()),pose);effects.update(.01,surfer,camera,{gliding:false});assert.equal(wings.visible,false);effects.dispose();
 }));
 
-test('guitar and lightning retain the original icon, impact and ray presentation',()=>withCanvas(()=>{
+test('guitar retains the original icon, impact and ray presentation',()=>withCanvas(()=>{
   const effects=createBoardEffects();
-  for(const id of ['guitar','lightning']){
+  for(const id of ['guitar']){
     effects.setProfile({rewardBoard:id});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);
     const burst=effects.group.children.find(o=>o.visible),icons=burst.children.filter(o=>o.isSprite&&o.visible),halo=burst.getObjectByName('local-impact-frame');
     assert.equal(icons.length,8);assert.equal(icons[0].material.map.name,'reward-icon-'+id);assert.equal(halo.visible,true);assert.deepEqual(halo.scale.toArray(),[1.1,1.06,1]);
     assert.equal(burst.children.filter(o=>o.isMesh&&o.visible).length,13);assert.equal(burst.getObjectByName('sculpted-reward-burst').visible,false);assert.equal(effects.group.getObjectByName('skybound-angel-wings').visible,false);
   }
   effects.dispose();
+}));
+
+function activeGraffiti(effects){
+  return effects.group.children.filter(root=>root.visible).map(root=>root.getObjectByName('lightning-graffiti')).filter(tag=>tag?.visible);
+}
+function advanceEffects(effects,seconds,options={}){
+  for(let remaining=seconds;remaining>1e-8;remaining-=.05)effects.update(Math.min(.05,remaining),surfer,camera,options);
+}
+
+test('Lightning graffiti appears only when the player completes a real trick',()=>withCanvas(()=>{
+  const effects=createBoardEffects();effects.setProfile({rewardBoard:'lightning'});
+  for(const event of [{type:'trickStart'},{type:'jump'},{type:'airJump'},{type:'raceBoost'},{type:'trick',opponent:true}]){
+    assert.equal(effects.trigger(event),false);effects.update(.01,surfer,camera);assert.equal(activeGraffiti(effects).length,0);
+  }
+  const events=[],demo={stage:'charge',charge:0,started:false};
+  const game=new SurfRaceGame(event=>{
+    events.push(event);effects.trigger(event);
+    if(event.type==='trickStart'&&!event.opponent)assert.equal(effects.activeCount,0,'the word waits for completion');
+  });
+  game.setRewardBoard('lightning');game.start();
+  for(let i=0;i<900&&!events.some(event=>event.type==='trick'&&!event.opponent);i++){
+    game.update(1/120,rewardDemoInput(game,demo,1/120));effects.update(1/120,surfer,camera);
+  }
+  assert.equal(events.filter(event=>event.type==='trick'&&!event.opponent).length,1);assert.equal(game.launchTricks,1);
+  assert.equal(activeGraffiti(effects).length,1);assert.equal(effects.activeCount,1);
+  effects.dispose();
+}));
+
+test('Lightning words remain legible beyond the electric accent and freeze during pause',()=>withCanvas(()=>{
+  const effects=createBoardEffects();effects.setProfile({rewardBoard:'lightning'});effects.trigger({type:'trick'});
+  camera.rotation.set(-.35,.7,.08);surfer.rig.position.set(8,4,-42);effects.update(.1,surfer,camera);
+  const tag=activeGraffiti(effects)[0],word=tag.getObjectByName('graffiti-word'),root=tag.parent;
+  assert.ok(word?.isSprite,'camera-facing lettering');assert.match(word.material.map.name,/^graffiti-word-/);
+  assert.equal(word.material.depthTest,true);assert.equal(word.material.depthWrite,false);
+  assert.ok(Math.abs(root.quaternion.dot(camera.quaternion))>1-1e-8);
+  assert.equal(root.getObjectByName('local-impact-frame').visible,false,'words do not add a full impact flash');
+  advanceEffects(effects,BOARD_EFFECT_LIFETIME);
+  assert.equal(activeGraffiti(effects).length,1,'lettering lasts long enough to read after the short accent');assert.ok(word.material.opacity>0);
+  const pose=[...tag.position.toArray(),...tag.scale.toArray(),...word.position.toArray(),...word.scale.toArray(),word.material.rotation,word.material.opacity];
+  advanceEffects(effects,2,{paused:true});
+  assert.deepEqual([...tag.position.toArray(),...tag.scale.toArray(),...word.position.toArray(),...word.scale.toArray(),word.material.rotation,word.material.opacity],pose);
+  advanceEffects(effects,GRAFFITI_EFFECT_LIFETIME);assert.equal(effects.activeCount,0);assert.equal(activeGraffiti(effects).length,0);
+  effects.dispose();camera.rotation.set(0,0,0);
+}));
+
+test('rapid Lightning combos reuse the fixed slots, vary words and release all word textures once',()=>withCanvas(()=>{
+  const effects=createBoardEffects(),resources=new Set(),words=new Set();effects.setProfile({rewardBoard:'lightning'});
+  const objects=effects.group.getObjectsByProperty('isObject3D',true).length;
+  for(let i=0;i<200;i++){
+    effects.trigger({type:'trick'});effects.update(.001,surfer,camera);
+    for(const tag of activeGraffiti(effects)){
+      const word=tag.getObjectByName('graffiti-word');words.add(tag.userData.word);resources.add(word.material);resources.add(word.material.map);
+    }
+  }
+  assert.equal(effects.activeCount,BOARD_EFFECT_POOL_SIZE);assert.equal(activeGraffiti(effects).length,BOARD_EFFECT_POOL_SIZE);
+  assert.equal(effects.group.getObjectsByProperty('isObject3D',true).length,objects);
+  assert.ok(words.has('NICE!'));assert.ok(words.has('WOW!'));assert.ok(words.size>=4,'several distinct graffiti reactions');
+  assert.equal(resources.size,words.size+BOARD_EFFECT_POOL_SIZE,'shared prebuilt textures and one material per slot');
+  const disposals=new Map([...resources].map(resource=>[resource,0]));
+  for(const resource of resources)resource.addEventListener('dispose',()=>disposals.set(resource,disposals.get(resource)+1));
+  effects.dispose();effects.dispose();
+  for(const disposed of disposals.values())assert.equal(disposed,1);
+  assert.equal(effects.group.children.length,0);assert.equal(effects.trigger({type:'trick'}),false);
+}));
+
+test('graffiti clears on reset, finish and equipment change and never appears on other decks',()=>withCanvas(()=>{
+  const effects=createBoardEffects();
+  for(const clear of [()=>effects.reset(),()=>effects.update(.01,surfer,camera,{finished:true}),()=>effects.setProfile({rewardBoard:'guitar'})]){
+    effects.setProfile({rewardBoard:'lightning'});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);assert.equal(activeGraffiti(effects).length,1);
+    clear();assert.equal(activeGraffiti(effects).length,0);
+  }
+  for(const rewardBoard of [null,'guitar','vortex','solar','sky']){
+    effects.setProfile({rewardBoard});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);assert.equal(activeGraffiti(effects).length,0);
+  }
+  effects.dispose();
+}));
+
+test('reduced-motion graffiti keeps its pose static while retaining readable lettering',()=>withCanvas(()=>{
+  const effects=createBoardEffects({reducedMotion:true});effects.setProfile({rewardBoard:'lightning'});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);
+  const tag=activeGraffiti(effects)[0],word=tag.getObjectByName('graffiti-word');
+  const pose=[...tag.position.toArray(),...tag.rotation.toArray(),...tag.scale.toArray(),...word.position.toArray(),...word.scale.toArray(),word.material.rotation];
+  advanceEffects(effects,.5);
+  assert.deepEqual([...tag.position.toArray(),...tag.rotation.toArray(),...tag.scale.toArray(),...word.position.toArray(),...word.scale.toArray(),word.material.rotation],pose);
+  assert.ok(word.material.opacity>0);effects.dispose();
 }));

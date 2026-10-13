@@ -127,7 +127,7 @@ The **BOARD SHOP** also displays five prize boards. Locked cards show the requir
 | Ladder / prize board | Trick-completion effect | Equipped perk |
 | --- | --- | --- |
 | **1 — AMPLIFIER** | Musical notes burst from the guitar deck. | **+25% aerial trick points** before the combo multiplier; ordinary checkpoint and other non-trick points are unchanged. |
-| **2 — LIVE WIRE** | Electric bolts form a brief impact burst around the rider and board. | **+25% race boost power** on cleanly landed trick and combo boosts. |
+| **2 — LIVE WIRE** | Completed tricks throw up original graffiti tags: **NICE!**, **WOW!**, **SICK!**, **RAD!**, **FRESH!** and **STYLE!**, with painted outlines, drips and small electric sparks. Tags rise beside the rider and fade; no screen flash. | **+25% race boost power** on cleanly landed trick and combo boosts. |
 | **3 — UNDERTOW** | Spiralling water curls around the rider and vortex deck. | **+35% race boost duration**. |
 | **4 — SOLAR FLARE** | Sharp sun rays and warm flare bursts punctuate each trick. | **25% faster pop recovery** in every mode. |
 | **5 — SKYBOUND** | Angel wings unfold around the board during a downward glide, with feathered trick bursts. | **Automatic gentle downward glide + one extra airborne jump per flight** in every mode. |

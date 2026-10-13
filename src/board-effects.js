@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { getRewardBoard } from './board-rewards.js';
+import { GRAFFITI_WORDS, createGraffitiTexture } from './graffiti-art.js';
 
 export const BOARD_EFFECT_POOL_SIZE=3;
 export const BOARD_EFFECT_LIFETIME=.66;
+export const GRAFFITI_EFFECT_LIFETIME=1.15;
 const TAU=Math.PI*2;
 const EFFECT_IDS=['guitar','lightning','vortex','solar','sky'];
 
@@ -94,6 +96,7 @@ function effectMaterial(color){return new THREE.MeshBasicMaterial({color,transpa
 export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false}={}) {
   const group=new THREE.Group();group.name='reward-board-effects';
   const textures=new Map(EFFECT_IDS.map(id=>[id,iconTexture(id)]));
+  const graffitiTextures=GRAFFITI_WORDS.map(createGraffitiTexture);
   const haloGeometry=jaggedHalo(),rayGeometry=new THREE.PlaneGeometry(.045,.56);
   const waterGeometry=ribbonGeometry('vortex'),coronaGeometry=ribbonGeometry('solar'),flareGeometry=flameGeometry(),particleGeometry=new THREE.OctahedronGeometry(.065,0),wingGeometry=angelWingGeometry();
   let equipped=null,next=0,disposed=false,sequence=0;
@@ -101,6 +104,9 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const root=new THREE.Group();root.name='reward-burst-'+index;root.visible=false;group.add(root);
     const iconMaterial=new THREE.SpriteMaterial({transparent:true,depthWrite:false,depthTest:true,opacity:0});
     const icons=Array.from({length:8},()=>{const icon=new THREE.Sprite(iconMaterial);root.add(icon);return icon;});
+    const graffiti=new THREE.Group();graffiti.name='lightning-graffiti';graffiti.visible=false;root.add(graffiti);
+    const wordMaterial=new THREE.SpriteMaterial({transparent:true,depthWrite:false,depthTest:true,opacity:0});
+    const word=new THREE.Sprite(wordMaterial);word.name='graffiti-word';graffiti.add(word);
     const rayMaterial=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,opacity:0});
     const halo=new THREE.Mesh(haloGeometry,rayMaterial);halo.name='local-impact-frame';root.add(halo);
     const rays=Array.from({length:12},()=>{const ray=new THREE.Mesh(rayGeometry,rayMaterial);root.add(ray);return ray;});
@@ -110,7 +116,7 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const coronas=Array.from({length:2},(_,i)=>{const mesh=new THREE.Mesh(coronaGeometry,i?edgeMaterial:coreMaterial);mesh.name='solar-corona-'+i;sculpted.add(mesh);return mesh;});
     const flames=Array.from({length:10},(_,i)=>{const mesh=new THREE.Mesh(flareGeometry,i%2?coreMaterial:edgeMaterial);mesh.name='solar-flame-'+i;sculpted.add(mesh);return mesh;});
     const particles=Array.from({length:14},(_,i)=>{const mesh=new THREE.Mesh(particleGeometry,particleMaterial);mesh.name='reward-droplet-or-ember-'+i;sculpted.add(mesh);return mesh;});
-    return {root,icons,halo,rays,sculpted,ribbons,coronas,flames,particles,coreMaterial,edgeMaterial,particleMaterial,iconMaterial,rayMaterial,age:0,duration:BOARD_EFFECT_LIFETIME,id:null,seed:0,small:false};
+    return {root,icons,halo,rays,graffiti,word,wordMaterial,sculpted,ribbons,coronas,flames,particles,coreMaterial,edgeMaterial,particleMaterial,iconMaterial,rayMaterial,age:0,duration:BOARD_EFFECT_LIFETIME,id:null,seed:0,small:false};
   });
   const wings=new THREE.Group();wings.name='skybound-angel-wings';wings.visible=false;group.add(wings);
   const wingMaterial=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,opacity:0});
@@ -126,7 +132,14 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     if(disposed||!equipped||event?.opponent||!['trick','airJump'].includes(event?.type))return false;
     if(event.type==='airJump'&&equipped!=='sky')return false;
     const reward=getRewardBoard(equipped),slot=slots[next++%slots.length];
-    slot.id=equipped;slot.small=event.type==='airJump';slot.age=0;slot.duration=slot.small?.46:BOARD_EFFECT_LIFETIME;slot.seed=(sequence++%5)*.27;
+    slot.id=equipped;slot.small=event.type==='airJump';slot.age=0;slot.duration=equipped==='lightning'?GRAFFITI_EFFECT_LIFETIME:slot.small?.46:BOARD_EFFECT_LIFETIME;slot.seed=(sequence%5)*.27;
+    slot.graffiti.visible=equipped==='lightning';
+    if(slot.graffiti.visible){
+      const wordIndex=sequence%GRAFFITI_WORDS.length;
+      slot.graffiti.userData.word=GRAFFITI_WORDS[wordIndex];slot.graffiti.userData.side=sequence%2?-1:1;
+      slot.wordMaterial.map=graffitiTextures[wordIndex];slot.wordMaterial.needsUpdate=true;
+    }
+    sequence++;
     slot.iconMaterial.map=textures.get(equipped);slot.iconMaterial.needsUpdate=true;slot.iconMaterial.color.set(reward.colors.accent);
     slot.rayMaterial.color.set(reward.colors.secondary);slot.root.visible=true;slot.root.userData.effect=reward.vfx;slot.root.userData.completedTrick=event.type==='trick';
     slot.sculpted.visible=equipped==='vortex'||equipped==='solar';
@@ -192,28 +205,39 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       const age=slot.age,p=age/slot.duration,impact=age<.055,fade=Math.pow(1-p,.6),expansion=reducedMotion?0:Math.max(0,p-.085);
       const size=slot.small?.78:1;
       const sculpted=slot.id==='vortex'||slot.id==='solar';
-      slot.iconMaterial.opacity=(reducedMotion?.58:.96)*fade;
+      const graffiti=slot.id==='lightning';
+      if(graffiti){
+        // An opaque painted tag, not additive glow: readable against both ocean
+        // and concrete. Rise off the rail beside the rider, leaving the face clear.
+        const side=slot.graffiti.userData.side,motion=reducedMotion?0:p;
+        const pop=reducedMotion?1:1-Math.pow(1-Math.min(1,age/.12),3);
+        slot.graffiti.position.set(side*(1.02+motion*.42),.55+motion*.62,.28);
+        slot.word.scale.set(2.45*(.74+pop*.26),1.225*(.74+pop*.26),1);
+        slot.wordMaterial.rotation=side*(reducedMotion?.08:.12-motion*.08);
+        slot.wordMaterial.opacity=(reducedMotion?.86:1)*(1-THREE.MathUtils.smoothstep(p,.57,1));
+      }
+      slot.iconMaterial.opacity=(graffiti?.46:reducedMotion?.58:.96)*fade;
       slot.rayMaterial.opacity=reducedMotion?0:(impact?.72:.34)*fade;
-      slot.halo.visible=!sculpted&&slot.id!=='sky'&&!reducedMotion&&age<.2;
+      slot.halo.visible=!sculpted&&!graffiti&&slot.id!=='sky'&&!reducedMotion&&age<.2;
       slot.halo.scale.set(1.1*size+expansion*.65,1.06*size+expansion*.65,1);
       for(let i=0;i<slot.icons.length;i++) {
-        const icon=slot.icons[i];icon.visible=!sculpted&&(!reducedMotion||i<4);
+        const icon=slot.icons[i];icon.visible=!sculpted&&(graffiti?i<(reducedMotion?2:4):!reducedMotion||i<4);
         const angle=i*TAU/(reducedMotion?4:8)+slot.seed+(slot.id==='vortex'&&!reducedMotion?p*.7:0);
         const radius=(reducedMotion?1.13:1.02+expansion*.9)*size;
         icon.position.set(Math.cos(angle)*radius,Math.sin(angle)*radius*.85,.12+(i%2)*.08);
-        const iconSize=(slot.id==='guitar'?.40:slot.id==='lightning'?.46:.38)*size;
+        const iconSize=(slot.id==='guitar'?.40:graffiti?.22:.38)*size;
         icon.scale.setScalar(iconSize*(reducedMotion?1:1+Math.sin(p*Math.PI)*.12));
         icon.material.rotation=slot.id==='lightning'?.1:slot.id==='sky'?-.25:0;
       }
       for(let i=0;i<slot.rays.length;i++) {
         const ray=slot.rays[i],angle=i*TAU/slot.rays.length+slot.seed;
-        ray.visible=!sculpted&&slot.id!=='sky'&&!reducedMotion&&age<.28;ray.rotation.z=angle-Math.PI/2;
+        ray.visible=!sculpted&&slot.id!=='sky'&&!reducedMotion&&age<(graffiti?.11:.28);ray.rotation.z=angle-Math.PI/2;
         const radius=(.92+expansion*.8)*size;ray.position.set(Math.cos(angle)*radius,Math.sin(angle)*radius,.02);
-        ray.scale.set(slot.id==='lightning'?1.4:1,(impact?1.2:.7)*size,1);
+        ray.scale.set(graffiti?.7:1,(impact?1.2:.7)*size*(graffiti?.6:1),1);
       }
       if(sculpted)updateSculpted(slot,p,fade,size);
     }
   }
-  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry])geometry.dispose();for(const texture of textures.values())texture.dispose();group.removeFromParent();group.clear();}
+  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.wordMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry])geometry.dispose();for(const texture of [...textures.values(),...graffitiTextures])texture.dispose();group.removeFromParent();group.clear();}
   return {group,setProfile,trigger,update,reset,dispose,get activeCount(){return slots.filter(s=>s.root.visible).length;},get reducedMotion(){return reducedMotion;}};
 }
