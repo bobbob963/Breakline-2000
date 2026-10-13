@@ -145,11 +145,13 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const mesh=new THREE.Mesh(wingGeometry,wingMaterial);mesh.scale.x=side;pivot.add(mesh);return {pivot,side};
   });
   const wingMatrix=new THREE.Matrix4(),parentInverse=new THREE.Matrix4();
-  let wingAmount=0,wingLife=0,wingTime=0,pulseAge=1;
-  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;pulseAge=1;pulse.visible=false;pulseMaterial.opacity=0;}
+  let wingAmount=0,wingLife=0,wingTime=0,pulseAge=1,timePowerMode='slow';
+  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;pulseAge=1;pulse.visible=false;pulseMaterial.opacity=0;timePowerMode='slow';pulse.userData.mode='slow';pulseMaterial.color.set('#75ffb5');}
   function setProfile(profile){equipped=getRewardBoard(profile?.rewardBoard)?.id??null;reset();}
   function trigger(event) {
     if(!disposed&&equipped==='deadtime'&&event?.type==='timePower'&&!event.opponent){
+      timePowerMode=event.active&&event.mode==='fast'?'fast':'slow';
+      pulse.userData.mode=timePowerMode;pulseMaterial.color.set(timePowerMode==='fast'?'#ff777c':'#75ffb5');
       pulseAge=event.active?0:1;pulse.visible=!!event.active&&!reducedMotion;return !!event.active;
     }
     if(disposed||!equipped||event?.opponent||!['trick','airJump'].includes(event?.type))return false;
@@ -295,6 +297,7 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       if(sculpted)updateSculpted(slot,p,fade,size);
       if(clock){
         const motion=reducedMotion?0:p;
+        slot.coreMaterial.color.set(timePowerMode==='fast'?'#ffd1b9':'#d9d6a9');slot.edgeMaterial.color.set(timePowerMode==='fast'?'#ff9290':'#b7ffd0');slot.particleMaterial.color.set(timePowerMode==='fast'?'#ed4958':'#5cd890');
         slot.coreMaterial.opacity=slot.edgeMaterial.opacity=slot.particleMaterial.opacity=(reducedMotion?.65:.92)*fade;
         for(let i=0;i<slot.hands.length;i++){
           const {pivot,minute,hour}=slot.hands[i],angle=i*TAU/8+slot.seed+motion*TAU*1.15;

@@ -25,6 +25,8 @@ test('instruction remapping covers tutorial, powers and race HUD while protectin
   assert.equal(remapControlText('Hold Space, release, press J. Follow J with L. Try J, then B.',bindings),'Hold Z, release, press 2. Follow 2 with 3. Try 2, then 4.');
   assert.equal(remapControlText('Use I in the air. Enter banks a landed combo. DEADTIME uses Q. C also works.',bindings),'Use 1 in the air. 5 banks a landed combo. DEADTIME uses 7. 6 also works.');
   assert.equal(remapControlText('Q TO SLOW TIME · HOLD SPACE · RELEASE · J · LAND',bindings),'7 TO SLOW TIME · HOLD Z · RELEASE · 2 · LAND');
+  assert.equal(remapControlText('Tap Q for slow motion; double-tap Q for 2× fast-forward.',bindings),'Tap 7 for slow motion; double-tap 7 for 2× fast-forward.');
+  assert.equal(remapControlText('Q TO SLOW · DOUBLE-TAP Q TO FAST-FORWARD · 6.0s',bindings),'7 TO SLOW · DOUBLE-TAP 7 TO FAST-FORWARD · 6.0s');
   assert.equal(remapControlText('100% READY · I',bindings),'100% READY · 1');
   assert.equal(remapControlText('NEXT: L / B · COMBO MOVES',bindings),'NEXT: 3 / 4 · COMBO MOVES');
   assert.equal(remapControlText('SPACE TO LINK · ENTER TO BANK',bindings),'Z TO LINK · 5 TO BANK');

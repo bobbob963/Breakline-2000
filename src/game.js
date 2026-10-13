@@ -4,7 +4,7 @@ import { findComboAnimation } from './combo-animations.js';
 import { getSurferSpecial } from './surfer-specials.js';
 import { getRewardBoard } from './board-rewards.js';
 import { sanitizeResolvedAdminStats } from './admin-settings.js';
-import { TimePower, TIME_POWER_SCALE, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
+import { TimePower, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,stormBarrelsNear,barrelCrossSection,barrelClosureProgress,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 import { surfHazardsNear,whirlpoolPull,sweepSurfHazard } from './surf-hazards.js';
 import { createStormTiming } from './storm-progression.js';
@@ -110,8 +110,11 @@ export class SurfGame {
   get timePowerCooldown() {return this._timePower?.cooldown??0;}
   get timePowerBurstTime() {return this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0?(this._timePower?.burst??0):0;}
   get timePowerSpeedMultiplier() {return this.timePowerBurstTime>0?TIME_POWER_BURST_MULTIPLIER:1;}
-  get timeScale() {return this.timePowerActive?TIME_POWER_SCALE:1;}
+  get timePowerMode() {return this._timePower?.mode||'slow';}
+  get timePowerRevision() {return this._timePower?.revision??0;}
+  get timeScale() {return this.timePowerActive?this._timePower.timeScale:1;}
   toggleTimePower() {return this._timePower.toggle(this.timePowerEligible);}
+  fastForwardTimePower() {return this._timePower.fastForward(this.timePowerEligible);}
   updateTimePower(realDt) {
     return this._timePower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
       equipped:this.timePowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});

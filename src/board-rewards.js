@@ -28,8 +28,8 @@ export const REWARD_BOARDS = Object.freeze({
   afterburner: board('afterburner', 'AFTERBURNER', null, '+25% BASE SPEED / +50% BOOST POWER',
     'Clear your first three Time Trials to earn this turbine deck. Ride 25% faster at base speed and get 50% more bonus speed from earned trick boosts. Warm exhaust bursts off completed tricks.',
     'exhaust', { primary: '#fa732f', secondary: '#352048', accent: '#ffebac' }, { trialClears: 3, baseSpeedMultiplier: 1.25, boostPowerMultiplier: 1.5 }),
-  deadtime: board('deadtime', 'DEADTIME', null, 'Q / SLOW TIME → +50% SPEED',
-    'A secret earned by surviving five minutes in Storm Rider. Q toggles six seconds of slow motion. Spend the full charge for 50% more speed for three seconds, then recharge. Clock hands spiral off completed tricks; a green pulse spreads from the board when time slows.',
+  deadtime: board('deadtime', 'DEADTIME', null, 'Q TO SLOW · DOUBLE-TAP Q TO FAST-FORWARD',
+    'A secret earned by surviving five minutes in Storm Rider. Tap Q for slow motion or double-tap Q for 2× fast-forward, sharing six seconds of charge. Spend the full charge for 50% more speed for three seconds, then recharge. Clock hands spiral off completed tricks; a green pulse spreads from the board when time slows, and a red pulse spreads when time speeds up.',
     'clock', { primary: '#176a45', secondary: '#112923', accent: '#b7ffd0' }, { hidden: true, slowMotion: true, survivalSeconds: 300 }),
 });
 

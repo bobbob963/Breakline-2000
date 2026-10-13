@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 import * as THREE from 'three';
 import {SurfWorld} from '../src/world.js';
 import {SurfGame} from '../src/game.js';
+import {createTimePowerInput} from '../src/time-power-input.js';
 import {SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret} from '../src/secret-progress.js';
 import {getRewardBoard} from '../src/board-rewards.js';
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
@@ -26,20 +27,28 @@ test('production unlock saves immediately at five minutes, announces once and of
   assert.match(c.rewardCard('deadtime',{unlocked:true,equipped:true}),/EQUIPPED/);
 });
 
-test('main animation loop passes the same slowed delta to simulation, special meter and world while screen pulse uses real time',()=>{
-  const game=new SurfGame();game.setRewardBoard('deadtime');game.start();game.toggleTimePower();
+for(const mode of ['slow','fast'])test(`main animation loop integrates ${mode} power input for physics, meter and world while its screen pulse uses real time`,()=>{
+  const game=new SurfGame();game.setRewardBoard('deadtime');game.start();
+  const timePowerInput=createTimePowerInput(()=>game);timePowerInput.press(0);
+  if(mode==='fast')timePowerInput.press(120);
+  // A single press starts after the double-tap window; a double starts fast
+  // immediately, with the whole shared charge still available.
+  const expected=mode==='slow'?.28+.72*.4:2;
   const draws=[],screens=[],specials=[];
-  const c={game,previous:0,accumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
+  const c={game,timePowerInput,previous:0,accumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
     world:{update:dt=>draws.push(dt),boardScreenOrigin:()=>({x:100,y:200})},timePowerScreen:{update:(dt,state)=>screens.push({dt,state})},wasted:{active:false,update:noop},
     preview:null,menuSurfer:{update:noop},document:{hidden:false},$ :()=>({classList:{contains:()=>true,remove:noop}}),audio:{update:noop,setRaceState:noop,setRideContext:noop},
     radio:{sync:noop},updateHud:noop,checkSurvivalSecret:noop,toastTime:0,requestAnimationFrame:()=>1};
   vm.runInNewContext(block('const frame=now=>{',';animationId=requestAnimationFrame(frame);')+';globalThis.runFrame=frame;',c);
   for(let i=1;i<=60;i++)c.runFrame(i*1000/60);
-  assert.ok(Math.abs(game.elapsed-.4)<1/120+.00001);
-  assert.ok(Math.abs(draws.reduce((a,b)=>a+b,0)-.4)<1e-8);
-  assert.ok(Math.abs(specials.reduce((a,b)=>a+b,0)-.4)<1e-8);
+  assert.ok(Math.abs(game.elapsed-expected)<1/120+.00001);
+  assert.ok(Math.abs(draws.reduce((a,b)=>a+b,0)-expected)<1e-8);
+  assert.ok(Math.abs(specials.reduce((a,b)=>a+b,0)-expected)<1e-8);
   assert.ok(Math.abs(screens.reduce((sum,row)=>sum+row.dt,0)-1)<1e-8);
   assert.deepEqual(screens.at(-1).state.origin,{x:100,y:200});assert.equal(screens.at(-1).state.active,true);
+  assert.equal(screens.at(-1).state.mode,mode);
+  assert.ok(Math.abs(game.timePowerCharge-(mode==='slow'?5.28:5))<1e-8);
+  if(mode==='fast')assert.ok(screens.every(row=>row.state.active&&row.state.mode==='fast'));
   game.pause();const elapsed=game.elapsed,charge=game.timePowerCharge;c.runFrame(1016.667);
   assert.equal(game.elapsed,elapsed);assert.equal(game.timePowerCharge,charge);assert.equal(screens.at(-1).state.paused,true);
 });

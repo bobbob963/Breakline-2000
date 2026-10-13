@@ -13,21 +13,25 @@ export class TimePowerScreen {
     this.ring=doc.createElement('div');this.ring.className='time-power-pulse';
     this.element.append(this.tint,this.ring);mount.append(this.element);this.reset();
   }
-  update(dt,{active=false,paused=false,origin}={}) {
+  update(dt,{active=false,mode='slow',paused=false,origin}={}) {
     if(this.disposed)return;
     const viewport=this.viewport(),width=Math.max(1,viewport.width),height=Math.max(1,viewport.height);
-    if(active&&!this.active){
-      this.origin={x:clamp(Number.isFinite(origin?.x)?origin.x:width*.5,0,width),y:clamp(Number.isFinite(origin?.y)?origin.y:height*.7,0,height)};
-      this.age=0;this.amount=0;
-    }
-    this.active=!!active;
     if(!paused){
+      const nextMode=mode==='fast'?'fast':'slow';
+      if(active&&(!this.active||nextMode!==this.mode)){
+        this.origin={x:clamp(Number.isFinite(origin?.x)?origin.x:width*.5,0,width),y:clamp(Number.isFinite(origin?.y)?origin.y:height*.7,0,height)};
+        this.age=0;this.amount=0;this.mode=nextMode;
+      }
+      this.active=!!active;
       const elapsed=clamp(Number.isFinite(dt)?dt:0,0,.1);
       if(this.active)this.age+=elapsed;
       this.amount=clamp(this.amount+(this.active?1:-1)*elapsed/(this.active?.4:.25),0,1);
     }
     this.element.hidden=!this.active&&this.amount===0;
     this.element.dataset.active=String(this.active);
+    // Keep the last colour while fading out, even after the simulation has
+    // returned to its default mode. A new activation starts at the deck again.
+    this.element.dataset.mode=this.mode;
     if(this.element.hidden)return;
     const {x,y}=this.origin??{x:width*.5,y:height*.7};
     const endRadius=Math.hypot(Math.max(x,width-x),Math.max(y,height-y))+4;
@@ -42,8 +46,8 @@ export class TimePowerScreen {
     this.element.dataset.phase=this.reducedMotion?'tint':expanding?'pulse':'tint';
   }
   reset() {
-    this.active=false;this.age=0;this.amount=0;this.origin=null;
-    this.element.hidden=true;this.ring.hidden=true;this.tint.style.opacity='0';this.tint.style.clipPath='none';this.element.dataset.active='false';
+    this.active=false;this.mode='slow';this.age=0;this.amount=0;this.origin=null;
+    this.element.hidden=true;this.ring.hidden=true;this.tint.style.opacity='0';this.tint.style.clipPath='none';this.element.dataset.active='false';this.element.dataset.mode='slow';this.element.dataset.phase='tint';
   }
   dispose() {if(this.disposed)return;this.reset();this.disposed=true;this.element.remove();}
 }

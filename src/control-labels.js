@@ -36,7 +36,7 @@ export function remapControlText(text,rawBindings=DEFAULT_KEYBINDS) {
     // X / C rotates the workshop preview and is deliberately not rebindable.
     if(upper==='C'&&/\bX\s*\/\s*$/.test(before))return token;
     const isNamedKey=upper==='SPACE'||upper==='SHIFT';
-    const instruction=/\b(?:press|hold|release|holding|using|use|uses|with|then|follow|try|tap)\s*$/i.test(before);
+    const instruction=/\b(?:press|hold|release|holding|using|use|uses|with|then|follow|try|tap|double-tap)\s*$/i.test(before);
     const actionSuffix=/^\s+(?:TO (?:POP|PUMP|BRAKE|BANK|RELEASE|SLOW|GRIND|CUT|RESTART|PAUSE|RESUME)|also works\b|toggles\b|switches sound\b|restarts\b|pauses\b|banks\b|rides pipe\b|turns sharply\b|or Esc\b)/.test(after);
     const keyPair=/(?:\b[ADWSEJKLUOHFIBCQPRM]|SHIFT|Shift)\s*[/+]\s*$/.test(before)||/^\s*[/+]\s*(?:[ADWSEJKLUOHFIBCQPRM]\b|SHIFT\b|Shift\b)/.test(after);
     const hudToken=/(?:^|·|NEXT:)\s*$/.test(before)&&/^\s*(?:·|$)/.test(after);

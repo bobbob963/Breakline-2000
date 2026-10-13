@@ -171,3 +171,96 @@ test('invalid real deltas never corrupt the charge or emit a spurious burst',()=
   assert.equal(game.timePowerCharge,6);assert.equal(game.timePowerBurstTime,0);
   assert.equal(events.filter(event=>event.type==='timePowerBurst').length,0);
 });
+
+test('fast forward runs the whole clock at twice speed for six real seconds then grants one burst',()=>{
+  const {game,events}=fixture();
+  assert.equal(game.fastForwardTimePower(),true);assert.equal(game.timePowerMode,'fast');assert.equal(game.timeScale,2);
+  near(game.updateTimePower(5.75),11.5);near(game.timePowerCharge,.25);assert.equal(game.timePowerBurstTime,0);
+  near(game.updateTimePower(.25),.5);assert.equal(game.timePowerActive,false);assert.equal(game.timeScale,1);
+  assert.equal(game.timePowerBurstTime,3);assert.equal(game.timePowerSpeedMultiplier,1.5);assert.equal(game.timePowerCooldown,12);
+  assert.equal(game.fastForwardTimePower(),false);assert.equal(game.toggleTimePower(),false);
+  game.updateTimePower(3);assert.equal(game.timePowerSpeedMultiplier,1);
+  game.updateTimePower(9);assert.equal(game.timePowerCharge,6);assert.equal(game.timePowerCooldown,0);
+  const activation=events.find(event=>event.type==='timePower'&&event.active);
+  assert.equal(activation.mode,'fast');assert.equal(activation.timeScale,2);assert.equal(activation.charge,6);
+  const ending=events.find(event=>event.type==='timePower'&&!event.active);
+  assert.equal(ending.mode,'fast');assert.equal(ending.timeScale,1);assert.equal(ending.reason,'spent');
+  assert.equal(events.filter(event=>event.type==='timePowerBurst').length,1);
+});
+
+test('slow and fast share remaining charge and repeated fast-forward presses cannot refill or extend it',()=>{
+  const {game,events}=fixture();game.toggleTimePower();near(game.updateTimePower(2),.8);
+  assert.equal(game.fastForwardTimePower(),true);assert.equal(game.timeScale,2);assert.equal(game.timePowerCharge,4);
+  for(let i=0;i<20;i++)assert.equal(game.fastForwardTimePower(),false);
+  assert.equal(game.timePowerCharge,4);near(game.updateTimePower(1),2);
+  assert.equal(game.toggleTimePower(),true);assert.equal(game.timeScale,1);assert.equal(game.timePowerCharge,3);
+  game.updateTimePower(100);assert.equal(game.timePowerCharge,3);
+  assert.equal(game.toggleTimePower(),true);assert.equal(game.timePowerMode,'slow');assert.equal(game.timeScale,.4);
+  near(game.updateTimePower(1),.4);assert.equal(game.fastForwardTimePower(),true);
+  near(game.updateTimePower(2),4);assert.equal(game.timePowerBurstTime,3);
+  assert.equal(events.filter(event=>event.type==='timePowerBurst').length,1);
+  const switches=events.filter(event=>event.type==='timePower'&&event.reason==='switch');
+  assert.equal(switches.length,2);assert.ok(switches.every(event=>event.mode==='fast'&&event.timeScale===2));
+});
+
+test('fast forward pauses without spending charge, advancing cooldown or allowing another activation',()=>{
+  const {game}=fixture();game.fastForwardTimePower();game.updateTimePower(2);game.pause();
+  game.updateTimePower(100);assert.equal(game.timePowerCharge,4);assert.equal(game.timePowerMode,'fast');
+  assert.equal(game.fastForwardTimePower(),false);assert.equal(game.toggleTimePower(),false);
+  game.resume();near(game.updateTimePower(4),8);game.pause();game.updateTimePower(100);
+  assert.equal(game.timePowerBurstTime,3);assert.equal(game.timePowerCooldown,12);
+  game.resume();game.updateTimePower(1);assert.equal(game.timePowerBurstTime,2);assert.equal(game.timePowerCooldown,11);
+});
+
+test('fast-forward expiry integrates identically at 30, 60, 144 fps and across a long frame',()=>{
+  const framesets=[[7],[6,1],[5.99,.51,.5],...[30,60,144].map(fps=>Array.from({length:fps*7},()=>1/fps))];
+  for(const frames of framesets){
+    const power=new TimePower(),state={playing:true,equipped:true};power.fastForward(true);
+    const simulated=frames.reduce((sum,dt)=>sum+power.update(dt,state),0);
+    near(simulated,13);near(power.burst,2);near(power.cooldown,11);assert.equal(power.active,false);
+  }
+});
+
+test('every venue advances gameplay, race opponents and course clocks together in fast forward',()=>{
+  const creators=[on=>new SurfGame(on),on=>new SurfGame(on,'storm'),on=>new SurfGame(on,'rush'),on=>new WaveParkGame(on),
+    on=>createTournamentGame(on,{completedRounds:0}),on=>createTournamentGame(on,{completedRounds:1}),
+    on=>createTimeTrialGame(on),on=>createTimeTrialGame(on,{completedTrials:5,selectedTrial:5})];
+  for(const create of creators){
+    const {game}=fixture(create);game.countdownRemaining=0;assert.equal(game.fastForwardTimePower(),true);
+    // Use bounded simulation steps: the ordinary physics frame cap must never
+    // discard a fast-forward slice when the real frame was already near it.
+    for(let frame=0;frame<15;frame++){
+      let simulation=game.updateTimePower(1/60);
+      while(simulation>1e-10){const dt=Math.min(1/120,simulation);game.update(dt,{pump:true});simulation-=dt;}
+    }
+    near(game.elapsed,.5);near(game.timePowerCharge,5.75);assert.equal(game.timePowerActive,true);
+    if(game.opponent){near(game.opponent.elapsed,.5);assert.equal(game.opponent.timePowerEnabled,false);assert.equal(game.opponent.timeScale,1);}
+  }
+});
+
+test('fast forward respects board and admin eligibility, countdown, cancellation and restart',()=>{
+  const game=new SurfGame();game.start();assert.equal(game.fastForwardTimePower(),false);
+  game.setAdminStats({active:false,cheats:{slowMotion:true}});assert.equal(game.fastForwardTimePower(),true);
+  game.updateTimePower(1);game.setAdminStats({active:false,cheats:{slowMotion:false}});
+  assert.equal(game.timePowerActive,false);assert.equal(game.timePowerCharge,5);assert.equal(game.fastForwardTimePower(),false);
+  for(const outcome of ['bail','unequip','finish']){
+    const {game:active,events}=fixture();active.fastForwardTimePower();active.updateTimePower(2);
+    if(outcome==='bail')active.bail();else if(outcome==='unequip')active.setRewardBoard('guitar');else active.finish();
+    assert.equal(active.timePowerActive,false);assert.equal(active.timeScale,1);assert.equal(active.timePowerBurstTime,0);
+    assert.equal(active.timePowerCharge,4);assert.equal(events.filter(event=>event.type==='timePowerBurst').length,0);
+    active.start();assert.equal(active.timePowerCharge,6);assert.equal(active.timePowerMode,'slow');assert.equal(active.timePowerActive,false);
+  }
+  const {game:race}=fixture(on=>createTournamentGame(on));
+  assert.equal(race.fastForwardTimePower(),false);near(race.updateTimePower(.05),.05);assert.equal(race.timePowerCharge,6);
+});
+
+test('lifecycle revisions invalidate a delayed tap across restart, activation and cancellation',()=>{
+  const {game}=fixture();let revision=game.timePowerRevision;
+  const changed=()=>{assert.ok(game.timePowerRevision>revision);revision=game.timePowerRevision;};
+  game.start();changed();assert.equal(game.elapsed,0);
+  game.fastForwardTimePower();changed();
+  game.fastForwardTimePower();assert.equal(game.timePowerRevision,revision);
+  game.toggleTimePower();changed();
+  game.bail();changed();
+  game.setRewardBoard('guitar');changed();
+});

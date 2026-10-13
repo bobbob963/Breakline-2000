@@ -182,7 +182,7 @@ test('guide keys cover the actual aerial trick router and all requested modes an
   for (const id of ['surf', 'survival', 'waterworks', 'rivals', 'time-trials', 'customise', 'name']) assert.ok(chapters.has(id));
   assert.equal(chapters.size, TUTORIAL_STEPS.length);
   const text = JSON.stringify(TUTORIAL_STEPS);
-  for (const term of ['Q toggles', 'wardrobe', 'Customise Board', 'Three lives', 'No time limit', 'five rival ladders', 'twelve seconds']) assert.ok(text.includes(term), term);
+  for (const term of ['tap Q for slow motion', 'double-tap Q for 2× fast-forward', 'wardrobe', 'Customise Board', 'Three lives', 'No time limit', 'five rival ladders', 'twelve seconds']) assert.ok(text.includes(term), term);
 });
 
 test('tutorial badges and instructions follow current bindings, including removed arrow aliases',async()=>{
@@ -193,6 +193,6 @@ test('tutorial badges and instructions follow current bindings, including remove
   await f.chapter(1);assert.match(f.query('#tutorial-body').innerHTML,/The right arrow also turns right/);assert.doesNotMatch(f.query('#tutorial-body').innerHTML,/Left and right arrows work too/);
   await f.chapter(2);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>Z<\/kbd>/);assert.match(f.query('#tutorial-body').innerHTML,/holding G/);
   await f.chapter(3);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>1<\/kbd>/);assert.match(f.query('#tutorial-note').textContent,/use 1 in the air/);
-  await f.chapter(5);assert.match(f.query('#tutorial-body').innerHTML,/2 toggles slow motion/);assert.match(f.query('#tutorial-body').innerHTML,/release Z to hop/);
+  await f.chapter(5);assert.match(f.query('#tutorial-body').innerHTML,/tap 2 for slow motion/);assert.match(f.query('#tutorial-body').innerHTML,/double-tap 2 for 2× fast-forward/);assert.doesNotMatch(f.query('#tutorial-body').innerHTML,/tap Q/);assert.match(f.query('#tutorial-body').innerHTML,/release Z to hop/);
   bindings=rebindKey(bindings,'jump','Digit3');await f.chapter(2);assert.match(f.query('#tutorial-body').innerHTML,/<kbd>3<\/kbd>/);
 });

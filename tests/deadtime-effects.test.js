@@ -92,3 +92,57 @@ test('reduced-motion power uses gentle full-screen tint without ring or expandin
   assert.equal(screen.ring.hidden,true);assert.equal(screen.tint.style.clipPath,'none');assert.ok(Number(screen.tint.style.opacity)>0&&Number(screen.tint.style.opacity)<TIME_TINT_OPACITY);
   screenAdvance(screen,.5,{active:true});assert.equal(Number(screen.tint.style.opacity),TIME_TINT_OPACITY);screen.dispose();
 });
+
+test('switching from slow to fast restarts the red pulse at the current board and keeps red throughout fade-out',()=>{
+  const {screen}=screenFixture();screenAdvance(screen,1,{active:true,mode:'slow',origin:{x:245,y:530}});
+  assert.equal(screen.element.dataset.mode,'slow');assert.equal(screen.ring.hidden,true);
+  screen.update(.05,{active:true,mode:'fast',origin:{x:790,y:430}});
+  assert.equal(screen.element.dataset.mode,'fast');assert.equal(screen.ring.hidden,false);
+  assert.match(screen.tint.style.clipPath,/at 790\.00px 430\.00px/);
+  const firstRadius=Number(screen.ring.style.width.slice(0,-2));
+  screen.update(.05,{active:true,mode:'fast',origin:{x:80,y:80}});
+  assert.ok(Number(screen.ring.style.width.slice(0,-2))>firstRadius,'same activation keeps expanding');
+  assert.match(screen.tint.style.clipPath,/at 790\.00px 430\.00px/,'activation origin stays anchored');
+  screenAdvance(screen,1,{active:true,mode:'fast'});
+  assert.equal(screen.ring.hidden,true);assert.equal(Number(screen.tint.style.opacity),TIME_TINT_OPACITY);
+  screen.update(.05,{active:false,mode:'slow'});
+  assert.equal(screen.element.dataset.mode,'fast','returning simulation mode does not recolour the fading tint');
+  assert.ok(Number(screen.tint.style.opacity)>0);screenAdvance(screen,.4,{active:false,mode:'slow'});
+  assert.equal(screen.element.hidden,true);screen.update(.05,{active:true,mode:'slow'});
+  assert.equal(screen.element.dataset.mode,'slow');assert.equal(screen.ring.hidden,false);screen.dispose();
+});
+
+test('pause freezes red pulse, tint and pending mode changes, while reset restores clean slow defaults',()=>{
+  const {screen}=screenFixture();screen.update(.1,{active:true,mode:'fast',origin:{x:360,y:520}});
+  const tint={...screen.tint.style},ring={...screen.ring.style},dataset={...screen.element.dataset};
+  screenAdvance(screen,1,{active:true,mode:'fast',paused:true});
+  screen.update(.1,{active:true,mode:'slow',paused:true,origin:{x:50,y:50}});
+  assert.deepEqual(screen.tint.style,tint);assert.deepEqual(screen.ring.style,ring);assert.deepEqual(screen.element.dataset,dataset);
+  screen.reset();assert.equal(screen.element.hidden,true);assert.equal(screen.element.dataset.mode,'slow');assert.equal(screen.tint.style.opacity,'0');
+  screen.update(.05,{active:true,mode:'fast'});assert.equal(screen.element.dataset.mode,'fast');screen.dispose();
+});
+
+test('reduced-motion fast-forward keeps the red tint without an expanding screen or board ring',()=>withCanvas(()=>{
+  const {screen}=screenFixture(true);screenAdvance(screen,.5,{active:true,mode:'fast',origin:{x:50,y:600}});
+  assert.equal(screen.element.dataset.mode,'fast');assert.equal(screen.ring.hidden,true);assert.equal(screen.tint.style.clipPath,'none');assert.equal(Number(screen.tint.style.opacity),TIME_TINT_OPACITY);
+  const effects=createBoardEffects({reducedMotion:true});effects.setProfile({rewardBoard:'deadtime'});
+  effects.trigger({type:'timePower',active:true,mode:'fast'});effects.update(.1,{rig:new THREE.Group()},camera);
+  assert.equal(effects.group.getObjectByName('deadtime-board-pulse').visible,false);effects.dispose();screen.dispose();
+}));
+
+test('fast-forward makes the board burst and clock hands red, reuses the same pool and clears on stop or reset',()=>withCanvas(()=>{
+  const surfer={rig:new THREE.Group()},effects=createBoardEffects();effects.setProfile({rewardBoard:'deadtime'});
+  const pulse=effects.group.getObjectByName('deadtime-board-pulse'),objects=effects.group.getObjectsByProperty('isObject3D',true).length;
+  effects.trigger({type:'timePower',active:true,mode:'slow'});effects.update(.05,surfer,camera);
+  const green=pulse.children[0].material.color.getHexString();assert.equal(green,'75ffb5');
+  effects.trigger({type:'timePower',active:true,mode:'fast'});effects.trigger({type:'trick'});effects.update(.05,surfer,camera);
+  assert.equal(pulse.userData.mode,'fast');assert.equal(pulse.children[0].material.color.getHexString(),'ff777c');
+  const minute=activeClocks(effects)[0].getObjectByName('minute-hand');assert.equal(minute.material.color.getHexString(),'ff9290');
+  const ringScale=pulse.children[0].scale.toArray();advance(effects,surfer,1,{paused:true});assert.deepEqual(pulse.children[0].scale.toArray(),ringScale);assert.equal(pulse.children[0].material.color.getHexString(),'ff777c');
+  assert.equal(effects.group.getObjectsByProperty('isObject3D',true).length,objects);
+  effects.trigger({type:'timePower',active:false,mode:'fast'});effects.update(.05,surfer,camera);
+  assert.equal(pulse.visible,false);assert.equal(minute.material.color.getHexString(),'b7ffd0');
+  effects.trigger({type:'timePower',active:true,mode:'fast'});effects.reset();
+  assert.equal(pulse.visible,false);assert.equal(pulse.userData.mode,'slow');assert.equal(pulse.children[0].material.color.getHexString(),green);
+  effects.setProfile({rewardBoard:'guitar'});assert.equal(effects.trigger({type:'timePower',active:true,mode:'fast'}),false);assert.equal(pulse.visible,false);effects.dispose();
+}));

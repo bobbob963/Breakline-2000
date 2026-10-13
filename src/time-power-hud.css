@@ -3,5 +3,6 @@
 .time-power-hud span{display:block;margin:7px 0;font:7px/1.5 var(--mono)}
 .time-power-hud>div{height:4px;background:#345849}.time-power-hud i{display:block;height:100%;background:#9ce9b0;width:100%}
 .time-power-hud.active{border-color:#b6ffcc;background:#133e25e8}.time-power-hud.bursting{border-color:#ffdc87;color:#ffdc87}.time-power-hud.bursting i{background:#ffdc87}
+.time-power-hud.fast{border-color:#ff9290;background:#41191de8;color:#ffd0cb;text-shadow:1px 1px #230c10}.time-power-hud.fast>div{background:#70363c}.time-power-hud.fast i{background:#ff847f}
 .reward-card[data-reward-theme="deadtime"]{border-color:#78b991;background:linear-gradient(115deg,#17382b,#172726)}
 .reward-card[data-reward-theme="deadtime"] .reward-icon{color:#a8e8bf}

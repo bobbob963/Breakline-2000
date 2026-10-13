@@ -65,7 +65,13 @@ export function createKeydownHandler(getState, actions) {
     if (e.code === bindings.restart && game.phase !== 'ready') { (actions.restartRun || actions.startRun)(); return; }
     if (game.phase !== 'running' || modalMode) return;
     if(e.code===bindings.bank){game.bank();return;}
-    if (e.code === bindings.timePower) { if(!home) game.toggleTimePower?.(); return; }
+    if (e.code === bindings.timePower) {
+      if (!home) {
+        if (actions.pressTimePower) actions.pressTimePower(e.timeStamp);
+        else game.toggleTimePower?.();
+      }
+      return;
+    }
     if (e.code === bindings.cutback && game.doCutback) {
       if (!game.doCutback(input.left ? -1 : input.right ? 1 : 0)) actions.toast(game.airborne ? 'LAND BEFORE CUTTING BACK' : `BUILD SPEED · ${keyLabel(bindings.cutback)} TO CUTBACK`);
       return;
@@ -74,5 +80,6 @@ export function createKeydownHandler(getState, actions) {
     if (tricks[e.code]) actions.tryTrick(tricks[e.code]);
   };
   handler.resetAdminSequence = resetAdminSequence;
+  handler.cancelPendingPower = () => actions.cancelPowerInput?.();
   return handler;
 }
