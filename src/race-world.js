@@ -180,7 +180,7 @@ export function createRaceWorld(playerProfile) {
     let roll = opponent.pipeRide ? opponent.rideRoll : bail ? -1.8 : park && !air && !opponent.grinding ? clampSlope(crossSlope) + lean * .3 : lean;
     if (opponent.lipMove) { pitch *= 1 - pose.lipGrab; roll *= 1 - pose.lipGrab; }
     surfer.rig.rotation.set(pitch - cutback * .1, heading - (park ? 0 : turn * 1.05), roll - turn * (park ? .32 : .48));
-    surfer.yaw.rotation.y = pose.spin - (park ? opponent.grinding ? Math.PI / 2 : 0 : (opponent.vx || 0) * .035);
+    surfer.yaw.rotation.set(pose.bodyPitch,pose.spin - (park ? opponent.grinding ? Math.PI / 2 : 0 : (opponent.vx || 0) * .035),pose.bodyRoll,'YXZ');
     surfer.boardPivot.rotation.order = 'YXZ';
     surfer.boardPivot.rotation.set(pose.boardPitch, pose.boardSpin, pose.flip + pose.boardBank);
     surfer.boardPivot.position.set(pose.boardSide, (air ? .12 : 0) + pose.boardLift, pose.boardBack);

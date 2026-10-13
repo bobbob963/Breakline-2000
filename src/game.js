@@ -1,6 +1,7 @@
 // Rendering-independent arcade simulation. Units are metres and seconds.
 import { surfRules } from './session-modes.js';
 import { findComboAnimation } from './combo-animations.js';
+import { getSurferSpecial } from './surfer-specials.js';
 import { getRewardBoard } from './board-rewards.js';
 import { sanitizeResolvedAdminStats } from './admin-settings.js';
 import { TimePower, TIME_POWER_SCALE, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
@@ -24,7 +25,7 @@ export const TRICKS = {
   heelflip: { name: 'HEELFLIP', points: 650, duration: 0.65, flip: -Math.PI * 2 },
   method: { name: 'METHOD AIR', points: 400, duration: 0.80, grab: 1.2 },
   spin360: { name: '360 AIR', points: 700, duration: 0.7, spin: Math.PI * 2 },
-  special: { name: 'RODEO AIR', points: 1200, duration: 0.82, spin: Math.PI * 2, flip: Math.PI * 2, grab: .45 },
+  special: getSurferSpecial('kai'),
   tweak: { name: 'TWEAKED GRAB', points: 650, duration: 0.78, grab: 1, tweak: 1 },
 };
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -41,7 +42,7 @@ export function courseItem(index,rulesId='surf') {
 }
 
 export class SurfGame {
-  constructor(onEvent = () => {},rulesId='surf') { this.onEvent = onEvent;this.rulesId=surfRules(rulesId).id; this.reset(); }
+  constructor(onEvent = () => {},rulesId='surf') { this.onEvent = onEvent;this.rulesId=surfRules(rulesId).id; this.setCharacter('kai');this.reset(); }
   reset() {
     if(this._timePower)this._timePower.reset();
     else this._timePower=new TimePower(event=>this.onEvent(event));
@@ -69,6 +70,8 @@ export class SurfGame {
   start() { this.reset(); this.phase = 'running'; this.onEvent({ type: 'start' }); }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
+  setCharacter(id) {this.characterId=getSurferSpecial(id).characterId;return this.characterId;}
+  get characterSpecial() {return getSurferSpecial(this.characterId);}
   setAdminStats(value) {
     this.adminStats=sanitizeResolvedAdminStats(value);
     this.refreshAdminBoard();
@@ -243,12 +246,15 @@ export class SurfGame {
   doTrick(type) {
     if (!Object.hasOwn(TRICKS,type) || this.phase !== 'running' || !this.airborne || this.trick || this.bailTime > 0) return false;
     if(this.mode==='surf'&&this.airLaunchSource==='flat')return false;
-    this.trick = { type, age: 0, ...TRICKS[type] };
+    // Snapshot the chosen move: changing a profile during flight cannot change
+    // its timing, score, name or animation halfway through a rotation.
+    this.trick = { type, age: 0, ...(type==='special'?this.characterSpecial:TRICKS[type]) };
     this.trick.duration/=this.characterStats?.trickSpeed??1;
     const animation = this.comboBase > 0 ? findComboAnimation(this.lastCompletedTrickType, type) : null;
     const variation = animation ? { comboAnimation:animation.id, comboAnimationName:animation.name } : {};
     Object.assign(this.trick, variation);
-    this.onEvent({ type: 'trickStart', trick: type, ...variation }); return true;
+    const signature=type==='special'?{specialId:this.trick.specialId,characterId:this.trick.characterId,name:this.trick.name}:{};
+    this.onEvent({ type: 'trickStart', trick: type, ...variation,...signature }); return true;
   }
   completeTrick() {
     if(!this.trick)return false;
@@ -256,7 +262,8 @@ export class SurfGame {
     this.rotation+=t.spin||0;this.flipRotation+=t.flip||0;
     this.boardRotation+=t.boardSpin||0;this.rollRotation+=t.roll||0;
     this.launchTricks++;this.addCombo(t.name,t.points,true);this.lastCompletedTrickType=t.type;this.trick=null;
-    this.onEvent({type:'trick',name:t.name,rewardBoard:this.rewardBoard||null,vfx:this.rewardBoardDefinition?.vfx||null});return true;
+    const signature=t.specialId?{specialId:t.specialId,characterId:t.characterId}:{};
+    this.onEvent({type:'trick',name:t.name,rewardBoard:this.rewardBoard||null,vfx:this.rewardBoardDefinition?.vfx||null,...signature});return true;
   }
   updateAirTrick(dt) {
     if(!this.trick)return;

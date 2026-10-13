@@ -34,13 +34,36 @@ function comboChoreography(id, progress) {
   return {id,weight,plantFeet:weight,hip:pose.hip.map(value=>value*weight),torso:pose.torso.map(value=>value*weight),leftWrist:pose.leftWrist,leftElbow:pose.leftElbow,rightWrist:pose.rightWrist,tuck:(pose.tuck||0)*weight,board};
 }
 
+// Signature moves share the ordinary contact solver but have their own body
+// silhouettes. The cork rotates the complete rider/deck hierarchy, never a
+// hand-held deck independently of the arm. All shape offsets ease back to zero.
+function specialChoreography(id, progress) {
+  const weight=grabEnvelope(progress);
+  const poses={
+    'tidal-rodeo':{hip:[-.03,.10,-.05],torso:[-.12,-.25,-.10],leftWrist:[-.40,.60,-.25],leftElbow:[-.38,.43,-.12],board:[-.25,.08,.15,.04,-.03]},
+    'orbital-720':{hip:[-.04,.17,-.15],torso:[-.17,.15,.13],leftWrist:[-.14,.30,-.20],leftElbow:[-.40,.30,-.04],tuck:.8,board:[.26,-.18,.20,.10,-.06]},
+    'reef-kickout':{hip:[-.07,.11,.10],torso:[.04,-.20,-.25],leftWrist:[-.53,.52,.24],leftElbow:[-.43,.62,.14],board:[.28,-.05,.09,-.08,.04]},
+    'dockside-flip':{hip:[.05,.055,-.075],torso:[-.21,.42,-.10],leftWrist:[-.40,.17,-.35],leftElbow:[-.44,.38,-.12],tuck:.5,board:[-.10,.08,.06,.03,.02]},
+  };
+  const pose=Object.hasOwn(poses,id)?poses[id]:null;
+  if(!pose)return null;
+  // Jax lets the loose deck flip/shuv first, then pulls it into the catch.
+  const plantFeet=id==='dockside-flip'?weight*smooth((progress-.20)/.08):weight;
+  return {
+    bodyRoll:id==='tidal-rodeo'&&progress<1?Math.PI*2*smooth(progress):0,
+    bodyPitch:id==='tidal-rodeo'?Math.sin(Math.PI*smooth(progress))*.48:0,
+    board:pose.board.map(value=>value*plantFeet),
+    body:weight>0?{id,weight,plantFeet,hip:pose.hip.map(value=>value*weight),torso:pose.torso.map(value=>value*weight),leftWrist:pose.leftWrist,leftElbow:pose.leftElbow,tuck:(pose.tuck||0)*weight}:null,
+  };
+}
+
 export function sampleRiderTrick(game, { air = !!game.airborne } = {}) {
   const result = {
     spin: air ? game.rotation || 0 : 0,
     flip: air ? game.flipRotation || 0 : 0,
     boardSpin: air ? game.boardRotation || 0 : 0,
     grab: 0, lipGrab: 0, tweak: 0, progress: 0, holdingGrab: false, comboPose:null,
-    boardBank: 0, boardPitch: 0, boardLift: 0, boardSide: 0, boardBack: 0,
+    boardBank: 0, boardPitch: 0, boardLift: 0, boardSide: 0, boardBack: 0, bodyRoll:0, bodyPitch:0,
   };
   const trick = air ? game.trick : null;
   if (trick) {
@@ -66,6 +89,12 @@ export function sampleRiderTrick(game, { air = !!game.airborne } = {}) {
     if(combo){
       const {board,...body}=combo;result.comboPose=body;
       for(const [i,key]of ['boardBank','boardPitch','boardLift','boardSide','boardBack'].entries())result[key]+=board[i];
+    }
+    const special=specialChoreography(trick.specialId,progress);
+    if(special){
+      result.comboPose=special.body;
+      result.bodyRoll=special.bodyRoll;result.bodyPitch=special.bodyPitch;
+      for(const [i,key]of ['boardBank','boardPitch','boardLift','boardSide','boardBack'].entries())result[key]+=special.board[i];
     }
     result.progress = progress;
   }

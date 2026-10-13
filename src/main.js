@@ -111,7 +111,7 @@ const modeInfo={
 };
 function toast(text,bail=false){$('toast').textContent=text;$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
 function clearInput(){pressed.clear();for(const k in input)input[k]=false;keydownHandler?.resetAdminSequence();}
-function applyPlayerSettings(){game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
+function applyPlayerSettings(){game.setCharacter(profile.character);game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
 function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!tutorial?.isOpen&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
 function openAdmin(){if(!adminHomeScreen())return;clearInput();adminPanel.open();}
 function openTutorial(replay=true){if(!adminHomeScreen())return;clearInput();tutorial.open({replay});}
@@ -270,7 +270,7 @@ function showHelp(){
   <span><kbd>H</kbd> <kbd>F</kbd></span><span>Method air / 360 air.</span>
   <span><kbd>B</kbd></span><span>Tweaked grab: tuck your knees, pull the surfboard to your side and raise the free arm.</span>
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
-  <span><kbd>I</kbd></span><span>Rodeo Air at 100% SPECIAL. Once full, it stays ready until used—even through a wipeout.</span>
+  <span><kbd>I</kbd></span><span>${game.characterSpecial.name} — ${game.characterSpecial.description} Use at 100% SPECIAL while airborne. Once full, it stays ready until used—even through a wipeout.</span>
   ${game.timePowerEnabled?'<span><kbd>Q</kbd></span><span>Toggle DEADTIME slow motion. You have six seconds of charge; switching off early keeps the remaining charge. Use the full charge to gain 50% more speed for three seconds. Recharges over twelve seconds of active play. Pausing freezes the power.</span>':''}
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
   ${isParkMode()&&!game.isRace?'<span>TRICK BOOST</span><span>Land a completed aerial trick for a speed burst. Use a charged pop or ride a ramp for air. Link tricks in an unbanked combo for a stronger, longer boost. A plain hop gives no boost; braking eases it off and a wipeout clears it.</span>':''}
@@ -364,6 +364,9 @@ function updateCustomizationChoices(){
   const character=CHARACTERS[profile.character], labels=['AIR','HANG TIME','POP','SPEED','SPIN','LANDING','SWITCH','RAIL BALANCE','LIP BALANCE','FLOW'];
   $('character-stats').innerHTML=labels.map((label,i)=>{const rating=character.stats?.[i]??7;return `<div class="stat-row" aria-label="${label}: ${rating} out of 10"><span>${label}</span><div class="stat-dots" aria-hidden="true">${Array.from({length:10},(_,n)=>`<i class="stat-dot${n<rating?'':' empty'}"></i>`).join('')}</div></div>`;}).join('');
   $('character-bio').textContent=character.bio||'A local with a taste for long lines and late summer swells.';
+  $('surfer-special-name').textContent=game.characterSpecial.name;
+  $('surfer-special-description').textContent=game.characterSpecial.description;
+  $('special-move-name').textContent=game.characterSpecial.name;
   $('outfit-name').textContent=OUTFITS[profile.outfit].name;
   $('surfer-role').textContent=character.subtitle;
   $('surfer-stance').textContent=character.stance||'REGULAR';
@@ -405,7 +408,7 @@ function closeWardrobe(){
   $('wardrobe').classList.add('hidden');$('wardrobe-toggle').setAttribute('aria-expanded','false');
   if(workshopMode==='character')$('wardrobe-toggle').focus({preventScroll:true});
 }
-function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast('RODEO AIR!');}}
+function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game.airLaunchSource==='flat'){toast('NEED AIR · CUT BACK OR RIDE THE LIP');return;}if(type==='special'&&!special.ready){if(game.airborne)toast('BUILD YOUR SPECIAL METER');return;}if(game.doTrick(type)&&type==='special'){special.consume();toast(`${game.trick.name}!`);}}
 function tryPop(){if(game.jump())return;if(game.rewardBoardDefinition?.airJumps>0&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE EXTRA AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);

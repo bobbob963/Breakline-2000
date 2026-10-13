@@ -474,10 +474,10 @@ export class SurfWorld {
     const lean = attract ? Math.sin(t * .7) * .10 : isPark ? -(game.steering||0)*.16 : -game.vx * .024;
     const air = !attract && game.airborne;
     const bail = !attract && game.bailTime > 0;
-    const {spin,flip,boardSpin,grab,lipGrab,tweak=0,comboPose=null,boardBank=0,boardPitch=0,boardLift=0,boardSide=0,boardBack=0}=sampleRiderTrick(game,{air});
+    const {spin,flip,boardSpin,grab,lipGrab,tweak=0,comboPose=null,boardBank=0,boardPitch=0,boardLift=0,boardSide=0,boardBack=0,bodyRoll=0,bodyPitch=0}=sampleRiderTrick(game,{air});
     s.rig.rotation.order='YXZ';
     s.rig.rotation.y=heading-(isPark?0:turn*1.05);
-    s.yaw.rotation.y = spin - (isPark?(game.grinding?Math.PI/2:0):(attract ? .3 : game.vx * .035));
+    s.yaw.rotation.set(bodyPitch,spin - (isPark?(game.grinding?Math.PI/2:0):(attract ? .3 : game.vx * .035)),bodyRoll,'YXZ');
     const surface=isPark?(!attract&&game.surface?game.surface:parkSurface(x,z)):null;
     const slope=surface?Math.atan(surface.dx*-Math.sin(heading)+surface.dz*-Math.cos(heading)):0;
     const crossSlope=surface?Math.atan(surface.dx*Math.cos(heading)-surface.dz*Math.sin(heading)):0;

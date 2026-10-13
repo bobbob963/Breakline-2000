@@ -99,7 +99,7 @@ test('simulation produces equivalent outcomes at 30 and 120 Hz', () => {
   assert.ok(Math.abs(a.time - b.time) < .001);
 });
 
-test('charged launch gives the Rodeo Air time to finish and score after landing', () => {
+test('charged launch gives the Tidal Rodeo time to finish and score after landing', () => {
   const events = [];
   const g = new SurfGame(event => events.push(event)); g.start();
   assert.equal(g.doTrick('special'), false, 'special requires a launch');
@@ -107,7 +107,7 @@ test('charged launch gives the Rodeo Air time to finish and score after landing'
   assert.equal(g.doTrick('special'), true);
   advance(g, .9);
   assert.equal(g.trick, null);
-  assert.ok(g.comboNames.includes('RODEO AIR'));
+  assert.ok(g.comboNames.includes('TIDAL RODEO'));
   assert.equal(g.airborne, true);
   assert.equal(g.score, 0);
   assert.equal(g.bank(), false);
@@ -117,10 +117,10 @@ test('charged launch gives the Rodeo Air time to finish and score after landing'
   assert.equal(g.bank(), true);
   assert.equal(g.score, 2640);
   assert.equal(g.landedTricks, 1);
-  assert.equal(events.filter(event => event.type === 'trick' && event.name === 'RODEO AIR').length, 1);
+  assert.equal(events.filter(event => event.type === 'trick' && event.name === 'TIDAL RODEO').length, 1);
 });
 
-test('starting a Rodeo Air too close to landing loses the combo and recovers', () => {
+test('starting a Tidal Rodeo too close to landing loses the combo and recovers', () => {
   const events = [];
   const g = new SurfGame(event => events.push(event)); g.start();lipLaunch(g);nearLanding(g);
   assert.equal(g.doTrick('special'), true);
@@ -131,7 +131,7 @@ test('starting a Rodeo Air too close to landing loses the combo and recovers', (
   assert.equal(g.score, 0);
   assert.equal(g.landedTricks, 0);
   assert.equal(g.trick, null);
-  assert.equal(events.filter(event => event.type === 'trick' && event.name === 'RODEO AIR').length, 0);
+  assert.equal(events.filter(event => event.type === 'trick' && event.name === 'TIDAL RODEO').length, 0);
   advance(g, 1.4);
   assert.equal(g.bailTime, 0);
   assert.equal(g.phase, 'running');

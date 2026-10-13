@@ -180,7 +180,7 @@ The selected character, outfit, board, mode, sound preference and personal bests
 | B | Tweaked Grab in any mode: tucked knees, board pulled beside the body, one hand on the rail and the free arm raised. |
 | Shift + A / D (or Left / Right) | Cut back on the wave face, or make a sharp grounded turn in Waterworks. Near a quarterpipe lip, Shift catches the coping instead. Either key order works. Release the steering/Shift or change direction to trigger another cutback after the cooldown. |
 | C | Alternative cutback button. Steer A/D to choose the direction, or press C to reverse your current carving line. |
-| I | Rodeo Air while airborne when the **SPECIAL** meter is full. |
+| I | Your surfer's signature move while airborne when the **SPECIAL** meter is full. |
 | Enter | Bank a landed combo; start or replay from the menu/results. |
 | P / Escape | Pause / resume. Escape also closes customisation. |
 | R | Restart the current session. |
@@ -197,7 +197,16 @@ The **? Controls** panel pauses an active session. This version focuses on keybo
 - B performs the **Tweaked Grab**, worth 650 base points. It replaces the old spinning barrel-roll move. In Storm Rider, a barrel is now the **wave curling overhead**: line up with its open mouth and ride through for a barrel bonus.
 - Aim to finish each trick before landing. The final 20% of a move, up to 0.16 seconds, can recover at touchdown; a badly unfinished move still bails. One trick plays at a time. Each completed trick increases the multiplier, up to **×8**; repeated moves lose value within a combo.
 - After landing, pop again within **3.8 seconds** to continue the combo. Enter banks it immediately; letting the combo meter expire also banks it. A wipeout loses the active combo.
-- Completed tricks and banked points fill **SPECIAL**. Once it reaches **100%**, it stays ready through waiting and wipeouts until you use it. Press I during an air to spend the charge on Rodeo Air, and leave enough airtime to finish it. Restarting or returning to the main menu resets the meter. A partly filled meter slowly drains and loses charge on a wipeout.
+- Completed tricks and banked points fill **SPECIAL**. Once it reaches **100%**, it stays ready through waiting and wipeouts until you use it. Press I during an air to spend the charge on your selected surfer's signature move, and leave enough airtime to finish it. Failed attempts on the ground, during another trick or without enough charge do not spend a full meter. Restarting or returning to the main menu resets the meter. A partly filled meter slowly drains and loses charge on a wipeout.
+
+Each surfer has an original signature special, shown in character selection and beneath the meter. Outfits and board powers do not change which special belongs to the surfer. All four have the same 1,200 base points and 0.82-second duration before existing board/admin modifiers.
+
+| Surfer | Signature | Animation |
+| --- | --- | --- |
+| Kai | **Tidal Rodeo** | Corked full-body rotation with a close rail grab. |
+| Nova | **Orbital 720** | Two tight spins with a compact cross-body grab. |
+| Reef | **Reef Kickout** | Laid-over Method with a kicked-out board and frontside spin. |
+| Jax | **Dockside Flip** | Reverse board flip and shove, caught in a deep rail-grab tuck. |
 - In Surf Session, sun rings award **250 points** and strong carving earns extra style points. In The Waterworks, launch from different ramps and jump onto a water rail **along its length** to slide. Pop off or ride off its end before landing and banking.
 - In a timed mode, a grounded combo banks at the final buzzer. An airborne combo, active rail slide, pipe wall ride or lip move is forfeited. Storm Rider ends only when the last life is lost; its results include survived time, best survival time and barrel rides.
 

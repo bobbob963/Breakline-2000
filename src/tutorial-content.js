@@ -46,7 +46,7 @@ export const TUTORIAL_STEPS = Object.freeze([
       { title: 'COMBO → BOOST', text: 'Surf Session, Survival, Waterworks and races reward landed tricks with speed bursts. Link more before banking for stronger boosts. Try J, wait for the spin, then B for a custom combo animation.' },
       { title: 'BANK YOUR POINTS', text: 'Enter banks a landed combo. Pop again before its meter empties to keep linking. An unfinished trick can cause a wipeout and lose the combo.' },
     ],
-    note: 'During a run, a full Special meter stays at 100% until you use I in the air. Small landing mistakes are forgiven; give each trick enough time.',
+    note: 'Each surfer has a signature special: Kai has Tidal Rodeo, Nova has Orbital 720, Reef has Reef Kickout, and Jax has Dockside Flip. A full Special meter stays at 100% until you use I in the air. Give each trick enough time to land.',
   },
   {
     id: 'surf', chapter: 'SURF SESSION', title: 'CHASE THE PERFECT LINE.',
