@@ -183,7 +183,7 @@ test('Skybound flight and the same earned reward agree at 30, 60 and 120 frames 
     for (const hz of [30, 60, 120]) {
       const { game, events } = fixture(make, 'sky');
       assert.ok(game.jump()); advance(game, .2, {}, hz); assert.ok(game.jump());
-      assert.ok(game.doTrick('spin')); advance(game, 2, {}, hz);
+      assert.ok(game.doTrick('spin')); advance(game, 4, {}, hz);
       assert.equal(game.wipeouts, 0); assert.equal(game.airborne, false);
       assert.equal(events.filter(event => event.type === 'raceBoost' && !event.opponent).length, 1);
       results.push([game.x, game.y, game.distance, game.boostSpeed, game.boostTime, game.comboBase]);

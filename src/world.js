@@ -409,7 +409,7 @@ export class SurfWorld {
     const fieldOfView=parkFrame?parkFrame.fov:oceanRaceView?54:50;
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
-    this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract});
+    this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
     this.renderer.render(this.scene, this.camera);
   }
   dispose() {

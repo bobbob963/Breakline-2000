@@ -63,6 +63,32 @@ export class SurfGame {
     return this.rewardBoard;
   }
   get rewardBoardDefinition() {return getRewardBoard(this.rewardBoard);}
+  get glideEligible() {
+    return (this.phase==='running'||this.phase==='paused')&&this.airborne&&this.bailTime<=0&&
+      !this.pipeRide&&!this.grinding&&!this.lipMove&&(this.rewardBoardDefinition?.glideFallSpeed||0)>0;
+  }
+  // Derived rather than latched: landing, bailing, changing boards and the
+  // second jump immediately retract the wings, including between render frames.
+  get gliding() {return this.glideEligible&&this.vy<0;}
+  stepAirVertical(dt,gravity) {
+    if(!this.glideEligible){this.vy-=gravity*dt;return this.vy*dt;}
+    let travel=0;
+    if(this.vy>0){
+      const toApex=this.vy/gravity;
+      // Preserve the ordinary take-off arc; the perk only changes descent.
+      if(toApex>=dt){this.vy-=gravity*dt;return this.vy*dt;}
+      travel=this.vy*toApex-.5*gravity*toApex*toApex;
+      dt-=toApex;this.vy=0;
+    }
+    const board=this.rewardBoardDefinition,fallGravity=gravity*board.glideGravityMultiplier;
+    const terminal=board.glideFallSpeed,velocity=Math.max(-terminal,this.vy);
+    const accelerating=Math.min(dt,Math.max(0,(velocity+terminal)/fallGravity));
+    // Integrate both the accelerating and terminal-speed portions exactly,
+    // so a slower render frame cannot make the glide float or fall faster.
+    travel+=velocity*accelerating-.5*fallGravity*accelerating*accelerating-terminal*(dt-accelerating);
+    this.vy=Math.max(-terminal,velocity-fallGravity*dt);
+    return travel;
+  }
   get popRecoveryDuration() {return POP_COOLDOWN*(this.rewardBoardDefinition?.popRecoveryMultiplier||1);}
   get popCooldown() {return this.popRecovery;}
   get airJumpReady() {
@@ -227,7 +253,7 @@ export class SurfGame {
       this.bailTime = Math.max(0, this.bailTime - dt); this.y = ground;
       if (this.bailTime === 0) { this.x = clamp(this.x, -12, 13); this.onEvent({ type: 'recover' }); }
     } else if (this.airborne) {
-      this.airtime += dt; this.vy -= 10.5 * dt; this.y += this.vy * dt;
+      this.airtime += dt; this.y += this.stepAirVertical(dt,10.5);
       this.updateAirTrick(dt);
       if (this.y <= ground && this.vy < 0 && this.airtime > 0.12) {
         this.y = ground; this.airborne = false; this.vy = 0;

@@ -2,6 +2,7 @@
 const defaults = Object.freeze({
   trickPointsMultiplier: 1, boostPowerMultiplier: 1,
   boostDurationMultiplier: 1, popRecoveryMultiplier: 1, airJumps: 0,
+  glideGravityMultiplier: 1, glideFallSpeed: 0,
 });
 const board = (id, name, ladderIndex, buffLabel, description, vfx, colors, buffs) => Object.freeze({
   ...defaults, id, name, ladderIndex, buffLabel, description, vfx,
@@ -21,9 +22,9 @@ export const REWARD_BOARDS = Object.freeze({
   solar: board('solar', 'SOLAR FLARE', 3, '25% FASTER POP RECOVERY',
     'Sunburst deck. Recover between pops 25% sooner; sharp solar flares punctuate every trick.',
     'flare', { primary: '#ef712d', secondary: '#45204a', accent: '#fff4aa' }, { popRecoveryMultiplier: .75 }),
-  sky: board('sky', 'SKYBOUND', 4, 'ONE EXTRA AIR JUMP',
-    'Winged deck. Release Space again after finishing your current trick for one extra jump each flight; feathered wind marks every trick.',
-    'wind', { primary: '#8db5ed', secondary: '#252d5e', accent: '#f3ffff' }, { airJumps: 1 }),
+  sky: board('sky', 'SKYBOUND', 4, 'ANGEL GLIDE + EXTRA AIR JUMP',
+    'Winged deck. Angel wings open around the board as you glide gently down after each jump. Release Space again after your trick for one extra air jump per flight.',
+    'wind', { primary: '#8db5ed', secondary: '#252d5e', accent: '#f3ffff' }, { airJumps: 1, glideGravityMultiplier: .32, glideFallSpeed: 3.6 }),
 });
 
 export const REWARD_BOARD_ORDER = Object.freeze(Object.keys(REWARD_BOARDS));

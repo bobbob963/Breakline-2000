@@ -498,8 +498,8 @@ export class WaveParkGame extends SurfGame {
       }
       const wasAirborne = this.airborne;
       const from = { x:this.x, y:this.y, z:this.z };
-      if (wasAirborne) this.vy -= 11.2*dt;
-      const to = { x:this.x+this.vx*dt, y:this.y+(wasAirborne ? this.vy*dt : 0), z:this.z+this.vz*dt };
+      const verticalTravel=wasAirborne?this.stepAirVertical(dt,11.2):0;
+      const to = { x:this.x+this.vx*dt, y:this.y+verticalTravel, z:this.z+this.vz*dt };
       let movement = sweepParkMotion(from,to,!wasAirborne);
       const obstacle=sweptObstacles(from,movement.point,this);
       if(obstacle) movement={...obstacle,fraction:movement.fraction*obstacle.fraction};
