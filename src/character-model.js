@@ -289,7 +289,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     p.needsUpdate=true;yokeGeometry.computeVertexNormals();yokeGeometry.computeBoundingSphere();
     legs.forEach((leg,i)=>leg.cloth?.set(leg.points.hip,leg.points.knee,leg.points.ankle,roots[i].map(toRider)));
   }
-  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null,menuLean=null}={}){
+  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null,menuLean=null,menuHold=null}={}){
     shell?.resetNormals();
     if(mode)activeMode=mode;grab=THREE.MathUtils.clamp(Math.max(grab,lipGrab),0,1);
     tweak=air&&!standing?THREE.MathUtils.clamp(tweak,0,1):0;
@@ -311,6 +311,23 @@ export function createCharacter({id,character,outfit,fabricTexture}){
         // wrist and fingertip heights remain exactly at shoulder height.
         arms[i].set([x,.437,.002],[x+side*.32,.437,-.023],[x+side*.6095,.437,.002]);
       }
+    }else if(standing&&menuHold){
+      // Lobby only: relaxed upright posture with a waist-height rail grip.
+      // The board supports its own weight on the floor rather than pulling
+      // the shoulder, spine or elbow out of the rider's natural proportions.
+      body.position.set(.012,.981+breath,.008);body.rotation.set(-.012,.025,-.016);head.rotation.set(.012,-.035,.008);
+      body.updateMatrix();
+      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.12,.52,-.052],[-.14,.085,-.024],[-.177,.047,-.218],shoes);
+      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.13,.52,-.016],[.14,.085,.032],[.177,.047,-.162],shoes);
+      arms[0].set([-.194*build,.437,.002],[-.217*build,.145,.040],[-.239*build,-.151,-.058]);
+      rider.updateWorldMatrix(true,true);
+      const contact=body.worldToLocal(menuHold.contactWorld.clone());
+      const direction=V([.94,0,-.34]).normalize().applyQuaternion(body.getWorldQuaternion(new THREE.Quaternion()).invert());
+      const wrist=contact.clone().addScaledVector(direction,-.15);
+      // The upper arm hangs down, with the bent forearm and palm reaching
+      // across the rail. A little space beside the board avoids a folded wrist.
+      arms[1].set([.194*build,.437,.003],[.22,.13,.16],wrist.toArray(),1,contact.toArray());
+      landmarks.boardGrabTarget=body.localToWorld(contact.clone());
     }else if(standing&&menuLean){
       // Menu-only weight shift. Reuse limb IK and sewn clothing so an upright
       // board hold never rotates a detached sleeve or changes the body mesh.

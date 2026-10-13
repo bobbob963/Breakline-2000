@@ -353,7 +353,7 @@ function updateCustomizationChoices(){
   $('board-name').textContent=getRewardBoard(profile.rewardBoard)?.name||BOARD_DESIGNS[profile.boardDesign].name;
   $('home-surfer-name').textContent=CHARACTERS[profile.character].name;
   $('home-surfer-setup').textContent=`${OUTFITS[profile.outfit].name} / ${$('board-name').textContent}`;
-  $('home-surfer-preview').setAttribute('aria-label',`${CHARACTERS[profile.character].name} wearing ${OUTFITS[profile.outfit].name}, leaning against their ${$('board-name').textContent} surfboard`);
+  $('home-surfer-preview').setAttribute('aria-label',`${CHARACTERS[profile.character].name} wearing ${OUTFITS[profile.outfit].name}, holding their ${$('board-name').textContent} surfboard upright at their side`);
   const visibleBoards=ALL_REWARD_BOARD_ORDER.filter(id=>!getRewardBoard(id).hidden||rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress));
   $('reward-board-options').innerHTML=visibleBoards.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress),equipped:profile.rewardBoard===id})).join('');
   $('standard-board').setAttribute('aria-pressed',String(!profile.rewardBoard));

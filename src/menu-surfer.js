@@ -4,20 +4,21 @@ import { sanitizeRiderName } from './rider-identity.js';
 
 export function arrangeMenuSurfer(surfer) {
   surfer.rider.position.x=-.16;
-  const board=surfer.boardPivot;board.scale.setScalar(.69);board.rotation.order='ZYX';board.rotation.set(Math.PI/2,Math.PI,.19);board.position.set(.63,0,.045);
+  const board=surfer.boardPivot;board.scale.setScalar(1.06);board.rotation.order='ZYX';board.rotation.set(Math.PI/2,Math.PI,0);board.position.set(.70,0,.045);
   board.updateWorldMatrix(true,true);const bounds=new THREE.Box3().setFromObject(board);board.position.y=.013-bounds.min.y;
 }
 
 export function poseMenuSurfer(surfer,time=0) {
   surfer.rig.updateWorldMatrix(true,true);
-  const rail=surfer.board.userData.grabRailLocal.clone();rail.x=-.248;rail.z=-.62;rail.y=.157;
+  // The waist-height inner rail is an authored surface point on the deck.
+  // The board remains vertical and its tail stays planted while the rider breathes.
+  const rail=surfer.board.userData.grabRailLocal.clone();rail.z=-.08;
   const contactWorld=surfer.board.localToWorld(rail);
-  const elbowWorld=surfer.board.localToWorld(new THREE.Vector3(0,.153,-1.11));elbowWorld.y+=.024;elbowWorld.z-=.013;
-  surfer.pose({standing:true,time,menuLean:{contactWorld,elbowWorld}});
+  surfer.pose({standing:true,time,menuHold:{contactWorld}});
   return contactWorld;
 }
 
-/** Anchor the label to the posed crown, including lean, breathing and build. */
+/** Anchor the label to the posed crown, including posture, breathing and build. */
 export function projectMenuNameTag(surfer,camera,width,height) {
   if(!surfer?.landmarks?.crown||width<1||height<1)return {x:0,y:0,visible:false};
   camera.updateMatrixWorld();
@@ -70,8 +71,8 @@ export class MenuSurferPreview {
   }
   pose() {
     const surfer=this.surfer;if(!surfer)return;
-    // The forearm rests on the real nose while the relaxed hand meets its
-    // upper outer rail. World-space contacts preserve support across builds.
+    // Hold the inner rail beside the waist, keeping the free arm relaxed.
+    // World-space contact preserves the grip across all character builds.
     poseMenuSurfer(surfer,this.motionQuery?.matches?0:this.time);
   }
   resize() {
@@ -81,9 +82,9 @@ export class MenuSurferPreview {
     // art. Framing includes the board tip, both feet and the full silhouette.
     const scale=Math.min(1.5,Math.max(1,(globalThis.devicePixelRatio||1)));
     this.renderer.setSize(Math.round(width*scale),Math.round(height*scale),false);this.camera.aspect=width/height;
-    const targetHeight=2.16,verticalDistance=targetHeight/(2*Math.tan(THREE.MathUtils.degToRad(this.camera.fov*.5))),horizontalDistance=1.65/(2*Math.tan(THREE.MathUtils.degToRad(this.camera.fov*.5))*this.camera.aspect);
+    const targetHeight=2.48,verticalDistance=targetHeight/(2*Math.tan(THREE.MathUtils.degToRad(this.camera.fov*.5))),horizontalDistance=1.65/(2*Math.tan(THREE.MathUtils.degToRad(this.camera.fov*.5))*this.camera.aspect);
     const distance=Math.max(verticalDistance,horizontalDistance);
-    this.camera.position.set(-.02,1.06,-distance);this.camera.lookAt(.22,.98,0);this.camera.updateProjectionMatrix();
+    this.camera.position.set(-.02,1.20,-distance);this.camera.lookAt(.22,1.12,0);this.camera.updateProjectionMatrix();
     this.updateNameTag();
   }
   update(dt=0) {
