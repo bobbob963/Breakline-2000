@@ -56,7 +56,7 @@ export function createKeydownHandler(getState, actions) {
       return;
     }
     if (e.code === 'Enter') {
-      if (['results','ladder','trials'].includes(modalMode)) {actions.startRun();return;}
+      if (['results','ladder','trials','sewer-ladder'].includes(modalMode)||(modalMode==='tracks'&&(game.mode==='park'||game.isSewer))) {actions.startRun();return;}
       if (modalMode) {actions.closeModal();return;}
       if (game.phase === 'ready' || game.phase === 'finished') {actions.startRun();return;}
     }

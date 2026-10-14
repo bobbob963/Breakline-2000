@@ -5,6 +5,7 @@ import { getSurferSpecial } from './surfer-specials.js';
 import { getRewardBoard } from './board-rewards.js';
 import { sanitizeResolvedAdminStats } from './admin-settings.js';
 import { TimePower, TIME_POWER_BURST_MULTIPLIER } from './time-power.js';
+import { SewerPower, SEWER_POWER_SPEED_MULTIPLIER } from './sewer-power.js';
 import { waveHeight,waveCrest,stormDifficulty,stormBarrel,stormBarrelsNear,barrelCrossSection,barrelClosureProgress,sampleStormBarrel,sweepStormBarrel,STORM_BARREL_FIRST,STORM_BARREL_SPACING } from './storm-waves.js';
 import { surfHazardsNear,whirlpoolPull,sweepSurfHazard } from './surf-hazards.js';
 import { createStormTiming } from './storm-progression.js';
@@ -44,6 +45,8 @@ export function courseItem(index,rulesId='surf') {
 export class SurfGame {
   constructor(onEvent = () => {},rulesId='surf') { this.onEvent = onEvent;this.rulesId=surfRules(rulesId).id; this.setCharacter('kai');this.reset(); }
   reset() {
+    if(this._sewerPower)this._sewerPower.reset();
+    else this._sewerPower=new SewerPower(event=>this.onEvent(event));
     if(this._timePower)this._timePower.reset();
     else this._timePower=new TimePower(event=>this.onEvent(event));
     this.rules=surfRules(this.rulesId);this.rulesId=this.rules.id;
@@ -97,12 +100,19 @@ export class SurfGame {
     this.rewardBoard=getRewardBoard(id)?.id||null;
     this.refreshAdminBoard();
     if(!this.timePowerEnabled)this._timePower.cancel('unequip');
+    if(!this.sewerPowerEnabled)this._sewerPower.cancel('unequip');
     // Changing equipment cannot refill an extra jump during an existing flight.
     if(this.airborne)this.airJumpsUsed=Math.max(this.airJumpsUsed,this.rewardBoardDefinition?.airJumps||0);
     return this.rewardBoard;
   }
   get rewardBoardDefinition() {return this.adminStats?.active?this._adminBoardDefinition:getRewardBoard(this.rewardBoard);}
-  get baseSpeedMultiplier() {return this.rewardBoardDefinition?.baseSpeedMultiplier??1;}
+  get baseSpeedMultiplier() {return (this.rewardBoardDefinition?.baseSpeedMultiplier??1)*(this.sewerPowerActive?SEWER_POWER_SPEED_MULTIPLIER:1);}
+  get sewerPowerEnabled() {return this.rewardBoard==='sludge';}
+  get sewerPowerActive() {return this.sewerPowerEnabled&&!!this._sewerPower?.active&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0&&!(this.countdownRemaining>0);}
+  get sewerPowerRemaining() {return this._sewerPower?.remaining??0;}
+  get sewerPowerCooldown() {return this._sewerPower?.cooldown??0;}
+  get hazardShieldActive() {return this.sewerPowerActive;}
+  activateSewerPower() {return this._sewerPower.activate(this.sewerPowerEnabled&&this.phase==='running'&&this.bailTime<=0&&!(this.countdownRemaining>0));}
   get timePowerEnabled() {return this.rewardBoard==='deadtime'||this.adminStats?.cheats?.slowMotion===true;}
   get timePowerEligible() {return this.timePowerEnabled&&this.phase==='running'&&this.bailTime<=0&&!(this.countdownRemaining>0);}
   get timePowerActive() {return !!this._timePower?.active&&this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0&&!(this.countdownRemaining>0);}
@@ -116,6 +126,8 @@ export class SurfGame {
   toggleTimePower() {return this._timePower.toggle(this.timePowerEligible);}
   fastForwardTimePower() {return this._timePower.fastForward(this.timePowerEligible);}
   updateTimePower(realDt) {
+    this._sewerPower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
+      equipped:this.sewerPowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});
     return this._timePower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
       equipped:this.timePowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});
   }
@@ -222,6 +234,7 @@ export class SurfGame {
   }
   bail(reason = 'WIPEOUT') {
     if (this.bailTime > 0 || this.phase !== 'running') return;
+    this._sewerPower.cancel('bail');
     this._timePower.cancel('bail');
     const lost = this.comboBase * this.multiplier;
     this.clearSurfBoost();this.surfBoostAwarded=true;this.flatHopActive=false;
@@ -298,6 +311,7 @@ export class SurfGame {
   }
   finish(reason) {
     if(this.phase!=='running')return;
+    this._sewerPower.cancel('finish');
     this._timePower.cancel('finish');
     if(this.airborne||this.bailTime>0||this.cutbackActive)this.clearCombo();else this.bank();
     this.lastCompletedTrickType = null;
@@ -327,7 +341,7 @@ export class SurfGame {
     // start when it becomes legal, but continued holding cannot repeat it.
     if(chord&&this.cutbackChordArmed&&this.doCutback(chord))this.cutbackChordArmed=false;
     const hazards=this.surfAdventureEnabled?surfHazardsNear(this.distance,this.rulesId,this.elapsed):[];
-    const poolPull=this.bailTime<=0?whirlpoolPull(hazards,this.x,this.distance,this.airborne):0;
+    const poolPull=this.bailTime<=0&&!this.hazardShieldActive?whirlpoolPull(hazards,this.x,this.distance,this.airborne):0;
     this.current=(1.35*Math.sin(this.distance*.022+this.elapsed*.5)+.7*Math.sin(this.elapsed*1.1))*this.rules.currentStrength*(1+this.stormDifficulty*.8)+poolPull;
     if(this.cutbackActive){this.cutbackAge+=dt;this.cutbackProgress=clamp(this.cutbackAge/.72,0,1);this.cutback=Math.sin(this.cutbackProgress*Math.PI);}
     // Board cruise speed and earned bursts are separate: a 25% faster deck
@@ -413,7 +427,7 @@ export class SurfGame {
         const dx=(this.x-previousX)/item.hazardRadius,dz=(this.distance-previousDistance)/2.2;
         const fraction=clamp(-(ax*dx+az*dz)/(dx*dx+dz*dz||1),0,1),crossY=previousY+(this.y-previousY)*fraction;
         const reefTop=waveHeight(item.hazardX,-item.hazardDistance,this.elapsed)+item.hazardHeight;
-        if((ax+dx*fraction)**2+(az+dz*fraction)**2<1&&crossY<reefTop&&this.bailTime<=0) {
+        if((ax+dx*fraction)**2+(az+dz*fraction)**2<1&&crossY<reefTop&&this.bailTime<=0&&!this.hazardShieldActive) {
           this.processed.add(`h${i}`);this.bail('REEF COLLISION');
           if(this.phase!=='running')return;
         }
@@ -447,7 +461,7 @@ export class SurfGame {
         if(inPath&&!this.hazardWarning)this.hazardWarning=item.type==='whirlpool'?'WHIRLPOOL · STEER WIDE OR GET AIR':item.type==='reefbank'?'REEF BANKS · FOLLOW THE BARREL OPENING':'DRIFTWOOD · TAP SPACE TO HOP';
         if(inPath)this.hazardDanger=Math.max(this.hazardDanger,clamp(1-ahead/65,0,1)*.8);
       }
-      if(!this.hazardProcessed.has(item.id)&&this.bailTime<=0&&sweepSurfHazard(item,previous,this,this.elapsed-dt,this.elapsed)) {
+      if(!this.hazardProcessed.has(item.id)&&this.bailTime<=0&&!this.hazardShieldActive&&sweepSurfHazard(item,previous,this,this.elapsed-dt,this.elapsed)) {
         this.hazardProcessed.add(item.id);
         this.bail(item.type==='whirlpool'?'PULLED INTO A WHIRLPOOL':item.type==='reefbank'?'HIT THE EXPOSED REEF BANK':'CAUGHT ON DRIFTWOOD');
         this.onEvent({type:'surfHazardHit',hazard:item.type,id:item.id});
@@ -485,7 +499,7 @@ export class SurfGame {
       this.barrelWarning=this.barrelClosingProgress>0?'WAVE CLOSING · BOOST OUT':'CLOSING BARREL · PUMP / LAND TRICKS TO BOOST';
     }
     for(const index of this.barrelTimings.keys())if(stormBarrel(index).endDistance<this.distance-80)this.barrelTimings.delete(index);
-    const contact=this.bailTime<=0?sweepStormBarrel(previous,{x:this.x,y:this.y,z:-this.distance},this.elapsed-dt,this.elapsed,this.barrelTimings):null;
+    const contact=this.bailTime<=0&&!this.hazardShieldActive?sweepStormBarrel(previous,{x:this.x,y:this.y,z:-this.distance},this.elapsed-dt,this.elapsed,this.barrelTimings):null;
     if(contact)this.bail(contact.section.closingProgress>0?'CAUGHT BY THE CLOSING WAVE':'CAUGHT BY THE WAVE LIP');
     if(this.phase!=='running')return;
     const sample=sampleStormBarrel(this.x,this.y,-this.distance,this.elapsed,this.barrelTimings);

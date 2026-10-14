@@ -13,6 +13,8 @@ import { sanitizeTimeTrialProgress,timeTrialsUnlocked } from '../src/time-trial-
 import { trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 import { SECRET_STORAGE_KEY,sanitizeSecretProgress } from '../src/secret-progress.js';
+import { SEWER_STORAGE_KEY,sanitizeSewerProgress,sewerOutfitUnlocked,unlockAllSewerRewards,resetSewerLadder } from '../src/sewer-progress.js';
+import { TRACK_CHOICES } from '../src/tracks-ui.js';
 
 const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
 const noOp = () => {};
@@ -26,6 +28,7 @@ function equipFixture(progress = { version: 2, ladderIndex: 1, completedRounds: 
   const context = {
     adminSettings:sanitizeAdminSettings(null),resolveAdminStats,adminPanel:null,tutorial:null,settingsPanel:{isOpen:false},
     secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
+    sewerProgress:sanitizeSewerProgress(null),sewerOutfitUnlocked,
     profile: validateProfile({ character: 'reef', outfit: 'raglan', boardColor: '#24c5ba', boardDesign: 'tribal' }),
     tournamentProgress: sanitizeTournamentProgress(progress), validateProfile, rewardBoardUnlocked,
     trialProgress:sanitizeTimeTrialProgress(trials),OUTFITS,BOARD_DESIGNS,timeTrialsUnlocked,trialCosmeticUnlocked,
@@ -73,19 +76,33 @@ test('boot restoration strips a locked board but restores an earned board and mi
     { reward: 'deadtime', secrets:{version:1,deadtimeUnlocked:true}, expected:'deadtime' },
     { reward: 'deadtime', secrets:{version:1,deadtimeUnlocked:'true'}, survival:299.99, expected:null },
     { reward: 'deadtime', survival:300, expected:'deadtime' },
+    { reward:'sludge',expected:null },
+    { reward:'sludge',sewer:unlockAllSewerRewards(),expected:'sludge' },
+    { reward:'sludge',sewer:resetSewerLadder(unlockAllSewerRewards()),expected:'sludge' },
   ]) {
     const values = new Map([
       ['breakline99-profile', JSON.stringify({ rewardBoard: scenario.reward })],
       [scenario.legacy ? 'breakline99-tournament-v1' : 'breakline99-tournament-v2', JSON.stringify(scenario.progress)],
       ['breakline99-trials-v1', JSON.stringify(scenario.trials ?? null)],
       [SECRET_STORAGE_KEY,JSON.stringify(scenario.secrets??null)],
+      [SEWER_STORAGE_KEY,JSON.stringify(scenario.sewer??null)],
       ['breakline99-survival-time',String(scenario.survival??0)],
     ]);
-    const context = { SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
+    const context = { TRACK_CHOICES,SEWER_STORAGE_KEY,sanitizeSewerProgress,sewerOutfitUnlocked,SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,validateProfile, sanitizeTournamentProgress, rewardBoardUnlocked, sanitizeTimeTrialProgress,timeTrialsUnlocked,trialCosmeticUnlocked,OUTFITS,BOARD_DESIGNS,read: (key, fallback) => values.get(key) ?? fallback };
     vm.runInNewContext(`${boot}\nglobalThis.restoredProfile=profile;globalThis.restoredProgress=tournamentProgress;`, context);
     assert.equal(context.restoredProfile.rewardBoard, scenario.expected);
     if (scenario.legacy) assert.equal(context.restoredProgress.completedLadders, 1);
   }
+});
+
+test('sewer equipment rejects locked prizes and stays available after a ladder replay reset',()=>{
+  const {context,writes}=equipFixture();
+  assert.equal(context.setProfile({outfit:'draincrew'}),false);assert.equal(context.setProfile({rewardBoard:'sludge'}),false);assert.equal(writes.length,0);
+  context.sewerProgress=unlockAllSewerRewards();
+  assert.equal(context.setProfile({outfit:'nightshift',rewardBoard:'sludge'}),true);assert.equal(context.game.sewerPowerEnabled,true);
+  context.sewerProgress=resetSewerLadder(context.sewerProgress);
+  assert.equal(context.setProfile({outfit:'draincrew'}),true);assert.equal(context.profile.rewardBoard,'sludge');
+  assert.equal(writes.at(-1)[1].outfit,'draincrew');
 });
 
 test('Afterburner equips only after three trial clears, saves its identity and retains the existing outfit and deck setup', () => {

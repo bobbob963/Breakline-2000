@@ -72,13 +72,13 @@ export const TUTORIAL_STEPS = Object.freeze([
   },
   {
     id: 'waterworks', chapter: 'THE WATERWORKS', title: 'TAKE IT TO CONCRETE.',
-    lead: 'Ride the factory basins, rusty tunnels, ramps and rails with the same trick keys.',
+    lead: 'Open Tracks on the home screen to select Waterworks, Runoff Run or The Deep Works. The factory park keeps its basins, ramps and rails.',
     controls: [
       { keys: ['E', 'A / D'], label: 'Loop the pipes', detail: 'Hold E inside a tunnel and steer around its walls. Release E to return to the floor.' },
       { keys: ['E'], label: 'Grab the lip', detail: 'Hold E as you reach a quarterpipe lip to grab your board and turn back into the ramp.' },
       { keys: ['SHIFT'], label: 'Catch the coping', detail: 'Hold Shift as you ride to the ramp top to grind without jumping. A / D chooses your direction.' },
     ],
-    note: 'Ride ramps for bigger air. Land tricks for boosts. Jump onto rails along their length to grind; Space pops you off. Shift + turn still makes a sharp cutback away from the coping.',
+    note: 'Ride ramps for bigger air. Land tricks for boosts. Jump onto rails along their length to grind; Space pops you off. The two sewer tracks race through green water with side-pipe shortcuts, closing barrels, driftwood and whirlpools. Enter the Sewer Ladder from Tracks: two wins unlock Drain Crew, four unlock Night Shift, five unlock Sludge Surge. Equip it and press Q for five seconds of speed and hazard protection, then recharge for fifteen seconds.',
   },
   {
     id: 'rivals', chapter: 'THE HIT LIST', title: 'BEAT THE WHOLE CREW.',

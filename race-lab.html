@@ -7,9 +7,11 @@
 <body><header><h1>Rival Race Lab · Breakline ’99</h1><p>Production ocean and Waterworks racing. Independent practice; your Hit List save is untouched. <a href="/">Back to the game</a></p></header>
 <main><div id="viewport"><div id="loading">Loading the rival session…</div><div class="race-hud"><div><strong id="hud-position">READY</strong><span id="hud-checkpoint">Choose a session</span><p id="hud-boost" hidden>LAND TRICKS TO BOOST</p></div><div class="opponent"><strong id="hud-rival">—</strong><span id="hud-gap">Head-to-head sun-ring racing</span><p id="hud-rival-action"></p></div></div><div id="track" hidden><i id="player-marker"></i><i id="rival-marker"></i></div></div><aside>
 <div class="scenarios"><button id="run-moxie">Moxie · Waterworks</button><button id="run-rivet">Rivet · Surf Session</button><button id="run-undertow">Undertow · Waterworks</button><button id="run-static">Static · Surf Session</button><button id="run-kingtide">Kingtide · Waterworks</button><button id="run-surf">Surf practice</button><button id="run-park">Waterworks practice</button></div>
+<div class="scenarios"><button id="run-sewer-run">Runoff Run · Sewers</button><button id="run-sewer-depths">Deep Works · Sewers</button></div>
+<label><input id="surge-board" type="checkbox"> Equip Sludge Surge for the next sewer preview</label><button id="surge-power">Activate Sludge Surge (Q)</button>
 <div class="controls"><button id="boost-single">Single trick boost</button><button id="boost-combo">Combo boost</button></div>
 <div class="controls"><button id="rival-trick">Watch rival grab</button><button id="rival-boost">Watch rival combo boost</button></div>
-<div class="controls"><button id="pause">Pause</button><button id="restart">Restart</button><button id="frame">+1 frame</button></div>
+<div class="controls"><button id="pause">Pause</button><button id="restart">Restart</button><button id="frame">+1 frame</button><button id="advance">+5 seconds</button></div>
 <label><input id="autopilot" type="checkbox"> Follow course using ordinary controls</label>
 <label>Playback speed<select id="rate"><option value=".25">Quarter speed</option><option value="1" selected>Normal</option><option value="4">4× speed</option></select></label>
 <div id="status" role="status">Choose any rival for a practice race. Pass through every sun ring in order.</div>

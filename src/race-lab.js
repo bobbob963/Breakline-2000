@@ -2,6 +2,7 @@ import { SurfGame, courseItem } from './game.js';
 import { WaveParkGame } from './park.js';
 import { parkRaceOpponentInput } from './park-race.js';
 import { raceOpponentInput } from './surf-race.js';
+import { SewerRaceGame,sewerOpponentInput } from './sewer-race.js';
 import { createTournamentGame, TOURNAMENT_RIVALS } from './tournament.js';
 import { SurfWorld } from './world.js';
 import { validateProfile } from './appearance.js';
@@ -45,6 +46,7 @@ export function raceBoostDemoControls(game,demo,dt=STEP) {
 // A review-only route follower: it can press ordinary controls but cannot
 // grant checkpoint credit, set positions or alter either racer's physics.
 export function raceLabControls(game) {
+  if(game.isSewer)return sewerOpponentInput(game,game.course,1);
   if(game.mode==='park')return game.isRace?parkRaceOpponentInput(game,game.course,1):{pump:true};
   const checkpoint=game.course?.checkpoints[game.nextCheckpoint];
   let target=checkpoint?.x??0;
@@ -98,10 +100,14 @@ async function boot() {
   function start(kind=scenario) {
     if(!kind)return;
     clearInput();accumulator=0;events=[];scenario=kind;boostDemo=null;rivalDemo=null;
-    if(RIVAL_IDS.includes(kind))game=createTournamentGame(()=>{},{version:1,completedRounds:RIVAL_IDS.indexOf(kind)});
+    if(kind==='sewer-run'||kind==='sewer-depths')game=new SewerRaceGame(()=>{},{trackId:kind});
+    else if(RIVAL_IDS.includes(kind))game=createTournamentGame(()=>{},{version:1,completedRounds:RIVAL_IDS.indexOf(kind)});
     else game=kind==='park'?new WaveParkGame():new SurfGame();
     game.onEvent=onEvent;game.start();
+    if(game.isSewer&&$('surge-board').checked){game.setRewardBoard('sludge');world.setProfile(validateProfile({character:'jax',outfit:'draincrew',rewardBoard:'sludge'}));}
+    else world.setProfile(validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));
     $('status').textContent=game.isRace?`Race ${game.rival.name} through ${game.mode==='park'?'Waterworks':'Surf Session'}. Pass through every sun ring in order and reach the finish first.`:`${kind==='park'?'Waterworks':'Surf Session'}: checking that rivals and race markers are cleared.`;
+    if(game.isSewer)$('status').textContent=`${game.course.name} · Take the side pipes, hop debris, avoid whirlpools and escape the flood barrels. Every ring is required. ${$('surge-board').checked?'Sludge Surge equipped: press Q to activate.':''}`;
     counters();
   }
   function pause() {
@@ -169,16 +175,25 @@ async function boot() {
     await loadCharacterTextures();
     world=new SurfWorld($('viewport'),validateProfile({character:'jax',outfit:'yardcrew',boardDesign:'tribal'}));
     game=new SurfGame();$('loading').remove();
-    for(const kind of [...RIVAL_IDS,'surf','park'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
+    for(const kind of [...RIVAL_IDS,'surf','park','sewer-run','sewer-depths'])$('run-'+kind).addEventListener('click',()=>{start(kind);$('run-'+kind).blur();});
+    $('surge-power').addEventListener('click',()=>game.activateSewerPower?.());
     for(const kind of ['single','combo'])$('boost-'+kind).addEventListener('click',()=>{startBoostDemo(kind);$('boost-'+kind).blur();});
     for(const kind of ['trick','boost'])$('rival-'+kind).addEventListener('click',()=>{startRivalDemo(kind);$('rival-'+kind).blur();});
     $('restart').addEventListener('click',()=>start());
     $('pause').addEventListener('click',pause);
     $('frame').addEventListener('click',()=>{if(!scenario||game.phase==='finished')return;game.resume();tick();game.pause();counters();});
+    $('advance').addEventListener('click',()=>{
+      if(!scenario||game.phase==='finished')return;
+      game.resume();
+      for(let step=0;step<600&&game.phase==='running';step++){game.updateTimePower(STEP);tick();}
+      if(game.phase==='running')game.pause();
+      world.update(0,game);counters();
+    });
     $('autopilot').addEventListener('change',clearInput);
     const actions={
       toggleSound(){},closeWorkshop(){},cycleCharacter(){},closeModal(){},rotatePreview(){},isWardrobeOpen:()=>false,hideWardrobe(){},
       startRun:()=>start(),restartRun:()=>start(),pause,toast:text=>{$('status').textContent=text;},
+      pressTimePower:()=>game.activateSewerPower?.(),
       pressControl:code=>{pressed.add(code);syncInput();},tryTrick:type=>game.doTrick(type),
     };
     const keydown=createKeydownHandler(()=>({bootReady:true,workshopMode:null,modalMode:null,game,input}),actions);
@@ -194,7 +209,7 @@ async function boot() {
     function frame(now) {
       const dt=Math.min(.05,Math.max(0,(now-previous)/1000));previous=now;
       if(game.phase==='running') {
-        accumulator+=dt*Number($('rate').value);
+        accumulator+=game.updateTimePower(dt*Number($('rate').value));
         while(accumulator>=STEP&&game.phase==='running'){tick();accumulator-=STEP;}
       } else accumulator=0;
       world.update(dt,game);counters();requestAnimationFrame(frame);

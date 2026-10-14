@@ -10,6 +10,10 @@ import './wasted.css';
 import './rewards.css';
 import './menu-surfer.css';
 import './time-trials.css';
+import './tracks.css';
+import { SewerRaceGame } from './sewer-race.js';
+import { SEWER_STORAGE_KEY, SEWER_RACES, sanitizeSewerProgress, recordSewerResult, resetSewerLadder, unlockAllSewerRewards, sewerOutfitUnlocked } from './sewer-progress.js';
+import { TRACK_CHOICES, tracksMarkup, sewerLadderMarkup } from './tracks-ui.js';
 import { createTimeTrialGame, TIME_TRIALS } from './time-trials.js';
 import { sanitizeTimeTrialProgress, timeTrialsUnlocked, selectTimeTrial } from './time-trial-progress.js';
 import { TRIAL_COSMETIC_SETS, getTrialCosmeticSet, trialCosmeticUnlocked } from './trial-cosmetics.js';
@@ -72,15 +76,18 @@ let profile;try{profile=validateProfile(JSON.parse(read('breakline99-profile','{
 let adminSettings;try{adminSettings=sanitizeAdminSettings(JSON.parse(read(ADMIN_STORAGE_KEY,'null')));}catch{adminSettings=sanitizeAdminSettings(null);}
 let lastSurfWeather=read('breakline99-weather','');
 let selectedMode=read('breakline99-mode','surf');
-if(!['surf','park','rush','storm','tournament','trials'].includes(selectedMode))selectedMode='surf';
+if(!['surf','park','rush','storm','tournament','trials','sewer','sewer-ladder'].includes(selectedMode))selectedMode='surf';
+let selectedTrack=read('breakline99-track','park');
+if(!TRACK_CHOICES.some(track=>track.id===selectedTrack))selectedTrack='park';
+let sewerProgress;try{sewerProgress=sanitizeSewerProgress(JSON.parse(read(SEWER_STORAGE_KEY,'null')));}catch{sewerProgress=sanitizeSewerProgress(null);}
 let tournamentProgress;try{tournamentProgress=sanitizeTournamentProgress(JSON.parse(read('breakline99-tournament-v2',read('breakline99-tournament-v1','null'))));}catch{tournamentProgress=sanitizeTournamentProgress(null);}
 let trialProgress;try{trialProgress=sanitizeTimeTrialProgress(JSON.parse(read('breakline99-trials-v1','null')));}catch{trialProgress=sanitizeTimeTrialProgress(null);}
 const recordedSurvival=Number(read('breakline99-survival-time','0'));
 let bestSurvival=Number.isFinite(recordedSurvival)?Math.max(0,recordedSurvival):0;
 let secretProgress;try{secretProgress=sanitizeSecretProgress(JSON.parse(read(SECRET_STORAGE_KEY,'null')),bestSurvival);}catch{secretProgress=sanitizeSecretProgress(null,bestSurvival);}
-if(!rewardBoardUnlocked(profile.rewardBoard,tournamentProgress,trialProgress,secretProgress))profile.rewardBoard=null;
+if(!rewardBoardUnlocked(profile.rewardBoard,tournamentProgress,trialProgress,secretProgress,sewerProgress))profile.rewardBoard=null;
 if(selectedMode==='trials'&&!timeTrialsUnlocked(tournamentProgress))selectedMode='tournament';
-function cosmeticAvailable(entry){return !entry?.trialReward||(timeTrialsUnlocked(tournamentProgress)&&trialCosmeticUnlocked(entry.trialReward,trialProgress.completedTrials));}
+function cosmeticAvailable(entry){return entry?.sewerReward?sewerOutfitUnlocked(entry.sewerReward,sewerProgress):!entry?.trialReward||(timeTrialsUnlocked(tournamentProgress)&&trialCosmeticUnlocked(entry.trialReward,trialProgress.completedTrials));}
 if(!cosmeticAvailable(OUTFITS[profile.outfit]))profile.outfit='riptide';
 if(!cosmeticAvailable(BOARD_DESIGNS[profile.boardDesign]))profile.boardDesign='bolt';
 const isParkMode=()=>game?.mode==='park';
@@ -91,6 +98,8 @@ $('loading-tip').textContent={
   tournament:'Five ladders. Five prize boards. Beat every rival in a ladder to unlock its board and perk.',
   trials:'Beat the clock through every sun ring. Three new clears unlock a matching outfit and board graphic.',
   storm:'Escape before the barrel closes. Land tricks to boost, hop driftwood and steer clear of whirlpools.',
+  sewer:'Follow the sun rings through green water. Side pipes cut distance; hop debris and escape closing surges.',
+  'sewer-ladder':'Five rivals below the city. Two outfits to earn, then the Sludge Surge ability board.',
 }[selectedMode];
 document.querySelectorAll('[data-brand-art]').forEach(img=>img.src=brandLogo);
 const classicLogo=createClassicLogoCanvas().toDataURL('image/png');
@@ -119,6 +128,8 @@ const wasted=createWastedSequence({
   onComplete:()=>{if(game?.phase==='finished')showResults();},
 });
 const modeInfo={
+  sewer:{name:'SEWER CIRCUIT',level:'UNDERGROUND / HEAD-TO-HEAD',description:'Race through green water. Every sun ring counts. Find side-pipe shortcuts and survive whirlpools, debris and closing surges.'},
+  'sewer-ladder':{name:'THE SEWER LADDER',level:'UNDERGROUND / FIVE RIVALS',description:'Five races across two sewer tracks. Unlock outfits after two and four wins, then the Sludge Surge ability board.'},
   trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears. Clear three to earn the Afterburner speed board.'},
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
@@ -170,7 +181,9 @@ function applyAdminSettings(next){
 }
 function giveEverything(){
   const unlocked=everythingUnlocked(tournamentProgress,trialProgress,secretProgress);
-  persistAdminEntries(localStorage,[['breakline99-tournament-v2',JSON.stringify(unlocked.tournament)],['breakline99-trials-v1',JSON.stringify(unlocked.trials)],[SECRET_STORAGE_KEY,JSON.stringify(unlocked.secrets)]]);
+  const sewer=unlockAllSewerRewards(sewerProgress);
+  persistAdminEntries(localStorage,[['breakline99-tournament-v2',JSON.stringify(unlocked.tournament)],['breakline99-trials-v1',JSON.stringify(unlocked.trials)],[SECRET_STORAGE_KEY,JSON.stringify(unlocked.secrets)],[SEWER_STORAGE_KEY,JSON.stringify(sewer)]]);
+  sewerProgress=sewer;
   tournamentProgress=unlocked.tournament;trialProgress=unlocked.trials;secretProgress=unlocked.secrets;
   clearInput();makeGame();updateModeMenu();updateCustomizationChoices();updateHud();
 }
@@ -242,16 +255,36 @@ function onEvent(e){
   if(e.type==='timePower'&&!e.active&&e.reason==='toggle')toast('NORMAL TIME · CHARGE HELD');
   if(e.type==='timePowerBurst')toast('+50% SPEED · 3 SECOND BURST');
   if(e.type==='timePowerReady')toast('DEADTIME RECHARGED · Q');
+  if(e.type==='sewerPower'&&e.active)toast('SLUDGE SURGE · +35% SPEED + HAZARD SHIELD');
+  if(e.type==='sewerPowerReady')toast('SLUDGE SURGE RECHARGED · Q');
+  if(e.type==='sewerShortcut')toast(`${e.name||'SIDE PIPE'} · SHORTCUT`);
   if(e.type==='finish') {
     saveBest();
-    if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();}
+    if(game.isSewerLadder){
+      const previous=sewerProgress;
+      sewerProgress=recordSewerResult(sewerProgress,SEWER_RACES[game.roundIndex].id,{result:game.result,elapsed:game.finishTime??game.elapsed});
+      game.unlockedOutfitIds=['draincrew','nightshift'].filter(id=>!sewerOutfitUnlocked(id,previous)&&sewerOutfitUnlocked(id,sewerProgress));
+      game.unlockedBoardId=previous.earnedWins<5&&sewerProgress.earnedWins===5?'sludge':null;
+      write(SEWER_STORAGE_KEY,JSON.stringify(sewerProgress));updateCustomizationChoices();
+    }else if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();}
     else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));}
     if(game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}
     else showResults();
   }
 }
-function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfSessionWeather(adminSettings.environment.surfWeather==='random'?lastSurfWeather:adminSettings.environment.surfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
+function createSelectedSewerGame(){
+  const ladder=selectedMode==='sewer-ladder',index=ladder?Math.min(sewerProgress.completedRaces,4):0;
+  const race=SEWER_RACES[index],trackId=ladder?race.trackId:selectedTrack==='sewer-depths'?'sewer-depths':'sewer-run';
+  const character=race.character,base=CHARACTERS[character];
+  const rival={id:race.id,name:ladder?race.rivalName:trackId==='sewer-depths'?'VALVE':'DRAIN RAT',rank:5-index,pace:.64+race.paceOffset,profile:{character,outfit:base.defaultOutfit||'riptide',boardColor:'#c4d85d',boardDesign:'tribal'}};
+  return new SewerRaceGame(onEvent,{trackId,rival,roundIndex:index,roundCount:5,isSewerLadder:ladder});
+}
+function makeGame(){game=['sewer','sewer-ladder'].includes(selectedMode)?createSelectedSewerGame():selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfSessionWeather(adminSettings.environment.surfWeather==='random'?lastSurfWeather:adminSettings.environment.surfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
+  const trackActive=selectedMode==='park'||game.isSewer;
+  $('mode-park').classList.toggle('is-selected',trackActive);$('mode-park').setAttribute('aria-pressed',String(trackActive));
+  $('mode-park').querySelector('.mode-status').textContent=trackActive?'▶ TRACK SELECTED':'▶ CHOOSE TRACK';
+  $('tracks-button').classList.toggle('hidden',!trackActive);
   $('mode-trials').disabled=!timeTrialsUnlocked(tournamentProgress);
   $('trial-lock').textContent=timeTrialsUnlocked(tournamentProgress)?`${trialProgress.completedTrials}/12 cleared. Rewards every three.`:'Clear all five Rival ladders to unlock.';
   $('trial-button').classList.toggle('hidden',selectedMode!=='trials');
@@ -272,9 +305,10 @@ function updateModeMenu(){
   $('session-badge').textContent={surf:'2 MIN. / SCORE ATTACK',park:'2 MIN. / FREESTYLE',rush:'12 CHECKPOINTS / +8 SEC',storm:'ENDLESS / 3 LIVES'}[selectedMode];
   $('timer-label').textContent=game.isTimeTrial?'TIME LEFT':game.isRace?'RACE TIME':selectedMode==='storm'?'SURVIVED':'TIME';
   $('surf-condition').classList.toggle('hidden',isParkMode()&&!game.isRace);
-  $('rival-hud').classList.toggle('hidden',!game.isTournament&&!game.isTimeTrial);
-  document.querySelector('.goals').classList.toggle('hidden',game.isTournament||game.isTimeTrial);
-  $('ladder-button').classList.toggle('hidden',!game.isTournament);
+  $('rival-hud').classList.toggle('hidden',!game.isTournament&&!game.isTimeTrial&&!game.isSewer);
+  document.querySelector('.goals').classList.toggle('hidden',game.isTournament||game.isTimeTrial||game.isSewer);
+  $('ladder-button').classList.toggle('hidden',!game.isTournament&&!game.isSewerLadder);
+  $('ladder-button').innerHTML=game.isSewerLadder?'VIEW SEWER LADDER <span>↗</span>':'VIEW RIVAL LADDER <span>↗</span>';
   $('start').querySelector('span').textContent=game.isTimeTrial?`START ${game.trial.name}`:game.isTournament?(game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`):'DROP IN';
   $('rival-hud').classList.toggle('race-hud',!!game.isRace);
   $('rival-hud').querySelector('small').textContent=game.isTimeTrial?'TIME TRIAL / SOLO AGAINST THE CLOCK':game.isRace?'THE HIT LIST / HEAD-TO-HEAD RACE':'THE HIT LIST / RECORDED RIVAL RUN';
@@ -292,6 +326,15 @@ function updateModeMenu(){
     $('level-name').textContent=isParkMode()?`WATERWORKS / ${game.course.name}`:'SUNSET POINT / RIVAL RACE';
     $('mode-description').textContent=game.complete?`${game.ladder.name} cleared. ${getRewardBoard(game.ladder.rewardId).name} is yours. ${game.allLaddersComplete?'All five boards unlocked. TIME TRIALS are now open: race the clock for exclusive clothes and board styles.':'Equip it in the board shop, then take on the next ladder.'}`:`${game.ladder.name} · Beat all five rivals to unlock ${getRewardBoard(game.ladder.rewardId).name}. Race ${game.rival.name} through every sun ring to the ${fmt(game.course.length)}m finish.`;
   }
+  if(game.isSewer){
+    $('session-badge').textContent=game.isSewerLadder?`SEWER LADDER · ${sewerProgress.completedRaces}/5 WINS`:'SEWER RACE / 3 LIVES';
+    $('level-name').textContent=game.course.name;
+    $('mode-hud').textContent=game.isSewerLadder?'SEWER LADDER':'SEWER RACE';
+    $('selected-mode-name').textContent=game.isSewerLadder?'THE SEWER LADDER':game.course.name;
+    $('mode-description').textContent=game.isSewerLadder?`${sewerProgress.completedRaces===5?'LADDER CLEARED. Replay any time.':`RACE ${game.roundIndex+1}/5 · ${game.rival.name} · ${game.course.name}.`} Outfits at 2 and 4 wins. Sludge Surge ability board at 5.`:`${game.course.name} · ${fmt(game.course.length)}m through the pipes. Beat ${game.rival.name}, catch every sun ring and take the side pipes. Practice races do not advance the ladder.`;
+    $('start').querySelector('span').textContent=game.isSewerLadder&&sewerProgress.completedRaces===5?'REPLAY SEWER LADDER':`RACE ${game.rival.name}`;
+    $('rival-hud').querySelector('small').textContent=game.isSewerLadder?'THE SEWER LADDER / HEAD-TO-HEAD':'SEWER CIRCUIT / HEAD-TO-HEAD';
+  }
 
 }
 function selectMode(mode){if(!modeInfo[mode]||(mode==='trials'&&!timeTrialsUnlocked(tournamentProgress)))return;selectedMode=mode;write('breakline99-mode',mode);clearInput();makeGame();updateModeMenu();updateSoundLabel();}
@@ -304,7 +347,13 @@ function startRun(kind='default'){
   if(game?.isTutorial&&guidedTutorial?.active){guidedTutorial.restartStep();return;}
   wasted.reset();timePowerScreen.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;secretUnlockedThisRun=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
-  if(game.isTimeTrial){
+  if(game.isSewer){
+    if(game.isSewerLadder&&kind!=='retry'){
+      if(sewerProgress.completedRaces===5){sewerProgress=resetSewerLadder(sewerProgress);write(SEWER_STORAGE_KEY,JSON.stringify(sewerProgress));}
+      game=createSelectedSewerGame();
+    }
+    applyPlayerSettings();game.retry();
+  }else if(game.isTimeTrial){
     if(kind!=='retry'&&game.phase==='finished'&&game.result==='win')game=createTimeTrialGame(onEvent,trialProgress);
     applyPlayerSettings();game.retry();
   }else if(game.isTournament){
@@ -328,17 +377,18 @@ function openModal(mode,title,content,action,kicker='BREAKLINE ’99'){
   keydownHandler?.resetAdminSequence();
   $('modal').dataset.mode=mode;
   $('race-trials').classList.toggle('hidden',!game.isTimeTrial||!['pause','results'].includes(mode));
-  $('race-ladders').classList.toggle('hidden',!game.isTournament||!['pause','results'].includes(mode));
+  $('race-ladders').classList.toggle('hidden',(!game.isTournament&&!game.isSewerLadder)||!['pause','results'].includes(mode));
+  $('race-ladders').textContent=game.isSewerLadder?'SEWER LADDER / RESET':'RIVAL LADDERS / RESET';
   const active=game.phase==='running';if(active){game.pause();clearInput();}if(!modalMode)resumeAfterModal=active;
   modalMode=mode;$('modal-title').textContent=title;$('modal-kicker').textContent=kicker;$('modal-content').innerHTML=content;$('modal-action').textContent=action;
   $('modal').classList.remove('hidden');$('modal-action').focus({preventScroll:true});
 }
 function closeModal(resume=true){$('modal').classList.add('hidden');modalMode=null;if(resume&&resumeAfterModal)game.resume();resumeAfterModal=false;$('stage').focus({preventScroll:true});}
-function pause(){if(settingsPanel?.isOpen)return;if(workshopMode){closeWorkshop();return;}if(modalMode==='ladder'||modalMode==='trials'){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED',`<p>The clock is stopped. Your line is waiting.</p><p><kbd>${remapKeyLabel('P',playerSettings.keybinds)}</kbd> / <kbd>ESC</kbd> resume · <kbd>${remapKeyLabel('R',playerSettings.keybinds)}</kbd> restart</p>`,'KEEP RIDING','TIME OUT');}
+function pause(){if(settingsPanel?.isOpen)return;if(workshopMode){closeWorkshop();return;}if(['ladder','trials','tracks','sewer-ladder'].includes(modalMode)){if(game.phase==='finished')goHome();else closeModal();return;}if(modalMode==='pause'||modalMode==='help'){closeModal();return;}if(game.phase!=='running')return;openModal('pause','PAUSED',`<p>The clock is stopped. Your line is waiting.</p><p><kbd>${remapKeyLabel('P',playerSettings.keybinds)}</kbd> / <kbd>ESC</kbd> resume · <kbd>${remapKeyLabel('R',playerSettings.keybinds)}</kbd> restart</p>`,'KEEP RIDING','TIME OUT');}
 function showHelp(){
   if(modalMode==='help'){closeModal();return;}
   openModal('help','HOW TO RIDE',`<div class="controls-grid">
-  <span><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></span><span>${isParkMode()?'Steer around the park.':'Carve across the wave. The high lip is left.'}</span>
+  <span><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></span><span>${game.isSewer?'Steer across the pipe. Line up early with side-pipe entrances.':isParkMode()?'Steer around the park.':'Carve across the wave. The high lip is left.'}</span>
   <span><kbd>W</kbd> / <kbd>↑</kbd></span><span>${isParkMode()?'Pump to build speed.':'Pump for more speed.'} <kbd>S</kbd> / <kbd>↓</kbd> slows down.</span>
   <span><kbd>SPACE</kbd></span><span>${isParkMode()?'Hold to crouch and build speed, then release to pop.':'Hold, then release to pop.'} Recover on the water for ${Number(game.popRecoveryDuration.toFixed(2))} ${game.popRecoveryDuration===1?'second':'seconds'} between pops. ${game.isRace?'Race pops have enough air for a basic trick. Hold Space briefly, release, press J and land for a boost. Charge longer and follow J with L after the spin finishes for a combo.':isParkMode()?'Ride the ramps for bigger airs; wave lips also launch you automatically.':'Flat hops earn no points. Reach the wave lip or finish a cutback, then pop for trick height.'}</span>
   ${isParkMode()?'<span><kbd>E</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>Hold E inside a tunnel; steer around its walls for a full pipe loop. Release E to return to the floor.</span><span><kbd>E</kbd> / <kbd>SHIFT</kbd></span><span>Hold E as you ride up a quarterpipe to grab the board and turn back. Hold SHIFT instead to grind the coping directly—no jump needed. A/D chooses the grind direction.</span>':''}
@@ -348,6 +398,7 @@ function showHelp(){
   <span><kbd>B</kbd></span><span>Tweaked grab: tuck your knees, pull the surfboard to your side and raise the free arm.</span>
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>${game.characterSpecial.name} — ${game.characterSpecial.description} Use at 100% SPECIAL while airborne. Once full, it stays ready until used—even through a wipeout.</span>
+  ${game.sewerPowerEnabled?'<span><kbd>Q</kbd></span><span>SLUDGE SURGE: five seconds of 35% more base speed and protection from debris, whirlpools and closing waves. Recharge for fifteen seconds of active play. Bad trick landings can still wipe you out. Pause freezes the ability.</span>':''}
   ${game.timePowerEnabled?'<span><kbd>Q</kbd></span><span>Tap Q for slow motion, or double-tap Q for 2× fast-forward and a red pulse. Both use the same six-second charge, measured in real playing time. Tap Q again to stop and keep the remaining charge. Use the full charge for 50% more speed for three seconds, then recharge over twelve seconds. Pausing freezes the power.</span>':''}
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
   ${isParkMode()&&!game.isRace?'<span>TRICK BOOST</span><span>Land a completed aerial trick for a speed burst. Use a charged pop or ride a ramp for air. Link tricks in an unbanked combo for a stronger, longer boost. A plain hop gives no boost; braking eases it off and a wipeout clears it.</span>':''}
@@ -362,6 +413,7 @@ function showHelp(){
   remapControlsElement($('modal-content'),playerSettings.keybinds);
 }
 function showResults(){
+  if(game.isSewer){showSewerResults();return;}
   if(game.isTimeTrial){showTrialResults();return;}
   if(game.isTournament){showTournamentResults();return;}
   checkSurvivalSecret();
@@ -374,6 +426,25 @@ function showResults(){
 function showTrials(){
   if(!game.isTimeTrial)return;
   openModal('trials','BEAT THE CLOCK',trialListMarkup(trialProgress),`START ${TIME_TRIALS[trialProgress.selectedTrial].name}`,'CHAMPION CIRCUIT / TIME TRIALS');
+}
+function showTracks(){
+  openModal('tracks','PICK YOUR TRACK',tracksMarkup(selectedTrack),game.isSewer?`RACE ${game.course.name}`:selectedMode==='park'?'DROP INTO WATERWORKS':'BACK TO SESSIONS','COASTAL DIVISION / TRACK SELECT');
+}
+function selectTrack(id){
+  if(!TRACK_CHOICES.some(track=>track.id===id))return;
+  selectedTrack=id;write('breakline99-track',id);
+  closeModal(false);selectMode(id==='park'?'park':'sewer');goHome();showTracks();
+}
+function showSewerLadder(){
+  if(selectedMode!=='sewer-ladder'){closeModal(false);selectMode('sewer-ladder');goHome();}
+  openModal('sewer-ladder','THE SEWER LADDER',sewerLadderMarkup(sewerProgress,SEWER_RACES,OUTFITS),sewerProgress.completedRaces===5?'REPLAY SEWER LADDER':`RACE ${game.rival.name}`,'THE UNDERGROUND / OUTFITS + ABILITY BOARD');
+}
+function showSewerResults(){
+  clearInput();const win=game.result==='win',next=SEWER_RACES[sewerProgress.completedRaces];
+  const earned=(game.unlockedOutfitIds||[]).map(id=>`<div class="trial-unlock"><strong>OUTFIT UNLOCKED: ${OUTFITS[id].name}</strong><p>${OUTFITS[id].description}</p><button type="button" data-sewer-outfit="${id}">EQUIP ${OUTFITS[id].name}</button></div>`).join('');
+  const reward=game.unlockedBoardId?rewardCard('sludge',{unlocked:true,equipped:profile.rewardBoard==='sludge',result:true}):'';
+  const message=game.isSewerLadder?(win?(next?`NEXT RIVAL: ${next.rivalName}. Keep going to earn the next reward.`:'SEWER LADDER CLEARED. Both outfits and the SLUDGE SURGE ability board are yours.'):'Pass every sun ring and finish before your rival. Take the bypass pipes and land tricks for speed boosts.'):'Free race complete. Enter the sewer ladder from Tracks to win outfits and an ability board.';
+  openModal('results',win?'SEWER RIVAL BEATEN':game.resultReason||'RIVAL WINS',`<div class="showdown-result ${win?'won':'lost'}"><span>${game.course.name} / ${game.rival.name}</span><div><section><small>YOU</small><strong>${win?'1ST':'2ND'}</strong><small>${game.finishTime!=null?clockText(game.finishTime):`${fmt(game.distanceRemaining)}m REMAINING`}</small></section><b>VS</b><section><small>${game.rival.name}</small><strong>${win?'2ND':'1ST'}</strong><small>${game.opponentFinishTime!=null?clockText(game.opponentFinishTime):'SEWER CIRCUIT'}</small></section></div><p>${message}</p></div>${earned}${reward}<div class="results-stats"><span>SUN RINGS<b>${game.nextCheckpoint}/${game.course.checkpoints.length}</b></span><span>WIPEOUTS<b>${game.wipeouts}</b></span><span>LADDER WINS<b>${sewerProgress.completedRaces}/5</b></span></div><button class="secondary-button" type="button" data-open-tracks>TRACK SELECT ↗</button>`,game.isSewerLadder&&win?(next?'NEXT SEWER RIVAL':'REPLAY SEWER LADDER'):'RACE AGAIN',game.isSewerLadder?'THE SEWER LADDER':'SEWER CIRCUIT');
 }
 function showTrialResults(){
   clearInput();const win=game.result==='win',earned=game.unlockedSet;
@@ -389,14 +460,15 @@ function equipTrialSet(id){
   return true;
 }
 
-const rewardIcons={guitar:'♫',lightning:'ϟ',vortex:'◎',solar:'☀',sky:'↟',afterburner:'»',deadtime:'◷'};
+const rewardIcons={sludge:'◉',guitar:'♫',lightning:'ϟ',vortex:'◎',solar:'☀',sky:'↟',afterburner:'»',deadtime:'◷'};
 function rewardCard(id,{unlocked=false,equipped=false,result=false}={}){
   const board=getRewardBoard(id);
   if(board.hidden&&!unlocked)return '';
-  return `<article class="reward-card ${unlocked?'unlocked':'locked'} ${equipped?'equipped':''}" data-reward-theme="${id}"><span class="reward-icon" aria-hidden="true">${rewardIcons[id]}</span><div><small>${equipped?'EQUIPPED':unlocked?'UNLOCKED':board.trialClears?`CLEAR ${board.trialClears} TIME TRIALS`:`CLEAR LADDER ${board.ladderIndex+1}`}</small><strong>${board.name}</strong><p>${board.buffLabel}</p><span>${board.description}</span></div><button type="button" data-reward-board="${id}" ${unlocked?'':'disabled'} aria-pressed="${equipped}">${equipped?'EQUIPPED':unlocked?'EQUIP BOARD':'LOCKED'}</button></article>`;
+  return `<article class="reward-card ${unlocked?'unlocked':'locked'} ${equipped?'equipped':''}" data-reward-theme="${id}"><span class="reward-icon" aria-hidden="true">${rewardIcons[id]}</span><div><small>${equipped?'EQUIPPED':unlocked?'UNLOCKED':board.sewerReward?'CLEAR THE SEWER LADDER':board.trialClears?`CLEAR ${board.trialClears} TIME TRIALS`:`CLEAR LADDER ${board.ladderIndex+1}`}</small><strong>${board.name}</strong><p>${board.buffLabel}</p><span>${board.description}</span></div><button type="button" data-reward-board="${id}" ${unlocked?'':'disabled'} aria-pressed="${equipped}">${equipped?'EQUIPPED':unlocked?'EQUIP BOARD':'LOCKED'}</button></article>`;
 }
 function ladderRows(){return `<ol class="rival-ladder">${tournamentRivalsForLadder(tournamentProgress).map((r,i)=>`<li class="${i<tournamentProgress.completedRounds?'beaten':i===game.roundIndex?'current':'locked'}"><b>#${r.rank}</b><div><strong>${r.name}</strong><span>${r.venue==='park'?'WATERWORKS CIRCUIT':'SURF SESSION'} · RACE</span></div><div class="rival-target"><strong>${fmt(tournamentCourseLength(r))}m</strong><span>${i<tournamentProgress.completedRounds?'DEFEATED':i===game.roundIndex?'YOUR NEXT RIVAL':'LOCKED'}</span></div></li>`).join('')}</ol>`;}
 function showLadder(){
+  if(game.isSewerLadder){showSewerLadder();return;}
   if(!game.isTournament)return;
   const ladder=game.ladder,reward=getRewardBoard(ladder.rewardId);
   openModal('ladder',ladder.name,`<p class="rival-intro">Five ladders. Five exclusive boards. Each ladder has five head-to-head races across the coast and Waterworks.</p><div class="ladder-tabs" role="group" aria-label="Rival ladders">${TOURNAMENT_LADDERS.map((entry,i)=>`<button data-ladder="${i}" ${i>tournamentProgress.completedLadders||i===game.ladderIndex?'disabled':''} class="${i===game.ladderIndex?'selected':''}"><b>${String(i+1).padStart(2,'0')} ${entry.name}</b><span>${i<tournamentProgress.completedLadders?'CLEARED · REPLAY':i===game.ladderIndex?`${tournamentProgress.completedRounds}/5 RIVALS`:i===tournamentProgress.completedLadders?'ENTER LADDER':'LOCKED'}</span></button>`).join('')}</div><p class="ladder-prize">PRIZE: <b>${reward.name}</b> · ${reward.buffLabel}</p><div class="ladder-reset-row"><button type="button" data-reset-ladder>RESET THIS LADDER</button><p>Start this ladder again from race 1.<br>Your prize boards and unlocked ladders stay available.</p></div>${ladderRows()}<p class="rival-footnote">Pass every sun ring and finish first. Switching ladders starts at race 1. Your prize boards stay unlocked. ${tournamentProgress.completedLadders}/5 prize boards earned.</p>`,game.complete?(nextTournamentLadder(tournamentProgress)?'NEXT LADDER':'REPLAY LADDER'):`CHALLENGE ${game.rival.name}`,`THE HIT LIST / LADDER ${game.ladderIndex+1} OF 5`);
@@ -417,9 +489,9 @@ function showTournamentResults(){
 }
 
 function renderCustomizationChoices(){
-  $('outfit-options').innerHTML=Object.entries(OUTFITS).map(([key,v])=>`<button class="outfit-button" data-outfit="${key}" aria-pressed="false"><strong>${v.name}</strong><span>${v.description}</span>${v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
+  $('outfit-options').innerHTML=Object.entries(OUTFITS).map(([key,v])=>`<button class="outfit-button" data-outfit="${key}" aria-pressed="false"><strong>${v.name}</strong><span>${v.description}</span>${v.sewerReward?`<small class="cosmetic-lock">WIN ${v.sewerWins} SEWER LADDER RACES</small>`:v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
   const icons={bolt:'ϟ',checker:'▦',flames:'♨',tribal:'≋',hibiscus:'✿',skull:'☠',sunburst:'✺',pinstripe:'///'};
-  $('board-design-options').innerHTML=Object.entries(BOARD_DESIGNS).map(([key,v])=>`<button class="design-button" data-board-design="${key}" aria-pressed="false"><span class="design-symbol">${icons[key]||'◈'}</span><strong>${v.name}</strong>${v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
+  $('board-design-options').innerHTML=Object.entries(BOARD_DESIGNS).map(([key,v])=>`<button class="design-button" data-board-design="${key}" aria-pressed="false"><span class="design-symbol">${icons[key]||'◈'}</span><strong>${v.name}</strong>${v.sewerReward?`<small class="cosmetic-lock">WIN ${v.sewerWins} SEWER LADDER RACES</small>`:v.trialReward?`<small class="cosmetic-lock">CLEAR ${getTrialCosmeticSet(v.trialReward).requiredClears} TIME TRIALS</small>`:''}</button>`).join('');
   updateCustomizationChoices();
 }
 function updateCustomizationChoices(){
@@ -428,18 +500,18 @@ function updateCustomizationChoices(){
   }
   for(const [selector,catalog]of [['[data-outfit]',OUTFITS],['[data-board-design]',BOARD_DESIGNS]])document.querySelectorAll(selector).forEach(button=>{
     const key=button.getAttribute(selector.slice(1,-1)),entry=catalog[key];button.disabled=!cosmeticAvailable(entry);
-    const note=button.querySelector('.cosmetic-lock');if(note)note.textContent=button.disabled?`CLEAR ${getTrialCosmeticSet(entry.trialReward).requiredClears} TIME TRIALS`:'TIME TRIAL REWARD · UNLOCKED';
+    const note=button.querySelector('.cosmetic-lock');if(note)note.textContent=entry.sewerReward?(button.disabled?`WIN ${entry.sewerWins} SEWER LADDER RACES`:'SEWER REWARD · UNLOCKED'):button.disabled?`CLEAR ${getTrialCosmeticSet(entry.trialReward).requiredClears} TIME TRIALS`:'TIME TRIAL REWARD · UNLOCKED';
   });
   $('character-name').textContent=`${CHARACTERS[profile.character].name} / ${OUTFITS[profile.outfit].name}`;
   $('board-name').textContent=getRewardBoard(profile.rewardBoard)?.name||BOARD_DESIGNS[profile.boardDesign].name;
   $('home-surfer-name').textContent=CHARACTERS[profile.character].name;
   $('home-surfer-setup').textContent=`${OUTFITS[profile.outfit].name} / ${$('board-name').textContent}`;
   $('home-surfer-preview').setAttribute('aria-label',`${CHARACTERS[profile.character].name} wearing ${OUTFITS[profile.outfit].name}, holding their ${$('board-name').textContent} surfboard upright at their side`);
-  const visibleBoards=ALL_REWARD_BOARD_ORDER.filter(id=>!getRewardBoard(id).hidden||rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress));
-  $('reward-board-options').innerHTML=visibleBoards.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress),equipped:profile.rewardBoard===id})).join('');
+  const visibleBoards=ALL_REWARD_BOARD_ORDER.filter(id=>!getRewardBoard(id).hidden||rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress,sewerProgress));
+  $('reward-board-options').innerHTML=visibleBoards.map(id=>rewardCard(id,{unlocked:rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress,sewerProgress),equipped:profile.rewardBoard===id})).join('');
   $('standard-board').setAttribute('aria-pressed',String(!profile.rewardBoard));
   $('standard-board').classList.toggle('is-selected',!profile.rewardBoard);
-  $('reward-collection-count').textContent=`${visibleBoards.filter(id=>rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress)).length} / ${visibleBoards.length} UNLOCKED`;
+  $('reward-collection-count').textContent=`${visibleBoards.filter(id=>rewardBoardUnlocked(id,tournamentProgress,trialProgress,secretProgress,sewerProgress)).length} / ${visibleBoards.length} UNLOCKED`;
   const character=CHARACTERS[profile.character], labels=['AIR','HANG TIME','POP','SPEED','SPIN','LANDING','SWITCH','RAIL BALANCE','LIP BALANCE','FLOW'];
   $('character-stats').innerHTML=labels.map((label,i)=>{const rating=character.stats?.[i]??7;return `<div class="stat-row" aria-label="${label}: ${rating} out of 10"><span>${label}</span><div class="stat-dots" aria-hidden="true">${Array.from({length:10},(_,n)=>`<i class="stat-dot${n<rating?'':' empty'}"></i>`).join('')}</div></div>`;}).join('');
   $('character-bio').textContent=character.bio||'A local with a taste for long lines and late summer swells.';
@@ -461,7 +533,7 @@ function cycleCharacter(direction){
 }
 function setProfile(patch){
   const next=validateProfile({...profile,...patch});
-  if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress,trialProgress,secretProgress))return false;
+  if(next.rewardBoard&&!rewardBoardUnlocked(next.rewardBoard,tournamentProgress,trialProgress,secretProgress,sewerProgress))return false;
   if(!cosmeticAvailable(OUTFITS[next.outfit])||!cosmeticAvailable(BOARD_DESIGNS[next.boardDesign]))return false;
   profile=next;write('breakline99-profile',JSON.stringify(profile));applyPlayerSettings();world.setProfile(profile);preview?.setProfile(profile);menuSurfer?.setProfile(profile);updateCustomizationChoices();return true;
 }
@@ -511,13 +583,13 @@ function updateHud(){
   const weatherVisible=game.mode==='surf'&&!game.isRace&&['surf','storm'].includes(selectedMode);
   $('surf-weather').classList.toggle('hidden',!weatherVisible);
   if(weatherVisible){const weather=getSurfWeather(selectedMode==='storm'?'storm':game.weatherId);$('surf-weather').textContent=`${weather.label} / ${weather.timeLabel}`;}
-  const barrelEvent=selectedMode==='storm'&&!!game.barrelWarning;
+  const barrelEvent=(selectedMode==='storm'||game.isSewer)&&!!game.barrelWarning;
   $('barrel-event').classList.toggle('hidden',!barrelEvent);
   if(barrelEvent){$('barrel-countdown').textContent=game.barrelRemaining>0?`BARREL CLOSES IN ${game.barrelRemaining.toFixed(1)}s`:'WAVE CRASHING · GET CLEAR';$('barrel-event-fill').style.width=`${Math.max(0,Math.min(1,game.barrelClosingProgress||0))*100}%`;}
   $('wave-dot').style.left=`${isParkMode()?(game.x-PARK_BOUNDS.minX)/(PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*96:(game.x-MIN_X)/(MAX_X-MIN_X)*96}%`;
   $('wave-dot').parentElement.style.setProperty('--crest-position',`${(waveCrest(-game.distance,game.elapsed)-MIN_X)/(MAX_X-MIN_X)*96}%`);
   const surface=isParkMode()?(game.surface?.pipe?.name||game.surface?.ramp?.name):null;
-  $('ride-state').textContent=game.bailTime>0?'WIPEOUT':game.pipeRide?'PIPE WALL RIDE':game.lipMove?'LIP GRAB 180':game.grinding?(game.grinding.kind==='coping'?'COPING GRIND':'WATER SLIDE'):game.airborne?'AIRBORNE':game.barrel?.inside?'IN THE BARREL':game.cutback>0?'SNAP CUTBACK':isParkMode()?(surface||'WATERWORKS'):game.launchSource==='lip'?'AT THE WAVE LIP':'ON THE FACE';
+  $('ride-state').textContent=game.bailTime>0?'WIPEOUT':game.pipeRide?'PIPE WALL RIDE':game.lipMove?'LIP GRAB 180':game.grinding?(game.grinding.kind==='coping'?'COPING GRIND':'WATER SLIDE'):game.airborne?'AIRBORNE':game.barrel?.inside?'IN THE BARREL':game.cutback>0?'SNAP CUTBACK':isParkMode()?(surface||'WATERWORKS'):game.isSewer?(game.activeShortcut?'SIDE-PIPE SHORTCUT':'SEWER MAIN'):game.launchSource==='lip'?'AT THE WAVE LIP':'ON THE FACE';
   const popCooldown=game.popCooldown||0,powered=!isParkMode()&&game.launchSource!=='flat';
   $('pop-label').textContent=game.bailTime>0?'RECOVERING':game.airborne?'LAND TO RECOVER POP':game.lipMove?'FINISH LIP TURN':game.pipeRide&&!game.popReady?'RETURN TO PIPE FLOOR':popCooldown>0?`POP RECOVERY · ${popCooldown.toFixed(1)}s`:game.cutbackActive?(isParkMode()?'CUTBACK · TURNING':'CUTBACK · SETTING UP AIR'):isParkMode()?'POP READY':game.launchSource==='cutback'?`CUTBACK AIR · ${game.cutbackLaunchTime.toFixed(1)}s`:game.launchSource==='lip'?'LIP LAUNCH READY':'FIND LIP / CUT BACK';
   if(game.isRace&&game.countdownRemaining>0)$('pop-label').textContent='WAIT FOR GO · HOLD SPACE TO POP';
@@ -526,13 +598,21 @@ function updateHud(){
   $('pop-status').classList.toggle('cooling',popCooldown>0);$('pop-status').classList.toggle('powered',powered&&game.popReady);
   if(game.airJumpReady)$('pop-label').textContent=adminSettings.enabled?'SPACE FOR EXTRA AIR JUMP':'SKYBOUND · SPACE FOR SECOND AIR';
   const reward=getRewardBoard(profile.rewardBoard);
-  $('time-power-hud').classList.toggle('hidden',!game.timePowerEnabled);
+  $('time-power-hud').classList.toggle('hidden',!game.timePowerEnabled&&!game.sewerPowerEnabled);
+  $('time-power-hud').classList.toggle('sewer-power',!!game.sewerPowerEnabled);
   if(game.timePowerEnabled){
     const active=game.timePowerActive,fast=active&&game.timePowerMode==='fast',burst=game.timePowerBurstTime||0,cooldown=game.timePowerCooldown||0,charge=game.timePowerCharge||0;
     $('time-power-hud').classList.toggle('active',active);$('time-power-hud').classList.toggle('fast',fast);$('time-power-hud').classList.toggle('bursting',burst>0);
     $('time-power-title').textContent=active?(fast?'FAST-FORWARD ×2':'DEADTIME · SLOW MOTION'):burst>0?'+50% SPEED BURST':'DEADTIME';
     $('time-power-detail').textContent=active?`${charge.toFixed(1)}s LEFT · Q TO RELEASE`:burst>0?`${burst.toFixed(1)}s OF BOOST`:cooldown>0?`RECHARGING · ${cooldown.toFixed(1)}s`:game.bailTime>0?'RECOVERING':game.countdownRemaining>0?'READY AFTER GO':`Q TO SLOW · DOUBLE-TAP Q TO FAST-FORWARD · ${charge.toFixed(1)}s`;
     $('time-power-fill').style.width=`${Math.max(0,Math.min(1,burst>0?burst/3:cooldown>0?1-cooldown/12:charge/6))*100}%`;
+  }
+  if(game.sewerPowerEnabled){
+    const active=game.sewerPowerActive,remaining=game.sewerPowerRemaining,cooldown=game.sewerPowerCooldown;
+    $('time-power-hud').classList.toggle('active',active);$('time-power-hud').classList.remove('fast','bursting');
+    $('time-power-title').textContent=active?'SLUDGE SURGE · SHIELD + SPEED':'SLUDGE SURGE';
+    $('time-power-detail').textContent=active?`${remaining.toFixed(1)}s · +35% SPEED · HAZARD SHIELD`:cooldown>0?`RECHARGING · ${cooldown.toFixed(1)}s`:game.bailTime>0?'RECOVERING':game.countdownRemaining>0?'READY AFTER GO':'Q · 5 SECOND SURGE / 15 SECOND RECHARGE';
+    $('time-power-fill').style.width=`${Math.max(0,Math.min(1,active?remaining/5:cooldown>0?1-cooldown/15:1))*100}%`;
   }
   $('reward-ride-status').textContent=adminSettings.enabled?`${reward?.name||'STANDARD BOARD'} · CUSTOM STATS`:reward?`${reward.name} · ${reward.buffLabel}`:'';
   $('reward-ride-status').classList.toggle('hidden',!reward&&!adminSettings.enabled);
@@ -548,7 +628,7 @@ function updateHud(){
   else if(followups.length&&!game.trick&&!game.pipeRide&&!game.lipMove&&!game.grinding)$('combo-caption').textContent=`${game.airborne?'NEXT':'NEXT AIR'}: ${followups.map(combo=>combo.keys[1]).join(' / ')} · ${followups.length===1?followups[0].name:'COMBO MOVES'}`;
   $('special-fill').style.width=`${special.value*100}%`;$('special-fill').parentElement.classList.toggle('is-full',special.ready);
   if($('special-label'))$('special-label').textContent=special.ready?'100% READY · I':`SPECIAL ${Math.floor(special.value*100)}%`;
-  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTutorial&&!game.isTournament&&!game.isTimeTrial&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
+  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTutorial&&!game.isTournament&&!game.isTimeTrial&&!game.isSewer&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
   $('goal-gates').querySelector('span').textContent=isParkMode()?`Hit 5 ramps (${Math.min(5,game.visitedRamps.size)}/5)`:selectedMode==='rush'?`Checkpoints (${Math.min(12,game.gates)}/12)`:selectedMode==='storm'?`Barrel rides (${Math.min(3,game.barrelsSurvived||0)}/3)`:`Sun rings (${Math.min(6,game.gates)}/6)`;
   if(game.isTimeTrial){
     $('rival-name').textContent=`${String(game.trialIndex+1).padStart(2,'0')} / ${game.trial.name}`;
@@ -558,8 +638,8 @@ function updateHud(){
     $('rival-hud').classList.toggle('ahead',game.time>0);
     $('race-player-progress').style.width=`${Math.max(0,Math.min(100,game.raceProgress/game.course.length*100))}%`;
   }
-  if(game.isTournament){
-    $('rival-name').textContent=`L${game.ladderIndex+1} · #${game.rival.rank} ${game.rival.name}`;
+  if(game.isTournament||game.isSewer){
+    $('rival-name').textContent=game.isSewer?`${game.isSewerLadder?`R${game.roundIndex+1} · `:''}${game.rival.name}`:`L${game.ladderIndex+1} · #${game.rival.rank} ${game.rival.name}`;
     const gap=game.isRace?game.lead:game.score-game.rivalScore;
     $('rival-score').textContent=game.isRace?`${game.racePosition===1?'1ST':'2ND'} / 2`:fmt(game.rivalScore);
     $('rival-target').textContent=game.isRace?`${fmt(game.distanceRemaining)}m TO FINISH · CHECKPOINTS ${game.nextCheckpoint}/${game.course.checkpoints.length}`:`FINAL SCORE ${fmt(game.target)} · HEAT ${game.roundNumber}/5`;
@@ -600,7 +680,7 @@ adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onA
 keydownHandler=createKeydownHandler(
   ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen,settingsOpen:settingsPanel.isOpen,keybinds:playerSettings.keybinds}),
   {toggleSound,closeWorkshop,cycleCharacter,closeModal,startRun,restartRun,pause,tryTrick,toast,openAdmin,
-    pressTimePower:stamp=>timePowerInput.press(stamp),cancelPowerInput:()=>timePowerInput.cancel(),
+    pressTimePower:stamp=>game.sewerPowerEnabled?game.activateSewerPower():timePowerInput.press(stamp),cancelPowerInput:()=>timePowerInput.cancel(),
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
     hideWardrobe:closeWardrobe,
     rotatePreview:delta=>preview?.rotate(delta),
@@ -613,24 +693,31 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput
 document.addEventListener('pointerdown',event=>{if(!bootReady||tutorial.isOpen||settingsPanel.isOpen||event.target.closest('.masthead'))return;if(game?.phase==='ready'&&soundPreference!=='off'&&!audio.enabled){audio.setScene('menu');audio.enable().then(updateSoundLabel);}},{capture:true});
 $('start').addEventListener('click',startRun);$('restart').addEventListener('click',restartRun);$('pause').addEventListener('click',pause);$('help').addEventListener('click',showHelp);$('sound').addEventListener('click',toggleSound);
 $('ladder-button').addEventListener('click',showLadder);
+$('mode-park').addEventListener('click',showTracks);
+$('tracks-button').addEventListener('click',showTracks);
 $('race-ladders').addEventListener('click',showLadder);
 $('trial-button').addEventListener('click',showTrials);
 $('race-trials').addEventListener('click',showTrials);
 $('standard-board').addEventListener('click',()=>setProfile({rewardBoard:null}));
 $('modal-content').addEventListener('click',event=>{
   const button=event.target.closest('button');if(!button||button.disabled)return;
+  if(button.dataset.selectTrack){selectTrack(button.dataset.selectTrack);return;}
+  if(button.dataset.openTracks!==undefined){goHome();showTracks();return;}
+  if(button.dataset.openSewerLadder!==undefined){showSewerLadder();return;}
+  if(button.dataset.resetSewerLadder!==undefined){sewerProgress=resetSewerLadder(sewerProgress);write(SEWER_STORAGE_KEY,JSON.stringify(sewerProgress));goHome();showSewerLadder();return;}
+  if(button.dataset.sewerOutfit){if(setProfile({outfit:button.dataset.sewerOutfit}))showSewerResults();return;}
   if(button.dataset.openTrials!==undefined){selectMode('trials');goHome();showTrials();return;}
   if(button.dataset.trialEquip){equipTrialSet(button.dataset.trialEquip);return;}
   if(button.dataset.trial!==undefined){const next=selectTimeTrial(trialProgress,Number(button.dataset.trial));if(next){trialProgress=next;write('breakline99-trials-v1',JSON.stringify(next));goHome();showTrials();}return;}
   if(button.dataset.resetLadder!==undefined){resetCurrentLadder();return;}
-  if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard})){if(modalMode==='trials')showTrials();else if(game.isTimeTrial)showTrialResults();else if(game.isTournament)showTournamentResults();else showResults();}
+  if(button.dataset.rewardBoard&&setProfile({rewardBoard:button.dataset.rewardBoard})){if(modalMode==='trials')showTrials();else if(game.isTimeTrial)showTrialResults();else if(game.isSewer)showSewerResults();else if(game.isTournament)showTournamentResults();else showResults();}
   if(button.dataset.ladder!==undefined){
     const next=selectTournamentLadder(tournamentProgress,Number(button.dataset.ladder));
     if(next){tournamentProgress=next;write('breakline99-tournament-v2',JSON.stringify(next));goHome();showLadder();}
   }
 });
 $('modal-home').addEventListener('click',goHome);
-$('modal-action').addEventListener('click',()=>['results','ladder','trials'].includes(modalMode)?startRun():modalMode==='graphics'?location.reload():closeModal());
+$('modal-action').addEventListener('click',()=>['results','ladder','trials','sewer-ladder'].includes(modalMode)||(modalMode==='tracks'&&(isParkMode()||game.isSewer))?startRun():modalMode==='graphics'?location.reload():closeModal());
 $('quality').addEventListener('click',()=>{try{applySettings({...playerSettings,quality:playerSettings.quality==='retro'?'clean':'retro'},{name:riderIdentity.name});}catch(error){toast(error.message,true);}});
 $('menu-settings').addEventListener('click',openSettings);$('pause-settings').addEventListener('click',openSettings);
 document.querySelector('.brand').addEventListener('click',e=>{e.preventDefault();goHome();});

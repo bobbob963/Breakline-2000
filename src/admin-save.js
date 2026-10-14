@@ -26,7 +26,7 @@ export function persistAdminEntries(storage, entries) {
 }
 
 export function resetBreaklineProgress(storage) {
-  const progressKeys=new Set(['breakline99-tournament-v1','breakline99-tournament-v2','breakline99-trials-v1','breakline99-secrets-v1','breakline99-survival-time','breakline99-best']);
+  const progressKeys=new Set(['breakline99-tournament-v1','breakline99-tournament-v2','breakline99-trials-v1','breakline99-secrets-v1','breakline99-sewer-v1','breakline99-survival-time','breakline99-best']);
   return removeSaveEntries(storage,key=>progressKeys.has(key)||key?.startsWith('breakline99-best-'));
 }
 

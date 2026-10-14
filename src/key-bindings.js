@@ -16,7 +16,7 @@ const actions = [
   ['special','Surfer special','KeyI','Use your surfer’s special with a full meter.'],
   ['tweak','Tweaked grab','KeyB','Tweak your airborne grab.'],
   ['cutback','Cutback','KeyC','Cut back sharply from the wave face.'],
-  ['timePower','DEADTIME power','KeyQ','Tap for slow motion; double-tap for 2× fast-forward with DEADTIME equipped.'],
+  ['timePower','Board ability','KeyQ','SLUDGE SURGE: speed and hazard shield. DEADTIME: tap for slow motion; double-tap for fast-forward.'],
   ['bank','Bank combo','Enter','Bank your current trick combo. Enter still accepts menus.'],
   ['pause','Pause / resume','KeyP','Pause or resume your session. Escape always works too.'],
   ['restart','Restart session','KeyR','Restart the current session.'],

@@ -1,3 +1,4 @@
+import { sewerBoardUnlocked } from './sewer-progress.js';
 // Permanent ladder and Time Trial prizes. Rendering and physics share one catalogue.
 const defaults = Object.freeze({
   baseSpeedMultiplier: 1, trickPointsMultiplier: 1, boostPowerMultiplier: 1,
@@ -31,18 +32,23 @@ export const REWARD_BOARDS = Object.freeze({
   deadtime: board('deadtime', 'DEADTIME', null, 'Q TO SLOW · DOUBLE-TAP Q TO FAST-FORWARD',
     'A secret earned by surviving five minutes in Storm Rider. Tap Q for slow motion or double-tap Q for 2× fast-forward, sharing six seconds of charge. Spend the full charge for 50% more speed for three seconds, then recharge. Clock hands spiral off completed tricks; a green pulse spreads from the board when time slows, and a red pulse spreads when time speeds up.',
     'clock', { primary: '#176a45', secondary: '#112923', accent: '#b7ffd0' }, { hidden: true, slowMotion: true, survivalSeconds: 300 }),
+  sludge: board('sludge', 'SLUDGE SURGE', null, 'Q: +35% SPEED + HAZARD SHIELD',
+    'Win the Sewer Ladder to earn this pressure-valve deck. Press Q for five seconds of 35% extra speed and protection from whirlpools, debris, reefs and closing waves. Recharges in 15 seconds. Teal splashes burst off completed tricks.',
+    'sludge', {primary:'#238d79',secondary:'#142d31',accent:'#c4f96b'}, {sewerReward:true,activeAbility:'sludge'}),
 });
 
 // Ladder count and progression depend on this fixed list. Trial prizes are separate.
 export const REWARD_BOARD_ORDER = Object.freeze(['guitar', 'lightning', 'vortex', 'solar', 'sky']);
 export const TRIAL_REWARD_BOARD_ORDER = Object.freeze(['afterburner']);
 export const SECRET_REWARD_BOARD_ORDER = Object.freeze(['deadtime']);
-export const ALL_REWARD_BOARD_ORDER = Object.freeze([...REWARD_BOARD_ORDER, ...TRIAL_REWARD_BOARD_ORDER, ...SECRET_REWARD_BOARD_ORDER]);
+export const SEWER_REWARD_BOARD_ORDER = Object.freeze(['sludge']);
+export const ALL_REWARD_BOARD_ORDER = Object.freeze([...REWARD_BOARD_ORDER, ...TRIAL_REWARD_BOARD_ORDER, ...SECRET_REWARD_BOARD_ORDER, ...SEWER_REWARD_BOARD_ORDER]);
 export function getRewardBoard(id) {
   return typeof id === 'string' && Object.hasOwn(REWARD_BOARDS, id) ? REWARD_BOARDS[id] : null;
 }
-export function rewardBoardUnlocked(id, progress, trialProgress, secretProgress) {
+export function rewardBoardUnlocked(id, progress, trialProgress, secretProgress, sewerProgress) {
   const reward = getRewardBoard(id), completed = progress?.completedLadders;
+  if(reward?.sewerReward)return sewerBoardUnlocked(id,sewerProgress);
   if (reward?.hidden) return !!secretProgress && Object.hasOwn(secretProgress, 'deadtimeUnlocked') && secretProgress.deadtimeUnlocked === true;
   if (reward?.trialClears) {
     const clears = trialProgress?.completedTrials;

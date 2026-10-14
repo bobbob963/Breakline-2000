@@ -28,6 +28,8 @@ export const OUTFITS = {
   ripcurrent: { name: 'RIP CURRENT', trialReward: 'ripcurrent', description: 'Seafoam long-sleeve rashguard, deep teal striped shorts and pale coral detailing. Time Trials prize.', top: 'rashguard', shirt: '#81b8af', shorts: '#244d59', accent: '#e3b69c', pattern: 'rashguard', shortPattern: 'stripe', sleeves: 'long' },
   furnace: { name: 'FURNACE', trialReward: 'furnace', description: 'Rust-red crew sweatshirt, full-length charcoal cargo trousers, cream cap and trainers. Time Trials prize.', top: 'sweatshirt', bottom: 'trousers', shirt: '#9e4e38', shorts: '#393b3b', accent: '#dab762', pattern: 'crewbolt', shortPattern: 'cargo', hat: 'whitecap', sleeves: 'long', footwear: 'trainers' },
   chronocrew: { name: 'CHRONO CREW', trialReward: 'chronocrew', description: 'Cream racing raglan with forest-green sleeves, checked shorts and a shell necklace. Time Trials champion prize.', top: 'raglan', shirt: '#ded7bf', shorts: '#b4b99e', accent: '#355b50', pattern: 'badge', shortPattern: 'checker', sleeves: 'threequarter', necklace: true },
+  draincrew: { name:'DRAIN CREW', sewerReward:'draincrew', sewerWins:2, description:'Faded petrol-blue work sweatshirt, rust cargo trousers, reflective hazard stripes and a cream cap. Win two Sewer Ladder races.', top:'sweatshirt', bottom:'trousers', shirt:'#27565a', shorts:'#665044', accent:'#d7cf73', pattern:'hazardcrew', shortPattern:'cargo', sleeves:'long', hat:'whitecap', footwear:'trainers' },
+  nightshift: { name:'NIGHT SHIFT', sewerReward:'nightshift', sewerWins:4, description:'Ink-black oversized tee with a mint drain graphic, violet cargo shorts and a backwards cap. Win four Sewer Ladder races.', top:'oversized', shirt:'#222c35', shorts:'#66536e', accent:'#8fe3c5', pattern:'drainmark', shortPattern:'cargo', sleeves:'short', hat:'cap', footwear:'trainers' },
 };
 export const BOARD_DESIGNS = {
   bolt: { name: 'LIGHTNING' }, checker: { name: 'CHECKER RIP' }, flames: { name: 'HOT ROD' },
@@ -152,6 +154,17 @@ function fabricTexture(outfit, shorts = false) {
   } else if (pattern === 'crewbolt') {
     ctx.fillStyle = '#305663';ctx.beginPath();ctx.moveTo(45,17);ctx.lineTo(39,28);ctx.lineTo(47,27);ctx.lineTo(45,40);ctx.lineTo(55,24);ctx.lineTo(50,25);ctx.lineTo(54,17);ctx.closePath();ctx.fill();
     ctx.fillStyle = '#c5cab7';ctx.fillRect(37,22,21,3);
+  } else if(pattern==='hazardcrew') {
+    ctx.fillStyle='#162e32';ctx.fillRect(0,37,64,13);
+    ctx.fillStyle=outfit.accent;ctx.fillRect(0,39,64,3);ctx.fillRect(0,47,64,2);
+    for(const x of [10,42]){ctx.fillStyle='#d3d8ba';ctx.fillRect(x,4,3,35);ctx.fillRect(x+10,4,3,35);ctx.fillStyle='#172d2f';ctx.fillRect(x+2,19,9,11);ctx.fillStyle=outfit.accent;ctx.fillRect(x+3,20,7,3);ctx.font='bold 5px monospace';ctx.fillText('99',x+3,28);}
+  } else if(pattern==='drainmark') {
+    for(const x of [16,48]){
+      ctx.strokeStyle=outfit.accent;ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,30,11,0,Math.PI*2);ctx.stroke();
+      ctx.save();ctx.translate(x,30);ctx.rotate(-.35);ctx.fillStyle=outfit.accent;for(let i=-6;i<=6;i+=4)ctx.fillRect(i-1,-8,2,16);ctx.restore();
+      ctx.fillStyle='#d7dbc7';ctx.font='bold 5px monospace';ctx.textAlign='center';ctx.fillText('NIGHT SHIFT',x,48);ctx.textAlign='start';
+      ctx.fillStyle=outfit.accent;ctx.fillRect(x-11,51,22,2);
+    }
   } else if (pattern === 'cargo') {
     ctx.fillStyle = '#172027';ctx.globalAlpha=.18;ctx.fillRect(0,0,2,64);ctx.fillRect(30,0,2,64);ctx.globalAlpha=1;
     for(const x of [6,38]){ctx.fillStyle='rgba(25,30,25,.17)';ctx.fillRect(x,30,17,20);ctx.fillStyle='rgba(224,222,186,.16)';ctx.fillRect(x,29,17,3);ctx.strokeStyle='rgba(30,35,27,.35)';ctx.lineWidth=1;ctx.strokeRect(x,30,17,20);ctx.fillStyle='rgba(28,32,26,.48)';ctx.fillRect(x+7,32,2,2);}
@@ -348,6 +361,16 @@ export function rewardBoardTexture(id) {
     ctx.fillStyle=primary;ctx.beginPath();ctx.arc(32,105,4,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=accent;ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.fillText('05:00',32,182);
     for(let i=0;i<3;i++)polygon([[15+i*10,193],[24+i*10,193],[19+i*10,204],[10+i*10,204]],i%2?accent:secondary);
+  } else if(id==='sludge') {
+    // Pressure-valve insignia with green drain channels and worn warning tape.
+    polygon([[11,0],[22,0],[53,208],[42,208]],secondary);
+    ctx.strokeStyle=accent;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(48,8);ctx.lineTo(48,60);ctx.lineTo(17,88);ctx.lineTo(17,187);ctx.stroke();
+    ctx.fillStyle=secondary;ctx.beginPath();ctx.ellipse(32,111,24,40,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=accent;ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(32,111,18,30,0,0,Math.PI*2);ctx.stroke();
+    for(let i=0;i<5;i++){const a=i*Math.PI*2/5;ctx.beginPath();ctx.moveTo(32,111);ctx.lineTo(32+Math.cos(a)*18,111+Math.sin(a)*30);ctx.stroke();}
+    ctx.fillStyle='#dbe5b1';ctx.beginPath();ctx.arc(32,111,6,0,Math.PI*2);ctx.fill();
+    for(const y of [40,177])for(let x=9;x<56;x+=12)polygon([[x,y],[x+6,y],[x+12,y+12],[x+6,y+12]],accent);
+    for(const [x,y]of [[9,142],[47,154],[37,28],[26,193]]){ctx.fillStyle=accent;ctx.beginPath();ctx.ellipse(x,y,3,5,0,0,Math.PI*2);ctx.fill();}
   } else if(id==='sky') {
     for(const side of [-1,1]){ctx.save();ctx.translate(32,108);ctx.scale(side,1);polygon([[0,38],[4,-59],[24,-89],[25,-55],[14,-35],[24,-47],[19,-22],[10,-8],[20,-19],[14,8]],secondary);ctx.restore();}
     polygon([[29,43],[35,29],[34,137],[29,162]],accent);

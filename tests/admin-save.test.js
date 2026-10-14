@@ -5,6 +5,7 @@ import { ALL_REWARD_BOARD_ORDER, rewardBoardUnlocked } from '../src/board-reward
 import { TRIAL_COSMETIC_SETS, trialCosmeticUnlocked } from '../src/trial-cosmetics.js';
 import { TOURNAMENT_LADDERS, selectTournamentLadder, sanitizeTournamentProgress } from '../src/tournament-progress.js';
 import { TIME_TRIALS, timeTrialsUnlocked, selectTimeTrial, sanitizeTimeTrialProgress } from '../src/time-trial-progress.js';
+import { unlockAllSewerRewards,sewerOutfitUnlocked } from '../src/sewer-progress.js';
 
 function fakeStorage(initial={}) {
   const values=new Map(Object.entries(initial));
@@ -26,9 +27,11 @@ function fakeStorage(initial={}) {
 }
 
 test('Give Me Everything unlocks every prize, ladder and trial without inventing any personal bests',()=>{
-  const unlocked=everythingUnlocked();
+  const unlocked=everythingUnlocked(),sewer=unlockAllSewerRewards();
   assert.equal(timeTrialsUnlocked(unlocked.tournament),true);
-  for(const id of ALL_REWARD_BOARD_ORDER) assert.equal(rewardBoardUnlocked(id,unlocked.tournament,unlocked.trials,unlocked.secrets),true,id);
+  for(const id of ALL_REWARD_BOARD_ORDER) assert.equal(rewardBoardUnlocked(id,unlocked.tournament,unlocked.trials,unlocked.secrets,sewer),true,id);
+  for(const outfit of ['draincrew','nightshift'])assert.equal(sewerOutfitUnlocked(outfit,sewer),true);
+  assert.deepEqual(sewer.bestTimes,Array(5).fill(null));
   for(const set of TRIAL_COSMETIC_SETS) assert.equal(trialCosmeticUnlocked(set.id,unlocked.trials.completedTrials),true,set.name);
   for(let index=0;index<TOURNAMENT_LADDERS.length;index++) assert.notEqual(selectTournamentLadder(unlocked.tournament,index),null);
   for(let index=0;index<TIME_TRIALS.length;index++) assert.notEqual(selectTimeTrial(unlocked.trials,index),null);
@@ -98,7 +101,7 @@ test('Full Reset removes all and only Breakline saves, including legacy, admin, 
   const gameEntries={
     'breakline99-tournament-v1':'legacy','breakline99-tournament-v2':'current',
     'breakline99-trials-v1':'PBs','breakline99-admin-v1':'stats',
-    'breakline99-secrets-v1':'secret board',
+    'breakline99-secrets-v1':'secret board','breakline99-sewer-v1':'sewer rewards and times',
     'breakline99-profile':'board and outfit','breakline99-sound':'off',
     'breakline99-quality':'high','breakline99-best-surf':'12000',
     'breakline99-future-setting':'future',

@@ -5,7 +5,9 @@ import vm from 'node:vm';
 import { SurfGame } from '../src/game.js';
 import { WaveParkGame } from '../src/park.js';
 import { SpecialMeter } from '../src/special.js';
-import { validateProfile,OUTFITS,BOARD_DESIGNS } from '../src/appearance.js';
+import { validateProfile,CHARACTERS,OUTFITS,BOARD_DESIGNS } from '../src/appearance.js';
+import { SewerRaceGame } from '../src/sewer-race.js';
+import { SEWER_STORAGE_KEY,SEWER_RACES,sanitizeSewerProgress,unlockAllSewerRewards,sewerOutfitUnlocked,resetSewerLadder } from '../src/sewer-progress.js';
 import { createTournamentGame,sanitizeTournamentProgress,nextTournamentLadder,selectTournamentLadder } from '../src/tournament.js';
 import { createTimeTrialGame } from '../src/time-trials.js';
 import { sanitizeTimeTrialProgress,timeTrialsUnlocked } from '../src/time-trial-progress.js';
@@ -28,7 +30,8 @@ function fixture() {
   const saved=storage(),calls={hud:0,mode:0,choices:0,reloads:0,clear:0,opened:0};
   const introClasses=new Set(),element={classList:{add:noOp,remove:noOp,toggle:noOp,contains:value=>introClasses.has(value)},focus:noOp};
   const context={
-    SurfGame,WaveParkGame,createTournamentGame,createTimeTrialGame,nextTournamentLadder,selectTournamentLadder,
+    SurfGame,WaveParkGame,SewerRaceGame,CHARACTERS,createTournamentGame,createTimeTrialGame,nextTournamentLadder,selectTournamentLadder,
+    SEWER_STORAGE_KEY,SEWER_RACES,sanitizeSewerProgress,unlockAllSewerRewards,sewerOutfitUnlocked,resetSewerLadder,sewerProgress:sanitizeSewerProgress(null),selectedTrack:'sewer-run',
     ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,everythingUnlocked,persistAdminEntries,resetBreaklineSave,
     SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret,secretProgress:sanitizeSecretProgress(null),secretUnlockedThisRun:false,
     timePowerScreen:{reset:noOp,onEvent:noOp,update:noOp},
@@ -47,7 +50,7 @@ function fixture() {
     write:(key,value)=>saved.setItem(key,value),onEvent:noOp,
   };
   vm.runInNewContext(block('function applyPlayerSettings(', 'function syncInput('),context);
-  vm.runInNewContext(block('function makeGame(', 'function updateModeMenu('),context);
+  vm.runInNewContext(block('function createSelectedSewerGame(', 'function updateModeMenu('),context);
   vm.runInNewContext(block('function startRun(', 'function goHome('),context);
   vm.runInNewContext(block('function cosmeticAvailable(', 'if(!cosmeticAvailable(OUTFITS'),context);
   vm.runInNewContext(block('function setProfile(', 'function openWorkshop('),context);
@@ -98,7 +101,7 @@ test('actual Apply saves validated tuning before updating the selected rider and
 });
 
 test('actual constructors and retry actions apply custom settings in every session and isolate race opponents',()=>{
-  for(const mode of ['surf','rush','storm','park','tournament','trials']) {
+  for(const mode of ['surf','rush','storm','park','tournament','trials','sewer','sewer-ladder']) {
     const {context:c}=fixture();c.adminSettings=customSettings(c.profile);c.selectedMode=mode;
     if(mode==='trials')c.trialProgress=sanitizeTimeTrialProgress({version:1,completedTrials:5,selectedTrial:5});
     c.makeGame();assert.equal(c.game.baseSpeedMultiplier,1.5,mode);assert.equal(c.game.jumpPowerMultiplier,1.7);
@@ -146,16 +149,20 @@ test('special charge uses the current character multiplier for actual trick and 
 test('Give Me Everything opens every reward and course without inventing personal bests or erasing custom stats',()=>{
   const {context:c,saved,calls}=fixture();c.applyAdminSettings(customSettings(c.profile));
   c.trialProgress=sanitizeTimeTrialProgress({version:1,completedTrials:3,selectedTrial:2,bestTimes:[31,35,40]});
+  c.sewerProgress=sanitizeSewerProgress({version:1,completedRaces:2,earnedWins:2,bestTimes:[58,70]});
   saved.setItem('breakline99-best-surf','12000');const beforeProfile={...c.profile},beforeSettings=c.adminSettings;
   c.giveEverything();assert.equal(c.tournamentProgress.completedLadders,5);assert.equal(c.trialProgress.completedTrials,12);
   assert.ok(timeTrialsUnlocked(c.tournamentProgress));assert.equal(c.game.phase,'ready');assert.equal(c.game.baseSpeedMultiplier,1.5);
-  for(const id of ALL_REWARD_BOARD_ORDER)assert.ok(rewardBoardUnlocked(id,c.tournamentProgress,c.trialProgress,c.secretProgress));
+  for(const id of ALL_REWARD_BOARD_ORDER)assert.ok(rewardBoardUnlocked(id,c.tournamentProgress,c.trialProgress,c.secretProgress,c.sewerProgress));
   for(const entry of [...Object.values(OUTFITS),...Object.values(BOARD_DESIGNS)])assert.ok(c.cosmeticAvailable(entry));
   assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40]);assert.ok(c.trialProgress.bestTimes.slice(3).every(time=>time===null));
   assert.deepEqual(c.profile,beforeProfile);assert.equal(c.adminSettings,beforeSettings);assert.equal(saved.getItem('breakline99-best-surf'),'12000');
   assert.equal(JSON.parse(saved.getItem('breakline99-trials-v1')).completedTrials,12);assert.equal(calls.mode,2);assert.equal(calls.choices,1);
   assert.equal(c.secretProgress.deadtimeUnlocked,true);assert.equal(JSON.parse(saved.getItem(SECRET_STORAGE_KEY)).deadtimeUnlocked,true);
   assert.equal(saved.getItem('breakline99-survival-time'),null,'unlock-all does not fabricate a five-minute record');
+  assert.equal(c.sewerProgress.completedRaces,5);assert.equal(c.sewerProgress.earnedWins,5);
+  assert.deepEqual(c.sewerProgress.bestTimes,[58,70,null,null,null]);
+  assert.deepEqual(JSON.parse(saved.getItem(SEWER_STORAGE_KEY)),c.sewerProgress);
   c.giveEverything();assert.deepEqual(c.trialProgress.bestTimes.slice(0,3),[31,35,40],'repeating unlock does not change earned times');
 });
 
@@ -172,9 +179,9 @@ test('Apply persists the slow-motion cheat independently of stat tuning and pass
   assert.equal(c.game.toggleTimePower(),false);
 });
 
-test('a failed secret-board unlock rolls back all three saved progress records',()=>{
+test('a failed secret-board unlock rolls back all four saved progress records',()=>{
   const {context:c,saved,calls}=fixture();
-  const entries=[['breakline99-tournament-v2',c.tournamentProgress],['breakline99-trials-v1',c.trialProgress],[SECRET_STORAGE_KEY,c.secretProgress]];
+  const entries=[['breakline99-tournament-v2',c.tournamentProgress],['breakline99-trials-v1',c.trialProgress],[SECRET_STORAGE_KEY,c.secretProgress],[SEWER_STORAGE_KEY,c.sewerProgress]];
   for(const [key,value] of entries)saved.setItem(key,JSON.stringify(value));
   saved.setItem('breakline99-survival-time','42');
   const before=[...saved.data],secrets=c.secretProgress,tournament=c.tournamentProgress,trials=c.trialProgress,set=saved.setItem;
@@ -182,6 +189,17 @@ test('a failed secret-board unlock rolls back all three saved progress records',
   assert.throws(()=>c.giveEverything(),/could not save/);
   assert.deepEqual([...saved.data],before);assert.equal(c.secretProgress,secrets);
   assert.equal(c.tournamentProgress,tournament);assert.equal(c.trialProgress,trials);assert.equal(calls.mode,0);
+});
+
+test('a failed fourth sewer write restores the first three saves and all live progress',()=>{
+  const {context:c,saved,calls}=fixture();
+  const records=[['breakline99-tournament-v2',c.tournamentProgress],['breakline99-trials-v1',c.trialProgress],[SECRET_STORAGE_KEY,c.secretProgress],[SEWER_STORAGE_KEY,c.sewerProgress]];
+  for(const [key,value]of records)saved.setItem(key,JSON.stringify(value));
+  const before=[...saved.data],beforeSewer=c.sewerProgress,set=saved.setItem;
+  saved.setItem=(key,value)=>{if(key===SEWER_STORAGE_KEY&&JSON.parse(value).earnedWins===5)throw new Error('quota');set(key,value);};
+  assert.throws(()=>c.giveEverything(),/could not save/);
+  assert.deepEqual([...saved.data],before);assert.equal(c.sewerProgress,beforeSewer);
+  assert.equal(c.tournamentProgress,records[0][1]);assert.equal(c.trialProgress,records[1][1]);assert.equal(c.secretProgress,records[2][1]);assert.equal(calls.mode,0);
 });
 
 test('a failed multi-save unlock keeps both live progression and stored progression unchanged',()=>{

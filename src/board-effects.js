@@ -24,6 +24,9 @@ function iconTexture(id) {
   } else if(id==='afterburner') {
     shape([[13,57],[11,42],[26,17],[28,31],[41,4],[50,34],[54,47],[43,59],[26,63]]);
     c.globalCompositeOperation='destination-out';shape([[24,54],[30,43],[31,51],[41,34],[43,52],[36,59]]);c.globalCompositeOperation='source-over';
+  } else if(id==='sludge') {
+    shape([[30,3],[49,27],[55,41],[48,56],[32,63],[14,57],[7,43],[13,26]]);
+    c.globalCompositeOperation='destination-out';c.beginPath();c.ellipse(24,38,6,12,.35,0,TAU);c.fill();c.globalCompositeOperation='source-over';
   } else if(id==='sky') {
     shape([[8,58],[21,13],[40,3],[53,5],[54,22],[40,37],[31,36],[33,46],[21,49]]);
     c.globalCompositeOperation='destination-out';c.lineWidth=3;c.beginPath();c.moveTo(12,56);c.lineTo(43,16);c.stroke();
@@ -138,6 +141,11 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
   });
   const pulse=new THREE.Group();pulse.name='deadtime-board-pulse';pulse.visible=false;group.add(pulse);
   const pulseMaterial=effectMaterial('#75ffb5'),pulseRing=new THREE.Mesh(pulseGeometry,pulseMaterial);pulseRing.rotation.x=-Math.PI/2;pulseRing.position.y=.04;pulse.add(pulseRing);
+  const shield=new THREE.Group();shield.name='sludge-surge-shield';shield.visible=false;group.add(shield);
+  const shieldGeometry=new THREE.IcosahedronGeometry(1,1),shieldMaterial=new THREE.MeshBasicMaterial({color:'#82f6cc',transparent:true,opacity:.18,wireframe:true,depthWrite:false,depthTest:true});
+  const shieldMesh=new THREE.Mesh(shieldGeometry,shieldMaterial);shieldMesh.scale.set(.84,1.17,.84);shield.add(shieldMesh);
+  const shieldRingMaterial=effectMaterial('#bded70');
+  const shieldRings=Array.from({length:2},()=>{const ring=new THREE.Mesh(pulseGeometry,shieldRingMaterial);ring.rotation.x=-Math.PI/2;shield.add(ring);return ring;});
   const wings=new THREE.Group();wings.name='skybound-angel-wings';wings.visible=false;group.add(wings);
   const wingMaterial=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,opacity:0});
   const wingPair=[-1,1].map(side=>{
@@ -145,10 +153,14 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     const mesh=new THREE.Mesh(wingGeometry,wingMaterial);mesh.scale.x=side;pivot.add(mesh);return {pivot,side};
   });
   const wingMatrix=new THREE.Matrix4(),parentInverse=new THREE.Matrix4();
-  let wingAmount=0,wingLife=0,wingTime=0,pulseAge=1,timePowerMode='slow';
-  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;pulseAge=1;pulse.visible=false;pulseMaterial.opacity=0;timePowerMode='slow';pulse.userData.mode='slow';pulseMaterial.color.set('#75ffb5');}
+  let wingAmount=0,wingLife=0,wingTime=0,pulseAge=1,timePowerMode='slow',shieldRemaining=0,shieldTime=0;
+  function reset(){for(const slot of slots){slot.root.visible=false;slot.age=slot.duration;}next=0;wingAmount=wingLife=wingTime=0;wings.visible=false;wingMaterial.opacity=0;wings.userData.gliding=false;pulseAge=1;pulse.visible=false;pulseMaterial.opacity=0;timePowerMode='slow';pulse.userData.mode='slow';pulseMaterial.color.set('#75ffb5');shieldRemaining=shieldTime=0;shield.visible=false;}
   function setProfile(profile){equipped=getRewardBoard(profile?.rewardBoard)?.id??null;reset();}
   function trigger(event) {
+    if(!disposed&&equipped==='sludge'&&event?.type==='sewerPower'&&!event.opponent){
+      shieldRemaining=event.active?Math.max(0,event.duration??5):0;shieldTime=0;shield.visible=shieldRemaining>0;
+      pulse.userData.mode='sludge';pulseMaterial.color.set('#79e7be');pulseAge=event.active?0:1;pulse.visible=!!event.active&&!reducedMotion;return !!event.active;
+    }
     if(!disposed&&equipped==='deadtime'&&event?.type==='timePower'&&!event.opponent){
       timePowerMode=event.active&&event.mode==='fast'?'fast':'slow';
       pulse.userData.mode=timePowerMode;pulseMaterial.color.set(timePowerMode==='fast'?'#ff777c':'#75ffb5');
@@ -167,11 +179,12 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     sequence++;
     slot.iconMaterial.map=textures.get(equipped);slot.iconMaterial.needsUpdate=true;slot.iconMaterial.color.set(reward.colors.accent);
     slot.rayMaterial.color.set(reward.colors.secondary);slot.root.visible=true;slot.root.userData.effect=reward.vfx;slot.root.userData.completedTrick=event.type==='trick';
-    slot.sculpted.visible=equipped==='vortex'||equipped==='solar'||equipped==='afterburner';
+    slot.sculpted.visible=equipped==='vortex'||equipped==='solar'||equipped==='afterburner'||equipped==='sludge';
     slot.clocks.visible=equipped==='deadtime';
     slot.sculpted.position.y=equipped==='afterburner'?-.50:0;
     slot.coreMaterial.color.set(equipped==='vortex'?'#26c9be':'#ff982f');slot.edgeMaterial.color.set(equipped==='vortex'?'#bdfff3':'#fff0a0');slot.particleMaterial.color.set(equipped==='vortex'?'#8aeade':'#ffc64c');
     if(equipped==='afterburner'){slot.coreMaterial.color.set('#ff792f');slot.edgeMaterial.color.set('#ffecad');slot.particleMaterial.color.set('#ce8dee');}
+    if(equipped==='sludge'){slot.coreMaterial.color.set('#32bc96');slot.edgeMaterial.color.set('#bcf278');slot.particleMaterial.color.set('#7ae7ba');}
     if(equipped==='deadtime'){slot.coreMaterial.color.set('#d9d6a9');slot.edgeMaterial.color.set('#b7ffd0');slot.particleMaterial.color.set('#5cd890');}
     if(equipped==='sky')wingLife=slot.small?.65:.52;
     return true;
@@ -197,6 +210,18 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
   function updateSculpted(slot,p,fade,size) {
     const water=slot.id==='vortex',motion=reducedMotion?0:p,impact=p<.1;
     slot.coreMaterial.opacity=(reducedMotion?.48:.77)*fade;slot.edgeMaterial.opacity=(reducedMotion?.56:.94)*fade;slot.particleMaterial.opacity=(reducedMotion?.48:.92)*fade;
+    if(slot.id==='sludge') {
+      for(const mesh of [...slot.ribbons,...slot.coronas,...slot.flames])mesh.visible=false;
+      // Broad droplets leave both rails then fall back toward the water. This
+      // is a splash silhouette, distinct from Undertow's orbiting ribbons.
+      for(let i=0;i<slot.particles.length;i++){
+        const drop=slot.particles[i],side=i%2?-1:1,j=Math.floor(i/2),rise=.55+(j%3)*.24;
+        drop.visible=!reducedMotion||i<4;
+        drop.position.set(side*(.24+j*.08+motion*(.95-j*.07)),.08+motion*rise-motion*motion*1.5,.08+(j%3)*.07);
+        drop.scale.set(.95,.9+Math.sin(motion*Math.PI)*1.3,.8);drop.rotation.z=side*(.4+motion*.7);
+      }
+      return;
+    }
     if(slot.id==='afterburner') {
       // Two compact exhaust fans lift off the deck rails. Reuse the existing
       // flame/ember pool, with no bright full-screen flash or per-trick assets.
@@ -242,11 +267,19 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
     if(disposed)return;
     if(finished){reset();return;}
     const elapsed=Math.max(0,Math.min(.1,dt||0));updateWings(elapsed,surfer,{paused,gliding});
+    if(!paused){shieldRemaining=Math.max(0,shieldRemaining-elapsed);shieldTime+=elapsed;}
+    shield.visible=equipped==='sludge'&&shieldRemaining>0;
+    if(shield.visible){
+      shield.position.copy(surfer.rig.position);shield.position.y+=.95;
+      shieldMesh.rotation.y=reducedMotion?0:shieldTime*.85;
+      const fade=Math.min(1,shieldRemaining/.4);shieldMaterial.opacity=(reducedMotion?.11:.17)*fade;shieldRingMaterial.opacity=.55*fade;
+      shieldRings.forEach((ring,i)=>{const phase=reducedMotion?i*.5:(shieldTime*.6+i*.5)%1;ring.position.y=-.9+phase*1.85;ring.scale.setScalar(.62+Math.sin(phase*Math.PI)*.30);});
+    }
     const board=surfer.board??surfer.boardPivot??surfer.rig;
     board.updateWorldMatrix(true,false);group.updateWorldMatrix(true,false);parentInverse.copy(group.matrixWorld).invert();wingMatrix.multiplyMatrices(parentInverse,board.matrixWorld);
     if(pulse.visible){
       if(!paused)pulseAge+=elapsed;
-      pulse.visible=equipped==='deadtime'&&pulseAge<.72&&!reducedMotion;
+      pulse.visible=(equipped==='deadtime'||equipped==='sludge')&&pulseAge<.72&&!reducedMotion;
       if(pulse.visible){
         wingMatrix.decompose(pulse.position,pulse.quaternion,pulse.scale);
         const p=pulseAge/.72;pulseRing.scale.setScalar(.18+3.9*(1-Math.pow(1-p,2)));pulseMaterial.opacity=.68*(1-p);
@@ -259,11 +292,11 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       // Fixed to the real rendered rider, including ocean-mesh alignment and
       // pipe rolls. This never changes the camera, simulation, or board pose.
       slot.root.position.copy(surfer.rig.position);slot.root.position.y+=.75;
-      if(slot.id==='deadtime')slot.root.position.setFromMatrixPosition(wingMatrix);
+      if(slot.id==='deadtime'||slot.id==='sludge')slot.root.position.setFromMatrixPosition(wingMatrix);
       slot.root.quaternion.copy(camera.quaternion);
       const age=slot.age,p=age/slot.duration,impact=age<.055,fade=Math.pow(1-p,.6),expansion=reducedMotion?0:Math.max(0,p-.085);
       const size=slot.small?.78:1;
-      const clock=slot.id==='deadtime',sculpted=slot.id==='vortex'||slot.id==='solar'||slot.id==='afterburner';
+      const clock=slot.id==='deadtime',sculpted=slot.id==='vortex'||slot.id==='solar'||slot.id==='afterburner'||slot.id==='sludge';
       const graffiti=slot.id==='lightning';
       if(graffiti){
         // An opaque painted tag, not additive glow: readable against both ocean
@@ -310,6 +343,6 @@ export function createBoardEffects({reducedMotion=globalThis.matchMedia?.('(pref
       }
     }
   }
-  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.wordMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();pulseMaterial.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry,handGeometry,handHubGeometry,pulseGeometry])geometry.dispose();for(const texture of [...textures.values(),...graffitiTextures])texture.dispose();group.removeFromParent();group.clear();}
+  function dispose(){if(disposed)return;disposed=true;reset();for(const s of slots){s.iconMaterial.dispose();s.wordMaterial.dispose();s.rayMaterial.dispose();s.coreMaterial.dispose();s.edgeMaterial.dispose();s.particleMaterial.dispose();}wingMaterial.dispose();pulseMaterial.dispose();shieldMaterial.dispose();shieldRingMaterial.dispose();shieldGeometry.dispose();for(const geometry of [haloGeometry,rayGeometry,waterGeometry,coronaGeometry,flareGeometry,particleGeometry,wingGeometry,handGeometry,handHubGeometry,pulseGeometry])geometry.dispose();for(const texture of [...textures.values(),...graffitiTextures])texture.dispose();group.removeFromParent();group.clear();}
   return {group,setProfile,trigger,update,reset,dispose,get activeCount(){return slots.filter(s=>s.root.visible).length;},get reducedMotion(){return reducedMotion;}};
 }

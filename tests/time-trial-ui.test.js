@@ -11,12 +11,14 @@ import { createTimeTrialGame } from '../src/time-trials.js';
 import { trialTime,trialListMarkup,trialRewardCards } from '../src/time-trial-ui.js';
 import { ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats } from '../src/admin-settings.js';
 import { SECRET_STORAGE_KEY,sanitizeSecretProgress } from '../src/secret-progress.js';
+import { SEWER_STORAGE_KEY,sanitizeSewerProgress,sewerOutfitUnlocked } from '../src/sewer-progress.js';
+import { TRACK_CHOICES } from '../src/tracks-ui.js';
 
 const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8'),noop=()=>{};
 function block(first,last){const a=source.indexOf(first),b=source.indexOf(last,a+first.length);assert.ok(a>=0&&b>a,`production block ${first} exists`);return source.slice(a,b);}
 function progress(n){return sanitizeTimeTrialProgress({version:1,completedTrials:n,selectedTrial:Math.min(n,11),bestTimes:TIME_TRIALS.map((t,i)=>i<n?t.timeLimit-5:null)});}
 function tournament(n){return sanitizeTournamentProgress({version:2,ladderIndex:Math.min(n,4),completedRounds:0,completedLadders:n});}
-const dependencies={SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
+const dependencies={TRACK_CHOICES,SEWER_STORAGE_KEY,sanitizeSewerProgress,sewerOutfitUnlocked,sewerProgress:sanitizeSewerProgress(null),SECRET_STORAGE_KEY,sanitizeSecretProgress,ADMIN_STORAGE_KEY,sanitizeAdminSettings,resolveAdminStats,validateProfile,OUTFITS,BOARD_DESIGNS,rewardBoardUnlocked,getRewardBoard,TRIAL_REWARD_BOARD_ORDER,sanitizeTournamentProgress,sanitizeTimeTrialProgress,timeTrialsUnlocked,getTrialCosmeticSet,trialCosmeticUnlocked};
 
 test('real boot restoration gates Time Trials behind all five ladders and strips only locked cosmetics',()=>{
   for(const scenario of [

@@ -11,9 +11,9 @@ test('corrupt saved profiles fall back to usable defaults without throwing', () 
   }
 });
 
-test('all four characters can independently select seventeen outfits and twelve board designs', () => {
+test('all four characters can independently select nineteen outfits and twelve board designs', () => {
   assert.equal(Object.keys(CHARACTERS).length, 4);
-  assert.equal(Object.keys(OUTFITS).length, 17);
+  assert.equal(Object.keys(OUTFITS).length, 19);
   assert.equal(Object.keys(BOARD_DESIGNS).length, 12);
   for (const character of Object.keys(CHARACTERS)) {
     for (const outfit of Object.keys(OUTFITS)) {
