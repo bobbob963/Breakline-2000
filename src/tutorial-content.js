@@ -6,7 +6,7 @@ export const TUTORIAL_STEPS = Object.freeze([
     lead: 'Find your line. Earn your air. Make the landing count.',
     cards: [
       { title: 'LEARN THE RIDE', text: 'Carve, pop and link tricks. The controls carry from the open wave into the factory.' },
-      { title: 'PICK YOUR SESSION', text: 'Chase a score, survive the storm or race the crew through sun rings.' },
+      { title: 'PICK YOUR SESSION', text: 'Chase a score, survive the storm or race the crew through sun rings. Every mode gives you three lives: the third wipeout plays WASTED and ends your run. Retrying restores all three.' },
       { title: 'BUILD YOUR SETUP', text: 'Win boards and outfits, then put your name above your rider in the lobby.' },
     ],
     note: 'A quick guide before your first ride. You can move back through the chapters at any time.',

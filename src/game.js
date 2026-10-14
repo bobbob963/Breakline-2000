@@ -231,9 +231,13 @@ export class SurfGame {
     if(this.barrelRun)this.barrelRun.bailed=true;
     if(this.barrel)this.barrel.inside=false;
     this.rotation = 0; this.flipRotation = 0; this.boardRotation = 0;this.rollRotation=0;this.cutback=0;this.cutbackActive=false; this.wipeouts++;
-    if(this.mode==='surf'&&this.rulesId==='storm')this.lives=Math.max(0,this.lives-1);
+    if(Number.isFinite(this.lives))this.lives=Math.max(0,this.lives-1);
     this.updateObjective();this.onEvent({ type: 'bail', reason, lost,lives:this.lives });
-    if(this.mode==='surf'&&this.rulesId==='storm'&&this.lives===0)this.finish('OUT OF LIVES');
+    if(this.lives===0) {
+      // Race controllers also settle progression and stop their opponent.
+      if(this.isRace)this.finish('loss','OUT OF LIVES');
+      else this.finish('OUT OF LIVES');
+    }
   }
   jump() {
     if(this.airborne)return this.tryAirJump();

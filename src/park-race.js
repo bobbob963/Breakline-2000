@@ -181,6 +181,7 @@ export class ParkRaceGame extends RaceParkRider {
     this.finishTime=null;this.opponentFinishTime=null;this.time=0;this.clearRaceBoost();this._boostAwardedForAir=true;
     prepareRacer(this,this.course,-.8);
     this.opponent=new RaceParkRider(event=>this.onEvent({...event,opponent:true}));this.opponent.start();this.opponent.profile=this.rival.profile;
+    this.opponent.lives=null; // AI crashes recover without ending the player's run.
     prepareRacer(this.opponent,this.course,.8);this.updateObjective();
     this.onEvent({type:'reset',tournament:true,race:true,roundIndex:this.roundIndex});
   }
@@ -199,6 +200,7 @@ export class ParkRaceGame extends RaceParkRider {
     }
     const from={x:this.x,y:this.y,z:this.z},otherFrom={x:this.opponent.x,y:this.opponent.y,z:this.opponent.z},elapsed=this.elapsed;
     this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;super.stepPark(dt,input);
+    if(this.phase!=='running')return;
     drainRaceBoost(this,dt);
     this.opponent.stepPark(dt,parkRaceTrickInput(this.opponent,this.course,this.rival.pace));
     drainRaceBoost(this.opponent,dt);

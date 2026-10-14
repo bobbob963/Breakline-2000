@@ -567,6 +567,7 @@ export class WaveParkGame extends SurfGame {
         }
       }
     }
+    if(this.phase!=='running')return;
     // Rail rides and edge rebounds also keep the underside above the collider.
     // Ordinary terrain intersections are resolved by the sweep before this.
     if(!this.pipeRide){this.y=Math.max(this.y,rideHeight(this.x,this.z,this.y).height);this.surface=parkRideSurface(this.x,this.z,this.y);}

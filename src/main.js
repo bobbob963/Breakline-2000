@@ -113,7 +113,7 @@ const wasted=createWastedSequence({
   onFrame:frame=>world?.updateWastedView(frame),
   onReveal:()=>audio.revealWasted(),
   onEnd:()=>{world?.endWastedView();audio.endWastedSequence();},
-  onComplete:()=>{if(game?.phase==='finished'&&selectedMode==='storm')showResults();},
+  onComplete:()=>{if(game?.phase==='finished')showResults();},
 });
 const modeInfo={
   trials:{name:'TIME TRIALS',level:'CHAMPION CIRCUIT',description:'Twelve solo runs against the clock. Ten wave courses, two extended Waterworks tracks. New clothes and deck graphics every three clears. Clear three to earn the Afterburner speed board.'},
@@ -193,11 +193,11 @@ function onEvent(e){
   // Rival actions are shown beside their name and on their rider. They must
   // never award the player special, replace player toasts or reset the camera.
   if(e.opponent)return;
-  world?.onEvent(e,game);if(!(['bail','finish'].includes(e.type)&&selectedMode==='storm'&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
+  world?.onEvent(e,game);if(!(['bail','finish'].includes(e.type)&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
   if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000*(game.characterStats?.specialGain??1));saveBest();}
   if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
-  if(e.type==='bail'){special.bail();toast(e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason,true);}
+  if(e.type==='bail'){special.bail();toast(`${e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason} · ${game.lives} ${game.lives===1?'LIFE':'LIVES'} LEFT`,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
   if(e.type==='raceGate'&&!e.opponent)toast(`SUN RING ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
   if(e.type==='raceMiss'&&!e.opponent)toast(isParkMode()?'MISSED SUN RING · TURN BACK AND PASS THROUGH':'MISSED SUN RING · LINE UP WITH THE OPENING',true);
@@ -214,7 +214,13 @@ function onEvent(e){
   if(e.type==='timePower'&&!e.active&&e.reason==='toggle')toast('NORMAL TIME · CHARGE HELD');
   if(e.type==='timePowerBurst')toast('+50% SPEED · 3 SECOND BURST');
   if(e.type==='timePowerReady')toast('DEADTIME RECHARGED · Q');
-  if(e.type==='finish'){saveBest();if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();showResults();}else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));showResults();}else if(selectedMode==='storm'&&game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}else showResults();}
+  if(e.type==='finish') {
+    saveBest();
+    if(game.isTimeTrial){trialProgress=game.getProgress();write('breakline99-trials-v1',JSON.stringify(trialProgress));updateCustomizationChoices();}
+    else if(game.isTournament){tournamentProgress=game.getProgress();write('breakline99-tournament-v2',JSON.stringify(tournamentProgress));}
+    if(game.lives===0&&game.wipeouts>=3){clearInput();wasted.start();}
+    else showResults();
+  }
 }
 function makeGame(){game=selectedMode==='trials'?createTimeTrialGame(onEvent,trialProgress):selectedMode==='tournament'?createTournamentGame(onEvent,tournamentProgress):selectedMode==='park'?new WaveParkGame(onEvent):new SurfGame(onEvent,selectedMode);applyPlayerSettings();game.weatherId=selectedMode==='storm'?'storm':getSurfSessionWeather(adminSettings.environment.surfWeather==='random'?lastSurfWeather:adminSettings.environment.surfWeather).id;world.setMode(game.mode);audio.setMode(game.mode);audio.setScene('menu');loadBest();}
 function updateModeMenu(){
@@ -321,7 +327,7 @@ function showHelp(){
   <span>PRIZE BOARDS</span><span>Clear each of the five Rival ladders to unlock a board with its own perk and trick burst. Equip one in Board Shop; perks do not stack. SKYBOUND grants one extra airborne Space press-and-release after your current trick finishes. Land to recharge it.</span>
   <span><kbd>P</kbd> <kbd>R</kbd> <kbd>M</kbd></span><span>Pause / restart / sound. ESC also pauses.</span><span>RIPTIDE RADIO</span><span>Hover over the top edge to reveal the stereo during a ride. Choose any song or press SHUFFLE for a different track. AUTO follows the session and weather. Your choice is saved.</span></div>
   <section class="combo-guide"><h3>CUSTOM COMBO MOVES</h3><p>Finish the first trick, then press the second key while airborne. Keep the combo unbanked to link them across separate jumps.</p><dl>${COMBO_ANIMATIONS.map(combo=>`<div><dt>${combo.keys.map(key=>`<kbd>${key}</kbd>`).join(' → ')} <strong>${combo.name}</strong></dt><dd>${combo.description}</dd></div>`).join('')}</dl></section>
-  <p class="help-tip">Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. You have three lives and no time limit; stronger currents, faster riding, reef corridors and quicker-closing barrels build as you survive.'}</p>
+  <p class="help-tip">Every mode gives you three lives per run. Your third wipeout plays the WASTED cutscene, then opens results. Restarting restores all three lives. Landings allow small sideways drifts and a short grace period for almost-finished tricks. Start your moves early; a badly unfinished trick still loses the combo. ${isParkMode()?'Jump onto a pipe or rail along its length to grind. Rail sides are solid. Ride through the open rust tunnels, or use their approach ramps to reach the top.':'Use A/D to hold your line and S to settle a rough landing. In Storm Rider, follow the opening under a curling wave to ride the barrel. Survival has no time limit; stronger currents, faster riding, reef corridors and quicker-closing barrels build as you survive.'}</p>
 `,'GOT IT','CONTROLS');
   remapControlsElement($('modal-content'),playerSettings.keybinds);
 }
@@ -460,6 +466,9 @@ function updateHud(){
   $('race-countdown').classList.toggle('hidden',!counting);
   if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
   $('speed').textContent=Math.round(game.speed*3.6);$('speed-bar').style.width=`${Math.min(100,game.speed/25*100)}%`;
+  const lives=Math.max(0,Math.min(3,game.lives??3));
+  $('run-lives').textContent='◆'.repeat(lives)+'◇'.repeat(3-lives);
+  $('run-lives').setAttribute('aria-label',`${lives} ${lives===1?'life':'lives'} remaining`);
   if(game.isRace||game.trickBoostEnabled){
     const boostTime=game.isRace?game.boostTime:game.surfBoostTime,boostSpeed=game.isRace?game.boostSpeed:game.surfBoostSpeed,boostDuration=game.isRace?game.boostDuration:game.surfBoostDuration;
     const boosting=boostTime>0,comboBoost=game.isRace?game.boostLevel==='combo':game.surfBoostCombo;

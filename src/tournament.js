@@ -113,7 +113,7 @@ export class TournamentGame extends WaveParkGame {
     }
   }
 
-  finish() {
+  finish(reason) {
     if(this.phase!=='running'||this._finishing)return false;
     this._finishing=true;
     if(this.airborne||this.bailTime>0||this.grinding||this.pipeRide||this.lipMove||this.cutbackActive)this.clearCombo();
@@ -123,13 +123,13 @@ export class TournamentGame extends WaveParkGame {
     this.rampReturn=null;
     this.trick=null;
     this.lastCompletedTrickType=null;
-    this.result=this.score>this.target?'win':'loss';
+    this.result=this.lives!==0&&this.score>this.target?'win':'loss';
     if(this.result==='win') {
       const before=this._tournamentProgress.completedLadders;
       this._tournamentProgress=recordTournamentWin(this._tournamentProgress,this.roundIndex);
       this.unlockedBoardId=this._tournamentProgress.completedLadders>before?this.ladder.rewardId:null;
     }
-    this.resultReason=this.result==='win'?(this.complete?'CHAMPION':'RIVAL BEATEN'):this.score===this.target?'TIE - RIVAL HOLDS RANK':'TARGET NOT BEATEN';
+    this.resultReason=reason==='OUT OF LIVES'?reason:this.result==='win'?(this.complete?'CHAMPION':'RIVAL BEATEN'):this.score===this.target?'TIE - RIVAL HOLDS RANK':'TARGET NOT BEATEN';
     this.phase='finished';
     this.onEvent({type:'finish',tournament:true,reason:this.resultReason,result:this.result,roundIndex:this.roundIndex,roundNumber:this.roundNumber,rival:this.rival,target:this.target,score:this.score,complete:this.complete,progress:this.getProgress(),ladderIndex:this.ladderIndex,ladder:this.ladder,allLaddersComplete:this.allLaddersComplete,unlockedBoardId:this.unlockedBoardId});
     return true;

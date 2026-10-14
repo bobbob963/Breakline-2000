@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createWastedSequence, sampleWastedFrame, WASTED_SECONDS, WASTED_REVEAL_AT, WASTED_SKIP_AFTER } from '../src/wasted.js';
-import { SurfGame } from '../src/game.js';
+import { SurfGame, RUN_SECONDS } from '../src/game.js';
 import { WaveParkGame } from '../src/park.js';
-import { TournamentGame } from '../src/tournament.js';
+import { createTournamentGame, TournamentGame } from '../src/tournament.js';
+import { createTimeTrialGame } from '../src/time-trials.js';
 
 class Events {
   listeners = new Map();
@@ -178,7 +179,10 @@ test('resetting before reveal cannot play a stale reveal effect',()=>{
   assert.equal(reveals.length,0);sequence.start();sequence.update(WASTED_REVEAL_AT);assert.equal(reveals.length,1);sequence.destroy();
 });
 
-function applicationDeathRoute(mode) {
+const PLAYABLE_DEATH_ROUTES=['surf','rush','park','storm','rival-surf','rival-park','trial-surf','trial-park'];
+
+function applicationDeathRoute(route) {
+  const mode=route.startsWith('rival-')?'tournament':route.startsWith('trial-')?'trials':route;
   const ui=setup();ui.sequence.destroy();
   const source=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
   const creation=source.indexOf('const wasted=createWastedSequence('),creationEnd=source.indexOf('const modeInfo=',creation);
@@ -189,30 +193,46 @@ function applicationDeathRoute(mode) {
     createWastedSequence,$:id=>id==='stage'?ui.stage:null,selectedMode:mode,game:undefined,
     world:{onEvent:noOp,startWastedView:()=>calls.camera.push('start'),updateWastedView:frame=>calls.camera.push(frame.phase),endWastedView:()=>calls.camera.push('end')},
     audio:{event:type=>calls.audio.push(type),startWastedSequence:()=>calls.deathAudio.push('start'),revealWasted:()=>calls.deathAudio.push('reveal'),endWastedSequence:()=>calls.deathAudio.push('end')},
-    timePowerScreen:{reset:noOp},special:{gain:noOp,bail:noOp},toast:noOp,fmt:String,
-    isParkMode:()=>mode==='park'||mode==='tournament',
+    timePowerScreen:{reset:noOp},special:{gain:noOp,bail:noOp},toast:noOp,fmt:String,trialTime:String,
+    isParkMode:()=>context.game?.mode==='park',updateCustomizationChoices:noOp,
     clearInput:()=>calls.cleared++,showResults:()=>calls.results++,saveBest:()=>calls.saves++,
-    write:(key,value)=>calls.progress.push([key,JSON.parse(value)]),tournamentProgress:null,
+    write:(key,value)=>calls.progress.push([key,JSON.parse(value)]),tournamentProgress:null,trialProgress:null,
   };
   vm.runInNewContext(`${source.slice(creation,creationEnd)}\n${source.slice(eventStart,eventEnd)}\nglobalThis.sequence=wasted;`,context);
-  context.game=mode==='tournament'?new TournamentGame(context.onEvent):mode==='park'?new WaveParkGame(context.onEvent):new SurfGame(context.onEvent,mode);
+  context.game=mode==='tournament'
+    ?createTournamentGame(context.onEvent,{version:2,ladderIndex:0,completedRounds:route==='rival-surf'?1:0,completedLadders:0})
+    :mode==='trials'
+      ?createTimeTrialGame(context.onEvent,{version:1,completedTrials:route==='trial-park'?5:0,selectedTrial:route==='trial-park'?5:0,bestTimes:[]})
+      :mode==='park'?new WaveParkGame(context.onEvent):new SurfGame(context.onEvent,mode);
   context.game.start();
+  if(context.game.isRace)context.game.countdownRemaining=0;
   return {ui,context,calls,game:context.game,sequence:context.sequence};
 }
 
-test('the actual application routes only the third Storm wipeout through WASTED before one result',()=>{
-  const {game,sequence,calls,ui}=applicationDeathRoute('storm');
+function recoverWipeout(game) {
+  for(let frame=0;frame<250&&game.bailTime>0;frame++)game.update(1/120,{brake:true});
+  assert.equal(game.bailTime,0,'a recoverable wipeout returns control normally');
+}
+
+for(const route of PLAYABLE_DEATH_ROUTES)test(`${route}: third wipeout plays the full WASTED sequence before exactly one result`,()=>{
+  const {game,sequence,calls,ui}=applicationDeathRoute(route);
+  const progressBefore=game.getProgress?.();
   for(let wipeout=1;wipeout<=3;wipeout++) {
     game.bail('DEATH ROUTE FIXTURE');
     assert.equal(game.wipeouts,wipeout);assert.equal(game.lives,3-wipeout);
     assert.equal(sequence.active,wipeout===3);assert.equal(calls.results,0);
     if(wipeout<3) {
       assert.equal(game.phase,'running');
-      for(let frame=0;frame<250&&game.bailTime>0;frame++)game.update(1/120);
-      assert.equal(game.bailTime,0);
+      recoverWipeout(game);
     }
   }
   assert.equal(game.phase,'finished');assert.equal(ui.canvas.classList.contains('wasted-scene-canvas'),true);
+  assert.equal(game.resultReason,'OUT OF LIVES');
+  if(game.isRace) {
+    assert.equal(game.result,'loss');assert.deepEqual(game.getProgress(),progressBefore,'death cannot unlock a ladder, board or trial reward');
+    assert.deepEqual(calls.progress,[[game.isTimeTrial?'breakline99-trials-v1':'breakline99-tournament-v2',progressBefore]],'progress is saved before delayed results');
+    if(game.opponent)assert.equal(game.opponent.phase,'finished');
+  }
   assert.equal(calls.audio.filter(type=>type==='finish').length,0,'the normal finish sound does not play over the death presentation');
   assert.equal(calls.audio.filter(type=>type==='bail').length,2,'only recoverable wipeouts use the regular bail sound');
   assert.deepEqual(calls.camera,['start','first-person']);assert.deepEqual(calls.deathAudio,['start']);
@@ -223,18 +243,68 @@ test('the actual application routes only the third Storm wipeout through WASTED 
   sequence.update(.02);assert.equal(calls.results,1);assert.equal(sequence.active,false);
   assert.equal(calls.camera.at(-1),'end');assert.deepEqual(calls.deathAudio,['start','reveal','end']);
   game.bail();game.finish();sequence.update(20);assert.equal(calls.results,1);
-  assert.equal(game.wipeouts,3);assert.equal(game.lives,0);sequence.destroy();
+  assert.equal(game.wipeouts,3);assert.equal(game.lives,0);
+  sequence.reset();game.start();
+  assert.equal(game.phase,'running');assert.equal(game.lives,3);assert.equal(game.wipeouts,0);
+  assert.equal(sequence.active,false);sequence.update(20);assert.equal(calls.results,1,'retry cannot deliver a stale death result');
+  sequence.destroy();
 });
 
-test('other modes and non-death Storm finishes open results directly through production routing',()=>{
-  for(const mode of ['surf','rush','park','tournament','storm']) {
-    const {game,sequence,calls}=applicationDeathRoute(mode);
-    game.finish('SESSION FIXTURE');
-    assert.equal(game.phase,'finished',mode);assert.equal(sequence.active,false,mode);
-    assert.equal(calls.results,1,mode);assert.equal(calls.audio.filter(type=>type==='finish').length,1,mode);
+test('normal session endings, race wins/losses and trial wins/timeouts still open results directly',()=>{
+  const cases=[...['surf','rush','park','storm'].map(route=>({route})),
+    ...['rival-surf','rival-park','trial-surf','trial-park'].flatMap(route=>['win','loss'].map(result=>({route,result})))];
+  for(const {route,result} of cases) {
+    const {game,sequence,calls}=applicationDeathRoute(route);
+    if(game.isTimeTrial&&result==='win') {
+      game.finishTime=game.trial.timeLimit-1;game.nextCheckpoint=game.course.checkpoints.length;
+    }
+    if(game.isRace)game.finish(result,game.isTimeTrial&&result==='loss'?'TIME EXPIRED':undefined);
+    else game.finish(route==='rush'?'TIME EXPIRED':'SESSION COMPLETE');
+    assert.equal(game.phase,'finished',route);assert.equal(sequence.active,false,route);
+    assert.equal(calls.results,1,route);assert.equal(calls.audio.filter(type=>type==='finish').length,1,route);
     assert.deepEqual(calls.camera,[]);assert.deepEqual(calls.deathAudio,[]);
-    sequence.update(10);assert.equal(calls.results,1,mode);
-    if(mode==='tournament')assert.deepEqual(calls.progress,[['breakline99-tournament-v2',{version:2,ladderIndex:0,completedRounds:0,completedLadders:0}]]);
+    sequence.update(10);assert.equal(calls.results,1,route);
+    if(game.isRace) {
+      assert.equal(game.result,result);assert.equal(calls.progress.length,1);
+      assert.deepEqual(calls.progress[0][1],game.getProgress());
+    }
     sequence.destroy();
   }
+});
+
+test('rival wipeouts keep recovering and cannot consume player lives or trigger the player cutscene',()=>{
+  for(const route of ['rival-surf','rival-park']) {
+    const {game,sequence,calls}=applicationDeathRoute(route),opponent=game.opponent;
+    for(let wipeout=1;wipeout<=4;wipeout++) {
+      opponent.bail('OPPONENT FIXTURE');assert.equal(opponent.wipeouts,wipeout);
+      assert.equal(opponent.phase,'running');assert.equal(opponent.lives,null);
+      recoverWipeout(opponent);
+    }
+    assert.equal(game.phase,'running');assert.equal(game.lives,3);assert.equal(game.wipeouts,0);
+    assert.equal(sequence.active,false);assert.equal(calls.results,0);
+    assert.equal(calls.audio.includes('bail'),false);assert.deepEqual(calls.deathAudio,[]);
+    sequence.destroy();
+  }
+});
+
+test('a fatal Waterworks landing on the session buzzer emits only one finish and grants no landing reward',()=>{
+  const events=[],game=new WaveParkGame(event=>events.push(event)),dt=1/120;
+  game.start();game.lives=1;game.wipeouts=2;game.elapsed=RUN_SECONDS-dt;
+  game.airborne=true;game.airtime=1;game.y+=.001;game.vy=-4;
+  assert.equal(game.doTrick('special'),true);
+  game.update(dt,{brake:true});
+  assert.equal(game.phase,'finished');assert.equal(game.lives,0);assert.equal(game.wipeouts,3);
+  assert.equal(game.resultReason,'OUT OF LIVES');
+  assert.equal(events.filter(event=>event.type==='finish').length,1);
+  assert.equal(events.some(event=>['land','surfBoost','trick','bank'].includes(event.type)),false);
+  const elapsed=game.elapsed;game.update(1/30);assert.equal(game.elapsed,elapsed);
+});
+
+test('a legacy score heat cannot award a win or unlock progress when its third wipeout ends a leading run',()=>{
+  const events=[],game=new TournamentGame(event=>events.push(event));game.start();
+  const before=game.getProgress();game.score=game.target+1000;game.lives=1;game.wipeouts=2;
+  game.bail('LEGACY HEAT FIXTURE');
+  assert.equal(game.phase,'finished');assert.equal(game.result,'loss');assert.equal(game.resultReason,'OUT OF LIVES');
+  assert.deepEqual(game.getProgress(),before);assert.equal(game.unlockedBoardId,null);
+  assert.equal(events.filter(event=>event.type==='finish').length,1);
 });

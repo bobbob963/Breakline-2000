@@ -160,8 +160,9 @@ test('the real HUD shows the active perk, only prompts an eligible Skybound jump
   const elements = new Map();
   const $ = id => {
     if (!elements.has(id)) {
-      const classes = new Set(), element = {
+      const classes = new Set(), attributes = new Map(), element = {
         textContent: '', style: { setProperty: noOp }, querySelector: () => ({ textContent: '' }),
+        setAttribute: (name,value) => attributes.set(name,String(value)),getAttribute: name => attributes.get(name)??null,
         classList: { toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }, contains: name => classes.has(name) },
       };
       element.parentElement = element; elements.set(id, element);

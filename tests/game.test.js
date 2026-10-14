@@ -84,12 +84,18 @@ test('ground-level reef collision causes a recoverable wipeout', () => {
 });
 test('two-minute session finishes and settles only grounded points', () => {
   const events = []; const g = new SurfGame(e => events.push(e)); g.start();
-  advance(g, 119.9); g.addCombo('INDY GRAB', 220, true); advance(g, .2);
+  // Isolate buzzer settlement on the safe starting wave. An unattended full
+  // course can now end correctly on its third wipeout before the time limit.
+  g.elapsed=RUN_SECONDS-.1;g.time=.1;
+  g.addCombo('INDY GRAB', 220, true); advance(g, .2);
   assert.equal(g.phase, 'finished'); assert.equal(g.time, 0); assert.ok(g.score > 0);
+  assert.equal(g.resultReason,'SESSION COMPLETE');assert.equal(g.wipeouts,0);
   assert.equal(events.filter(e => e.type === 'finish').length, 1);
   const score = g.score; advance(g, 5); assert.equal(g.score, score);
-  const a = new SurfGame(); a.start(); advance(a, 119.9); a.jump(); advance(a, .2);
-  assert.equal(a.phase, 'finished'); assert.equal(a.comboBase, 0);
+  const a = new SurfGame(); a.start();a.elapsed=RUN_SECONDS-.1;a.time=.1;
+  assert.equal(a.jump(),true);a.addCombo('INDY GRAB',220,true);advance(a,.2);
+  assert.equal(a.phase, 'finished'); assert.equal(a.comboBase, 0);assert.equal(a.score,0);
+  assert.equal(a.resultReason,'SESSION COMPLETE');assert.equal(a.wipeouts,0);
 });
 test('simulation produces equivalent outcomes at 30 and 120 Hz', () => {
   const a = new SurfGame(), b = new SurfGame(); a.start(); b.start();

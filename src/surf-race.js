@@ -136,6 +136,7 @@ export class SurfRaceGame extends RaceSurfer {
     this.clearRaceBoost();this._boostAwardedForAir=true;
     prepareRacer(this,-2.4);
     this.opponent=new RaceSurfer(event=>this.onEvent({...event,opponent:true}));this.opponent.start();
+    this.opponent.lives=null; // AI crashes recover without ending the player's run.
     this.opponent.profile=this.rival.profile;prepareRacer(this.opponent,2.4);
     this.updateObjective();
     this.onEvent({type:'reset',tournament:true,race:true,roundIndex:this.roundIndex});
@@ -163,6 +164,7 @@ export class SurfRaceGame extends RaceSurfer {
     this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;
     suppressScoreRings(this);suppressScoreRings(this.opponent);
     super.stepSurf(dt,input);
+    if(this.phase!=='running')return;
     drainRaceBoost(this,dt);
     this.opponent.stepSurf(dt,surfRaceTrickInput(this.opponent,this.course,this.rival.pace));
     drainRaceBoost(this.opponent,dt);

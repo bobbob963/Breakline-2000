@@ -74,7 +74,9 @@ const TimeTrialRider=Base=>class extends RaceRider(Base) {
       const index=Math.max(0,Math.floor((this.distance-this.rules.firstGate)/this.rules.spacing));
       this.processed.add(`g${index}`);this.processed.add(`g${index+1}`);
     }
-    stepPhysics(dt,input);drainRaceBoost(this,dt);
+    stepPhysics(dt,input);
+    if(this.phase!=='running')return;
+    drainRaceBoost(this,dt);
     this.time=Math.max(0,this.trial.timeLimit-this.elapsed);
     const crossing=this.mode==='park'?this.resolveParkGate(from):this.resolveSurfGate(from);
     this.updateObjective();
