@@ -97,12 +97,52 @@ test('countdown continues at normal speed but cannot activate or recharge power'
   assert.equal(game.timePowerCharge,6);assert.equal(game.timePowerActive,false);
 });
 
-test('feeding the integrated clock slows both racers and their shared course clock together',()=>{
+test('split clocks keep the player responsive while the rival and course clock slow down',()=>{
   const {game}=fixture(on=>createTournamentGame(on,{completedRounds:1}));game.countdownRemaining=0;
   game.toggleTimePower();
-  for(let frame=0;frame<120;frame++)game.update(game.updateTimePower(1/60),{pump:true});
+  for(let frame=0;frame<120;frame++){
+    const worldDt=game.updateTimePower(1/60);
+    game.update(game.timePowerPlayerDelta,{pump:true},worldDt);
+  }
   near(game.elapsed,.8);near(game.opponent.elapsed,.8);near(game.timePowerCharge,4);
+  near(game.playerElapsed,2);near(game.opponent.playerElapsed,.8);
   assert.equal(game.opponent.timePowerActive,false);assert.equal(game.opponent.timeScale,1);
+});
+
+test('custom slow duration survives resets and recharge while fast-forward keeps six seconds',()=>{
+  const {game}=fixture();game.setAdminStats({active:false,cheats:{timePowerDuration:15}});
+  assert.equal(game.timePowerDuration,15);assert.equal(game.timePowerCapacity,15);near(game.timePowerCharge,15);
+  game.toggleTimePower();near(game.updateTimePower(5),2);near(game.timePowerPlayerDelta,5);near(game.timePowerCharge,10);
+  game.fastForwardTimePower();assert.equal(game.timePowerCapacity,6);near(game.timePowerCharge,4);
+  near(game.updateTimePower(1),2);near(game.timePowerPlayerDelta,2);
+  game.toggleTimePower();game.toggleTimePower();near(game.timePowerCharge,7.5);
+  near(game.updateTimePower(7.5),3);assert.equal(game.timePowerActive,false);near(game.timePowerBurstTime,3);
+  game.updateTimePower(12);near(game.timePowerCharge,15);
+  game.start();near(game.timePowerCharge,15);assert.equal(game.timePowerDuration,15);
+});
+
+test('editing duration preserves charge fraction and cannot bypass recharge or refill with repeated switches',()=>{
+  const p=new TimePower(),state={playing:true,equipped:true};
+  p.toggle(true);p.update(3,state);p.setDuration(20);near(p.charge,10);
+  p.setDuration(10);near(p.charge,5);p.fastForward(true);near(p.charge,3);
+  p.setDuration(60);near(p.charge,3);p.toggle(true);p.toggle(true);near(p.charge,30);
+  p.update(30,state);assert.equal(p.cooldown,12);p.setDuration(1);assert.equal(p.charge,0);
+  assert.equal(p.toggle(true),false);p.update(12,state);near(p.charge,1);
+  for(const [input,expected] of [[0,1],[70,60],[12.34,12.3],[NaN,6],[Infinity,6],['10',6]]){
+    p.setDuration(input);assert.equal(p.duration,expected);
+  }
+});
+
+test('player clock integrates normal slow motion and scaled fast-forward exactly across expiry',()=>{
+  for(const mode of ['slow','fast'])for(const fps of [30,60,144]){
+    const p=new TimePower(),state={playing:true,equipped:true};p.setDuration(1.3);
+    mode==='slow'?p.toggle(true):p.fastForward(true);
+    let world=0,player=0;
+    for(let i=0;i<fps*7;i++){world+=p.update(1/fps,state);player+=p.lastPlayerDelta;}
+    near(world,mode==='slow'?7-1.3*.6:13);near(player,mode==='slow'?7:13);
+  }
+  const p=new TimePower();p.toggle(true);p.update(1,{playing:true,equipped:true});
+  for(const invalid of [NaN,Infinity,-1,0]){assert.equal(p.update(invalid,{playing:true,equipped:true}),0);assert.equal(p.lastPlayerDelta,0);}
 });
 
 test('the independent admin cheat works on a standard board with custom stats disabled',()=>{

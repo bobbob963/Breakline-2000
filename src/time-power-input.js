@@ -5,6 +5,7 @@ export const TIME_POWER_DOUBLE_TAP_SECONDS = .28;
 // the pending single press before fast-forward starts.
 export function createTimePowerInput(getGame) {
   let pending = null;
+  let playerDelta = 0;
   const cancel = () => { pending = null; };
   const valid = game => !!pending && pending.game === game && game.timePowerEligible &&
     pending.revision === game.timePowerRevision && pending.mode === game.timePowerMode &&
@@ -15,9 +16,15 @@ export function createTimePowerInput(getGame) {
     cancel();
     return allowed ? game.toggleTimePower() : false;
   };
-  const advance = (game, dt) => dt > 0 ? (game?.updateTimePower?.(dt) ?? dt) : 0;
+  const advance = (game, dt) => {
+    if (!(dt > 0)) return 0;
+    const worldDelta = game?.updateTimePower?.(dt) ?? dt;
+    playerDelta += game?.timePowerPlayerDelta ?? dt;
+    return worldDelta;
+  };
   return {
     cancel,
+    get playerDelta() { return playerDelta; },
     press(timestamp) {
       const game = getGame();
       if (!game?.timePowerEligible) { cancel(); return false; }
@@ -39,6 +46,7 @@ export function createTimePowerInput(getGame) {
       return true;
     },
     update(dt) {
+      playerDelta = 0;
       if (!Number.isFinite(dt) || dt <= 0) return 0;
       const game = getGame();
       if (!valid(game)) { cancel(); return advance(game,dt); }

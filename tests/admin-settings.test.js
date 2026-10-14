@@ -7,7 +7,7 @@ import {
 
 test('missing and malformed admin saves start disabled with no overrides',()=>{
   for (const value of [undefined,null,false,[],42,'enabled',{enabled:'true',characters:[],boards:'sky'}]) {
-    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{},cheats:{slowMotion:false},environment:{surfWeather:'random'}});
+    assert.deepEqual(sanitizeAdminSettings(value),{version:1,enabled:false,characters:{},boards:{},cheats:{slowMotion:false,timePowerDuration:6},environment:{surfWeather:'random'}});
   }
   assert.equal(sanitizeAdminSettings({enabled:true}).enabled,true);
 });
@@ -18,14 +18,14 @@ test('saved stats reject nonfinite values and unknown fields, while clamping saf
     boards:{sky:{baseSpeed:-3,boostPower:99,extraJumps:2.9,popRecovery:0,glideGravity:-Infinity,boostDuration:null,unknown:1},unknown:{baseSpeed:3}},
   });
   assert.deepEqual(saved,{
-    version:1,enabled:true,cheats:{slowMotion:false},environment:{surfWeather:'random'},
+    version:1,enabled:true,cheats:{slowMotion:false,timePowerDuration:6},environment:{surfWeather:'random'},
     characters:{kai:{jumpPower:3,gravity:.25,comboWindow:5}},
     boards:{sky:{baseSpeed:.25,boostPower:4,popRecovery:0,extraJumps:2}},
   });
   const inherited = Object.create({kai:{jumpPower:2}});
   const inheritedStats = Object.create({boostPower:4});
   assert.deepEqual(sanitizeAdminSettings({characters:inherited,boards:{standard:inheritedStats}}),{
-    version:1,enabled:false,characters:{},boards:{standard:{}},cheats:{slowMotion:false},environment:{surfWeather:'random'},
+    version:1,enabled:false,characters:{},boards:{standard:{}},cheats:{slowMotion:false,timePowerDuration:6},environment:{surfWeather:'random'},
   });
 });
 
@@ -134,8 +134,8 @@ test('slow motion requires an explicit own boolean and survives independently of
     const saved=sanitizeAdminSettings({enabled,cheats:{slowMotion:true,unknown:true}});
     const resolved=resolveAdminStats(saved,profile);
     assert.equal(resolved.active,enabled);
-    assert.deepEqual(saved.cheats,{slowMotion:true});
-    assert.deepEqual(resolved.cheats,{slowMotion:true});
+    assert.deepEqual(saved.cheats,{slowMotion:true,timePowerDuration:6});
+    assert.deepEqual(resolved.cheats,{slowMotion:true,timePowerDuration:6});
     assert.equal(sanitizeResolvedAdminStats(resolved).cheats.slowMotion,true);
   }
   for(const value of [undefined,null,false,0,1,'true',{},[],new Boolean(true)]) {
@@ -204,4 +204,31 @@ test('weather persists through JSON and rider-default resets without sharing its
   reset.environment.surfWeather='dusk';
   assert.equal(tuned.environment.surfWeather,'sunset');assert.equal(original.environment.surfWeather,'sunset');
   assert.equal(sanitizeAdminSettings(null).environment.surfWeather,'random','a fresh full-reset save returns to random');
+});
+
+test('slow-time duration upgrades old saves safely and accepts only own finite numbers',()=>{
+  for(const source of [null,{}, {cheats:{slowMotion:true}}, {cheats:Object.create({timePowerDuration:45})},Object.create({cheats:{timePowerDuration:45}})]){
+    assert.equal(sanitizeAdminSettings(source).cheats.timePowerDuration,6);
+    assert.equal(sanitizeResolvedAdminStats(source).cheats.timePowerDuration,6);
+  }
+  for(const value of [undefined,null,'12',true,false,NaN,Infinity,-Infinity,{},[],new Number(9)]){
+    assert.equal(sanitizeAdminSettings({cheats:{timePowerDuration:value}}).cheats.timePowerDuration,6);
+    assert.equal(sanitizeResolvedAdminStats({cheats:{timePowerDuration:value}}).cheats.timePowerDuration,6);
+  }
+  for(const [value,expected]of [[-20,1],[0,1],[1,1],[6.04,6],[6.05,6.1],[17.36,17.4],[60,60],[999,60]]){
+    assert.equal(sanitizeAdminSettings({cheats:{timePowerDuration:value}}).cheats.timePowerDuration,expected);
+    assert.equal(sanitizeResolvedAdminStats({cheats:{timePowerDuration:value}}).cheats.timePowerDuration,expected);
+  }
+});
+
+test('slow-time duration persists for DEADTIME independently of custom stats and the any-board cheat',()=>{
+  const profile={character:'kai',rewardBoard:'deadtime'};
+  for(const enabled of [false,true])for(const slowMotion of [false,true]){
+    const initial={enabled,cheats:{slowMotion,timePowerDuration:23.7}};
+    const tuned=updateAdminScope(initial,profile,'board',{baseSpeed:1.5});
+    const reset=resetAdminScope(tuned,profile),loaded=sanitizeAdminSettings(JSON.parse(JSON.stringify(reset))),resolved=resolveAdminStats(loaded,profile);
+    assert.equal(resolved.active,enabled);assert.equal(resolved.cheats.slowMotion,slowMotion);assert.equal(resolved.cheats.timePowerDuration,23.7);
+    resolved.cheats.timePowerDuration=2;assert.equal(loaded.cheats.timePowerDuration,23.7);assert.equal(initial.cheats.timePowerDuration,23.7);
+  }
+  assert.equal(sanitizeAdminSettings(null).cheats.timePowerDuration,6,'a full reset restores the ordinary six-second duration');
 });

@@ -51,7 +51,7 @@ export class SurfGame {
     else this._timePower=new TimePower(event=>this.onEvent(event));
     this.rules=surfRules(this.rulesId);this.rulesId=this.rules.id;
     Object.assign(this, {
-      mode: 'surf', phase: 'ready', time: this.rules.startTime, elapsed: 0, distance: 0,
+      mode: 'surf', phase: 'ready', time: this.rules.startTime, elapsed: 0, playerElapsed:0, distance: 0,
       x: 1, vx: 0, speed: 16, y: waveHeight(1, 0, 0), vy: 0,
       airborne: false, airtime: 0, charge: 0, trick: null,
       comboBase: 0, multiplier: 1, comboTime: 0, comboNames: [], repetitions: {}, lastCompletedTrickType: null,
@@ -77,6 +77,7 @@ export class SurfGame {
   get characterSpecial() {return getSurferSpecial(this.characterId);}
   setAdminStats(value) {
     this.adminStats=sanitizeResolvedAdminStats(value);
+    this._timePower.setDuration(this.adminStats?.cheats?.timePowerDuration??6);
     this.refreshAdminBoard();
     if(!this.timePowerEnabled)this._timePower.cancel('unequip');
     // Editing stats/equipment during a flight never refills extra jumps.
@@ -117,6 +118,9 @@ export class SurfGame {
   get timePowerEligible() {return this.timePowerEnabled&&this.phase==='running'&&this.bailTime<=0&&!(this.countdownRemaining>0);}
   get timePowerActive() {return !!this._timePower?.active&&this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0&&!(this.countdownRemaining>0);}
   get timePowerCharge() {return this._timePower?.charge??0;}
+  get timePowerDuration() {return this._timePower?.duration??6;}
+  get timePowerCapacity() {return this._timePower?.capacity??6;}
+  get timePowerPlayerDelta() {return this._timePower?.lastPlayerDelta??0;}
   get timePowerCooldown() {return this._timePower?.cooldown??0;}
   get timePowerBurstTime() {return this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0?(this._timePower?.burst??0):0;}
   get timePowerSpeedMultiplier() {return this.timePowerBurstTime>0?TIME_POWER_BURST_MULTIPLIER:1;}
@@ -317,15 +321,17 @@ export class SurfGame {
     this.lastCompletedTrickType = null;
     this.resultReason=reason;this.phase='finished';this.onEvent({type:'finish',reason});
   }
-  update(dt, input = {}) {
+  update(dt, input = {}, worldDt = dt) {
     if (this.phase !== 'running') return;
-    dt=clamp(dt,0,.05);if(dt===0)return;
-    const steps=Math.max(1,Math.ceil(dt*120-1e-8));
-    for(let i=0;i<steps&&this.phase==='running';i++)this.stepSurf(dt/steps,input);
+    dt=Number.isFinite(dt)?Math.max(0,dt):0;worldDt=Number.isFinite(worldDt)?Math.max(0,worldDt):0;
+    const longest=Math.max(dt,worldDt);if(longest===0)return;
+    const scale=Math.min(1,.05/longest);dt*=scale;worldDt*=scale;
+    const steps=Math.max(1,Math.ceil(Math.max(dt,worldDt)*120-1e-8));
+    for(let i=0;i<steps&&this.phase==='running';i++)this.stepSurf(dt/steps,input,worldDt/steps);
   }
-  stepSurf(dt,input) {
+  stepSurf(dt,input,worldDt=dt) {
     const previousDistance=this.distance,previousX=this.x,previousY=this.y;
-    this.elapsed += dt; this.time = this.rules.endless?this.elapsed:Math.max(0,this.time-dt);
+    this.playerElapsed+=dt;this.elapsed += worldDt; this.time = this.rules.endless?this.elapsed:Math.max(0,this.time-worldDt);
     this.drainSurfBoost(dt);
     if(this.rulesId==='storm') {
       this.stormDifficulty=stormDifficulty(this.elapsed);
@@ -353,7 +359,8 @@ export class SurfGame {
     this.speed = targetSpeed + (previousSpeed - targetSpeed) * decay;
     this.distance += targetSpeed * dt + (previousSpeed - targetSpeed) * (1 - decay) / acceleration;
     const control=steering*(this.airborne?(this.characterStats?.airControl??1):(this.characterStats?.steering??1));
-    const lateral=this.bailTime>0?0:this.cutbackActive?this.cutbackDirection*(6+7*this.cutback)+control*2:this.airborne?control*(input.brake?3.2:8)+this.current*.3:control*10+this.current;
+    const currentEffect=this.current*(dt>0?worldDt/dt:0);
+    const lateral=this.bailTime>0?0:this.cutbackActive?this.cutbackDirection*(6+7*this.cutback)+control*2:this.airborne?control*(input.brake?3.2:8)+currentEffect*.3:control*10+currentEffect;
     this.vx += (lateral-this.vx)*(1-Math.exp(-dt*(this.airborne?4:7)));
     this.x += this.vx * dt;
     if (this.x < MIN_X || this.x > MAX_X) {
@@ -401,9 +408,9 @@ export class SurfGame {
       if (this.comboBase&&!this.cutbackActive) { this.comboTime -= dt; if (this.comboTime <= 0) this.bank(); }
     }
     if(this.phase!=='running')return;
-    if(this.rulesId==='storm')this.updateStormBarrel(dt,{x:previousX,y:previousY,z:-previousDistance});
+    if(this.rulesId==='storm')this.updateStormBarrel(worldDt,{x:previousX,y:previousY,z:-previousDistance});
     if(this.phase!=='running')return;
-    if(this.surfAdventureEnabled)this.updateSurfHazards(hazards,{x:previousX,y:previousY,distance:previousDistance},dt);
+    if(this.surfAdventureEnabled)this.updateSurfHazards(hazards,{x:previousX,y:previousY,distance:previousDistance},worldDt);
     if(this.phase!=='running')return;
     // Course objects are generated deterministically; each can trigger once.
     const current = Math.floor((this.distance-this.rules.firstGate)/this.rules.spacing);

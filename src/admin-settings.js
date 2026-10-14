@@ -9,6 +9,7 @@ export const ADMIN_SURF_WEATHER_OPTIONS = Object.freeze([
   Object.freeze({ value: 'dusk', label: 'Dusk / blue hour' }),
 ]);
 const field = (key, label, min, max, step, initial, unit, description) => Object.freeze({ key, label, min, max, step, default: initial, unit, description });
+export const ADMIN_TIME_POWER_DURATION_FIELD = field('timePowerDuration', 'Slow-time duration (seconds)', 1, 60, .1, 6, '', 'How long a full slow-motion charge lasts on DEADTIME or with the any-board cheat. Works with custom stats switched off. Fast-forward stays at 6 seconds.');
 export const ADMIN_CHARACTER_FIELDS = Object.freeze([
   field('jumpPower', 'Jump power', .25, 3, .05, 1, '×', 'Height from pops, ramps and extra air jumps.'),
   field('gravity', 'Gravity', .25, 2.5, .05, 1, '×', 'Lower values keep your rider in the air longer.'),
@@ -35,7 +36,15 @@ const characterIds = ['kai', 'nova', 'reef', 'jax'];
 const boardIds = ['standard', ...ALL_REWARD_BOARD_ORDER];
 const defaults = fields => Object.fromEntries(fields.map(item => [item.key, item.default]));
 const plain = value => !!value && typeof value === 'object' && !Array.isArray(value);
-const cleanCheats = value => ({ slowMotion: plain(value) && Object.hasOwn(value, 'slowMotion') && value.slowMotion === true });
+function cleanCheats(value) {
+  const field = ADMIN_TIME_POWER_DURATION_FIELD;
+  const duration = plain(value) && Object.hasOwn(value, field.key) ? value[field.key] : undefined;
+  return {
+    slowMotion: plain(value) && Object.hasOwn(value, 'slowMotion') && value.slowMotion === true,
+    timePowerDuration: typeof duration === 'number' && Number.isFinite(duration)
+      ? Math.round(Math.min(field.max, Math.max(field.min, duration)) * 10) / 10 : field.default,
+  };
+}
 const ownCheats = value => plain(value) && Object.hasOwn(value, 'cheats') ? value.cheats : null;
 function cleanEnvironment(value) {
   const environment = plain(value) && Object.hasOwn(value, 'environment') ? value.environment : null;

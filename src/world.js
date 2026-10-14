@@ -447,8 +447,8 @@ export class SurfWorld {
     this.wastedView = null;
     return true;
   }
-  update(dt, game) {
-    if(game.isSewer)return this.updateSewer(dt,game);
+  update(dt, game, playerDt = dt) {
+    if(game.isSewer)return this.updateSewer(dt,game,playerDt);
     const attract = game.phase === 'ready';
     const cameraMotion = this.viewSettings.cameraShake && !this.reducedMotion;
     const isPark=game.mode==='park';
@@ -457,6 +457,9 @@ export class SurfWorld {
     if(this.mode!==(isPark?'park':'surf'))this.setMode(game.mode);
     if (game.phase !== 'paused' && game.phase !== 'finished') this.time += dt;
     const t = attract ? this.time : game.elapsed, d = attract ? this.time * 9 : game.distance;
+    // Deadtime slows the surroundings while the local rider keeps their own
+    // animation and camera clock. Terrain contact still uses world time.
+    const playerTime = !attract && Number.isFinite(game.playerElapsed) ? game.playerElapsed : t;
     const x = attract ? (isPark?0:-1.4 + Math.sin(t * .6) * 1.1) : game.x;
     const z = isPark?(attract?22:game.z):-d;
     const oceanZ=Math.floor(-d/30)*30-90;
@@ -518,22 +521,22 @@ export class SurfWorld {
     const slope=surface?Math.atan(surface.dx*-Math.sin(heading)+surface.dz*-Math.cos(heading)):0;
     const crossSlope=surface?Math.atan(surface.dx*Math.cos(heading)-surface.dz*Math.sin(heading)):0;
     s.rig.rotation.z = game.pipeRide?game.rideRoll:bail ? -1.8 : isPark&&!air&&!game.grinding?clamp(crossSlope,-1.1,1.1)+lean*.3:lean;
-    s.rig.rotation.x = game.pipeRide?0:bail ? -.45 : air ? -.09 : game.grinding?0:isPark?clamp(slope,-1.1,1.1):.045 + Math.sin(t * 3.3) * .035;
+    s.rig.rotation.x = game.pipeRide?0:bail ? -.45 : air ? -.09 : game.grinding?0:isPark?clamp(slope,-1.1,1.1):.045 + Math.sin(playerTime * 3.3) * .035;
     if(game.lipMove){s.rig.rotation.x*=1-lipGrab;s.rig.rotation.z*=1-lipGrab;}
     s.rig.rotation.z-=turn*(isPark?.32:.48);s.rig.rotation.x-=cutback*.10;
     s.boardPivot.rotation.order='YXZ';
     s.boardPivot.rotation.set(boardPitch,boardSpin,flip+boardBank);
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
-    s.rig.userData.railBalance=THREE.MathUtils.damp(s.rig.userData.railBalance||0,game.grinding&&!bail?1:0,12,dt);
-    s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,balance:s.rig.userData.railBalance,cutbackDirection:game.cutbackDirection||1});
-    s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
+    s.rig.userData.railBalance=THREE.MathUtils.damp(s.rig.userData.railBalance||0,game.grinding&&!bail?1:0,12,playerDt);
+    s.pose?.({charge:game.charge,grab,air,time:playerTime,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,balance:s.rig.userData.railBalance,cutbackDirection:game.cutbackDirection||1});
+    s.rider.visible = !bail || Math.floor(playerTime * 12) % 2 === 0;
     this.captureLiveEye(game);
     const ground=isPark?(surface?.height??parkHeight(x,z)):contactOcean?alignSurfRiderToOcean(x,waveHeight(x,z,t),z,t,oceanZ,contactBarrel):waveHeight(x,z,t);
     this.shadow.position.set(x, ground + .055, z);
     this.shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - ground) * .07) : 1);
     this.shadow.visible = !bail&&!game.pipeRide;
     if (game.phase !== 'paused' && game.phase !== 'finished') {
-      this.sprayClock += dt;
+      this.sprayClock += playerDt;
       if (!air && !bail && this.sprayClock > .025 && game.speed>2) { if(cutback>.2)this.cutbackSpray(x,y,z,game.cutbackDirection,cutback,heading);else this.spray(x, y, z, .6, 2); this.sprayClock = 0; }
       for (const p of this.particles) {
         if (p.life <= 0) continue;
@@ -549,7 +552,7 @@ export class SurfWorld {
         const up=game.pipeRide?new THREE.Vector3(game.rideUp.x,game.rideUp.y,game.rideUp.z):new THREE.Vector3(0,1,0);
         const focus=new THREE.Vector3(x,y,z).addScaledVector(up,.85);
         if(!game.pipeRide){const headPosition=new THREE.Vector3();s.head.getWorldPosition(headPosition);focus.copy(s.rig.position).lerp(headPosition,.57);}
-        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:cameraMotion?game.speed:12,rideUp:game.pipeRide?game.rideUp:null,focus},dt);
+        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:cameraMotion?game.speed:12,rideUp:game.pipeRide?game.rideUp:null,focus},playerDt);
         target=parkFrame.position;look=parkFrame.look;
       }
     }else{
@@ -573,30 +576,31 @@ export class SurfWorld {
     }
     target = new THREE.Vector3().copy(viewCameraTarget(this.viewSettings,{anchor:{x,y,z},target,focus:look,rideUp:game.pipeRide?game.rideUp:null,park:isPark,active:!attract,firstPerson:!!this.wastedView}));
     if(parkFrame)this.camera.position.copy(target);
-    else this.camera.position.lerp(target, 1 - Math.exp(-dt * (attract ? 1.5 : 4)));
+    else this.camera.position.lerp(target, 1 - Math.exp(-playerDt * (attract ? 1.5 : 4)));
     if(storm&&!attract&&game.barrel?.inside)resolveBarrelCamera(this.camera.position,d,t,game.barrelTimings);
     if(parkFrame){this.lookAt.copy(parkFrame.look);this.camera.up.copy(parkFrame.up);}
-    else{this.lookAt.lerp(look,1-Math.exp(-dt*6));this.camera.up.set(0,1,0);}
+    else{this.lookAt.lerp(look,1-Math.exp(-playerDt*6));this.camera.up.set(0,1,0);}
     const contextualFov=parkFrame?parkFrame.fov:oceanRaceView?54:50+(surfBoost&&cameraMotion?2.5:0);
     const fieldOfView=viewFieldOfView(contextualFov,this.viewSettings,{active:!attract,firstPerson:!!this.wastedView});
     if(Math.abs(this.camera.fov-fieldOfView)>.001){this.camera.fov=fieldOfView;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
-    this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
+    this.boardEffects.update(playerDt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!bail&&!!game.gliding});
     this.applyWastedView();
     this.renderer.render(this.scene, this.camera);
   }
-  updateSewer(dt,game) {
+  updateSewer(dt,game,playerDt = dt) {
     if(this.mode!=='sewer')this.setMode('sewer');
     const attract=game.phase==='ready',active=game.phase!=='paused'&&game.phase!=='finished';
     if(!this.oceanRaceView){this.oceanRaceView=true;this.resize();}
     if(active)this.time+=dt;
     const time=attract?this.time:game.elapsed,trackId=game.trackId,distance=game.distance||0;
+    const playerTime=!attract&&Number.isFinite(game.playerElapsed)?game.playerElapsed:time;
     this.sewerWorld.update(game,time,dt);
     const style=this.sewerWorld.style;
     this.keyLight.color.set(style.pressure?0xe5d87d:0xffdd80);
     this.scene.background.set(style.fog);this.scene.fog.color.set(style.fog);this.scene.fog.near=90;this.scene.fog.far=265;
     this.rain.visible=false;this.raceWorld.group.visible=false;
-    const s=this.surfer,frame=poseSewerRider(s,game,trackId,time,dt);
+    const s=this.surfer,frame=poseSewerRider(s,game,trackId,playerTime,playerDt);
     // A broad route-relative fill keeps the rider readable through changing
     // tunnel headings; authored lamps provide the warmer local highlights.
     const alongX=-Math.sin(frame.heading),alongZ=-Math.cos(frame.heading);
@@ -610,7 +614,7 @@ export class SurfWorld {
     this.surfBoost.visible=!!boosting&&!this.reducedMotion;
     if(boosting){this.surfBoost.position.set(frame.x,frame.y+.14,frame.z);this.surfBoost.rotation.y=frame.heading;this.surfBoost.scale.set(1,1,1.7);this.surfBoost.material.opacity=.65;}
     if(active){
-      this.sprayClock+=dt;
+      this.sprayClock+=playerDt;
       if(!frame.air&&!frame.bail&&game.speed>2&&this.sprayClock>.04){
         if(game.cutback>.2)this.cutbackSpray(frame.x,frame.y,frame.z,game.cutbackDirection,game.cutback,frame.heading);
         else this.spray(frame.x,frame.y,frame.z,.6,2);this.sprayClock=0;
@@ -621,11 +625,11 @@ export class SurfWorld {
       x:frame.x,y:frame.y,z:frame.z,lane:game.x,distance,trackId,shortcut:game.activeShortcut,
       speed:game.speed,boosting,motion:this.viewSettings.cameraShake&&!this.reducedMotion,
       settings:this.viewSettings,attract,firstPerson:!!this.wastedView,
-    },dt);
+    },playerDt);
     this.camera.position.copy(cameraFrame.position);this.lookAt.copy(cameraFrame.look);this.camera.up.copy(cameraFrame.up);
     if(Math.abs(this.camera.fov-cameraFrame.fov)>.001){this.camera.fov=cameraFrame.fov;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
-    this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!frame.bail&&!!game.gliding});
+    this.boardEffects.update(playerDt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!frame.bail&&!!game.gliding});
     this.applyWastedView();this.renderer.render(this.scene,this.camera);
   }
   boardScreenOrigin() {

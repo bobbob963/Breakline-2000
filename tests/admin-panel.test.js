@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from '../src/admin-settings.js';
+import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, ADMIN_TIME_POWER_DURATION_FIELD, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from '../src/admin-settings.js';
 import { getRewardBoard } from '../src/board-rewards.js';
 
 const source=readFileSync(new URL('../src/admin-panel.js',import.meta.url),'utf8');
@@ -37,7 +37,7 @@ function panelFixture(initial={}) {
     reportValidity(){return true;}
     async dispatch(name,event){await this.events.get(name)?.(event);}
   }
-  const context={document,CHARACTERS:{kai:{name:'KAI'}},getRewardBoard,ADMIN_CHARACTER_FIELDS,ADMIN_BOARD_FIELDS,ADMIN_SURF_WEATHER_OPTIONS,
+  const context={document,CHARACTERS:{kai:{name:'KAI'}},getRewardBoard,ADMIN_CHARACTER_FIELDS,ADMIN_BOARD_FIELDS,ADMIN_SURF_WEATHER_OPTIONS,ADMIN_TIME_POWER_DURATION_FIELD,
     getAdminScope,updateAdminScope,resetAdminScope,sanitizeAdminSettings};
   vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace('export function createAdminPanel','function createAdminPanel'),context);
   const panel=context.createAdminPanel({
@@ -52,6 +52,7 @@ function panelFixture(initial={}) {
     async click(name){await overlay.dispatch('click',{target:{closest:()=>({dataset:{adminAction:name}})}});},
     async apply(){await query('form').dispatch('submit',{preventDefault:noOp});},
     async select(value){const input=query('#admin-surf-weather');input.value=value;await overlay.dispatch('input',{target:input});},
+    async duration(value,slider=false){const input=query(`#admin-cheats-timePowerDuration${slider?'-slider':''}`);input.type=slider?'range':'number';input.value=String(value);await overlay.dispatch('input',{target:input});},
     async key(event){await overlay.dispatch('keydown',{stopPropagation:noOp,preventDefault:noOp,...event});},
   };
 }
@@ -93,7 +94,7 @@ test('Full Reset remains an explicit two-step action, while the cheat control ex
   await f.click('reset');await f.click('confirm-reset');assert.equal(f.calls.reset,1);assert.equal(f.panel.isOpen,false);
   assert.match(source,/id="admin-slow-motion" aria-describedby="admin-slow-motion-description"/);
   assert.match(source,/Use slow motion with any board, even with custom stats switched off/);
-  assert.match(source,/6-second charge/);assert.match(source,/\+50% speed for 3 seconds/);assert.match(source,/12 seconds/);
+  assert.match(source,/fast-forward always lasts 6 seconds/);assert.match(source,/\+50% speed for 3 seconds/);assert.match(source,/12 seconds/);
 });
 
 test('weather applies with custom stats disabled and reopens at the saved setting',async()=>{
@@ -154,4 +155,37 @@ test('replaying the tutorial repeatedly does not reset or unlock progression',as
   for(let index=0;index<3;index++){f.panel.open();await f.click('tutorial');}
   assert.equal(f.calls.tutorial,3);assert.equal(f.calls.closed,3);
   assert.equal(f.calls.reset,0);assert.equal(f.calls.give,0);assert.equal(f.calls.applied.length,0);
+});
+
+test('slow-time duration is a draft until Apply and remains editable with both stat and cheat switches off',async()=>{
+  const f=panelFixture({enabled:false,cheats:{slowMotion:false,timePowerDuration:8.4}});f.panel.open();
+  assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),8.4);
+  assert.equal(Number(f.query('#admin-cheats-timePowerDuration-slider').value),8.4);
+  await f.duration(17.3);
+  assert.equal(f.settings.cheats.timePowerDuration,8.4);assert.equal(f.calls.applied.length,0);
+  assert.equal(Number(f.query('#admin-cheats-timePowerDuration-slider').value),17.3);
+  await f.apply();assert.equal(f.settings.enabled,false);assert.equal(f.settings.cheats.slowMotion,false);assert.equal(f.settings.cheats.timePowerDuration,17.3);
+  f.panel.open();assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),17.3);
+  await f.duration(60,true);assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),60);
+  await f.apply();assert.equal(f.settings.cheats.timePowerDuration,60);
+  assert.equal(ADMIN_TIME_POWER_DURATION_FIELD.label,'Slow-time duration (seconds)');
+  assert.equal(ADMIN_TIME_POWER_DURATION_FIELD.min,1);assert.equal(ADMIN_TIME_POWER_DURATION_FIELD.max,60);assert.equal(ADMIN_TIME_POWER_DURATION_FIELD.step,.1);
+});
+
+test('duration Cancel discards edits while rider defaults and Give Everything preserve the current draft',async()=>{
+  const f=panelFixture({cheats:{timePowerDuration:9.2}});f.panel.open();await f.duration(32);
+  await f.click('close');f.panel.open();assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),9.2);
+  await f.duration(21.5);await f.click('defaults');await f.click('give');
+  assert.equal(f.calls.give,1);assert.equal(f.calls.applied.length,0);assert.equal(f.settings.cheats.timePowerDuration,9.2);
+  assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),21.5);
+  await f.apply();assert.equal(f.settings.cheats.timePowerDuration,21.5);
+});
+
+test('duration autofill is captured on Apply and Full Reset restores six seconds',async()=>{
+  const f=panelFixture();f.panel.open();
+  f.query('#admin-cheats-timePowerDuration').value='14.8';
+  await f.apply();assert.equal(f.settings.cheats.timePowerDuration,14.8);
+  f.panel.open();await f.duration(46.2);await f.click('reset');await f.click('confirm-reset');
+  assert.equal(f.calls.reset,1);assert.equal(f.settings.cheats.timePowerDuration,6);
+  f.panel.open();assert.equal(Number(f.query('#admin-cheats-timePowerDuration').value),6);
 });

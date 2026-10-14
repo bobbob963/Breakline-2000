@@ -151,10 +151,10 @@ export class SurfRaceGame extends RaceSurfer {
       ?`RACE ${this.roundNumber}/${this.roundCount||5} · BEAT ${this.rival.name} · GATE ${this.nextCheckpoint+1}/${this.course.checkpoints.length}`
       :`BEAT ${this.rival.name} · FINISH ${Math.ceil(this.distanceRemaining)}m`;
   }
-  stepSurf(dt,input) {
+  stepSurf(dt,input,worldDt=dt) {
     if(this.phase!=='running')return;
     if(this.countdownRemaining>0) {
-      this.countdownRemaining=Math.max(0,this.countdownRemaining-dt);
+      this.countdownRemaining=Math.max(0,this.countdownRemaining-worldDt);
       if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}
       return;
     }
@@ -163,17 +163,16 @@ export class SurfRaceGame extends RaceSurfer {
     const previousElapsed=this.elapsed;
     this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;
     suppressScoreRings(this);suppressScoreRings(this.opponent);
-    super.stepSurf(dt,input);
+    super.stepSurf(dt,input,worldDt);
     if(this.phase!=='running')return;
     drainRaceBoost(this,dt);
-    this.opponent.stepSurf(dt,surfRaceTrickInput(this.opponent,this.course,this.rival.pace));
-    drainRaceBoost(this.opponent,dt);
+    if(worldDt>0){this.opponent.stepSurf(worldDt,surfRaceTrickInput(this.opponent,this.course,this.rival.pace));drainRaceBoost(this.opponent,worldDt);}
     const playerCross=resolveRaceMovement(this,previous,this.course,event=>this.onEvent({...event,opponent:false}));
     const rivalCross=resolveRaceMovement(this.opponent,rivalPrevious,this.course,event=>this.onEvent({...event,opponent:true}));
     this.time=this.elapsed;this.updateObjective();
     if(playerCross!==null||rivalCross!==null) {
-      this.finishTime=playerCross===null?null:previousElapsed+dt*playerCross;
-      this.opponentFinishTime=rivalCross===null?null:previousElapsed+dt*rivalCross;
+      this.finishTime=playerCross===null?null:previousElapsed+worldDt*playerCross;
+      this.opponentFinishTime=rivalCross===null?null:previousElapsed+worldDt*rivalCross;
       const win=playerCross!==null&&(rivalCross===null||playerCross<rivalCross-1e-9);
       this.finish(win?'win':'loss',playerCross!==null&&rivalCross!==null&&Math.abs(playerCross-rivalCross)<1e-9?'PHOTO FINISH - RIVAL HOLDS RANK':undefined);
     }

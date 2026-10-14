@@ -1,7 +1,7 @@
 import './admin-panel.css';
 import { CHARACTERS } from './appearance.js';
 import { getRewardBoard } from './board-rewards.js';
-import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from './admin-settings.js';
+import { ADMIN_CHARACTER_FIELDS, ADMIN_BOARD_FIELDS, ADMIN_SURF_WEATHER_OPTIONS, ADMIN_TIME_POWER_DURATION_FIELD, getAdminScope, updateAdminScope, resetAdminScope, sanitizeAdminSettings } from './admin-settings.js';
 
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const fieldsByScope = { character: ADMIN_CHARACTER_FIELDS, board: ADMIN_BOARD_FIELDS };
@@ -43,7 +43,8 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
         </section>
         <section class="admin-cheats" aria-labelledby="admin-cheats-title">
           <div><h3 id="admin-cheats-title">CHEATS</h3><label class="admin-enabled"><input type="checkbox" id="admin-slow-motion" aria-describedby="admin-slow-motion-description"> <span>SLOW MOTION / Q</span></label></div>
-          <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Tap Q for slow motion or double-tap Q for 2× fast-forward with a red pulse. Both share a 6-second charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
+          <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Tap Q for slow motion or double-tap Q for 2× fast-forward with a red pulse. Set the slow-motion duration below; fast-forward always lasts 6 seconds. Both use the same remaining charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
+          <section class="admin-time-power-duration">${fieldMarkup(ADMIN_TIME_POWER_DURATION_FIELD, 'cheats', ADMIN_TIME_POWER_DURATION_FIELD.default)}</section>
         </section>
         <section class="admin-tutorial" aria-labelledby="admin-tutorial-title">
           <div><h3 id="admin-tutorial-title">RIDER GUIDE</h3><p id="admin-tutorial-description">Replay the tutorial and change your rider name. Keeps your progress and unlocks. Unapplied tuning changes will be discarded.</p></div>
@@ -93,6 +94,8 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     query('#admin-board-title').textContent = getRewardBoard(profile.rewardBoard)?.name || 'STANDARD BOARD';
     query('#admin-enabled').checked = draft.enabled;
     query('#admin-slow-motion').checked = draft.cheats.slowMotion;
+    query('#admin-cheats-timePowerDuration').value = draft.cheats.timePowerDuration;
+    query('#admin-cheats-timePowerDuration-slider').value = draft.cheats.timePowerDuration;
     query('#admin-surf-weather').value = draft.environment.surfWeather;
     overlay.classList.toggle('admin-tuning-off', !draft.enabled);
   }
@@ -135,6 +138,13 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     if (input.id === 'admin-slow-motion') {
       draft = { ...draft, cheats: { ...draft.cheats, slowMotion: input.checked === true } };
       status(input.checked ? 'Slow motion will work with any board after you apply.' : 'The slow motion cheat will switch off after you apply.');
+      return;
+    }
+    if (input.id === 'admin-cheats-timePowerDuration' || input.id === 'admin-cheats-timePowerDuration-slider') {
+      if (!input.validity.valid || input.value === '' || !Number.isFinite(Number(input.value))) return;
+      draft = sanitizeAdminSettings({ ...draft, cheats: { ...draft.cheats, timePowerDuration: Number(input.value) } });
+      query(`#admin-cheats-timePowerDuration${input.type === 'range' ? '' : '-slider'}`).value = draft.cheats.timePowerDuration;
+      status(`A full slow-motion charge will last ${draft.cheats.timePowerDuration} seconds after you apply. Fast-forward stays at 6 seconds.`);
       return;
     }
     if (input.id === 'admin-enabled') {
@@ -185,12 +195,13 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
     event.preventDefault();
     if (busy || !form.reportValidity()) return;
     // Capture autofill without turning untouched reward defaults into saved overrides.
-    const current = getAdminScope(draft, profile);
+    const current = { ...getAdminScope(draft, profile), cheats: draft.cheats };
     for (const input of overlay.querySelectorAll('input[type="number"]')) {
       if (Number(input.value) !== current[input.dataset.adminScope][input.dataset.adminKey]) handleInput({ target: input });
     }
     draft.enabled = query('#admin-enabled').checked;
     draft.cheats.slowMotion = query('#admin-slow-motion').checked === true;
+    draft.cheats.timePowerDuration = Number(query('#admin-cheats-timePowerDuration').value);
     draft.environment.surfWeather = query('#admin-surf-weather').value;
     if (await action(() => onApply(sanitizeAdminSettings(draft)))) close();
   }

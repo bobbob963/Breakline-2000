@@ -192,25 +192,24 @@ export class ParkRaceGame extends RaceParkRider {
     if(!this.course)return;
     this.objectiveText=`RACE ${this.roundNumber}/${this.roundCount||5} · BEAT ${this.rival.name} · SUN RING ${Math.min(this.course.checkpoints.length,this.nextCheckpoint+1)}/${this.course.checkpoints.length}`;
   }
-  stepPark(dt,input) {
+  stepPark(dt,input,worldDt=dt) {
     if(this.phase!=='running')return;
     if(this.countdownRemaining>0) {
-      this.countdownRemaining=Math.max(0,this.countdownRemaining-dt);
+      this.countdownRemaining=Math.max(0,this.countdownRemaining-worldDt);
       if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}return;
     }
     const from={x:this.x,y:this.y,z:this.z},otherFrom={x:this.opponent.x,y:this.opponent.y,z:this.opponent.z},elapsed=this.elapsed;
-    this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;super.stepPark(dt,input);
+    this._pendingRaceBoost=null;this.opponent._pendingRaceBoost=null;super.stepPark(dt,input,worldDt);
     if(this.phase!=='running')return;
     drainRaceBoost(this,dt);
-    this.opponent.stepPark(dt,parkRaceTrickInput(this.opponent,this.course,this.rival.pace));
-    drainRaceBoost(this.opponent,dt);
+    if(worldDt>0){this.opponent.stepPark(worldDt,parkRaceTrickInput(this.opponent,this.course,this.rival.pace));drainRaceBoost(this.opponent,worldDt);}
     const crossing=resolveMovement(this,from,this.course,event=>this.onEvent({...event,opponent:false}));
     const otherCrossing=resolveMovement(this.opponent,otherFrom,this.course,event=>this.onEvent({...event,opponent:true}));
     this.raceProgress=parkRaceProgress(this,this.course);this.opponent.raceProgress=parkRaceProgress(this.opponent,this.course);
     this.time=this.elapsed;this.updateObjective();
     if(crossing!==null||otherCrossing!==null) {
-      this.finishTime=crossing===null?null:elapsed+dt*crossing;
-      this.opponentFinishTime=otherCrossing===null?null:elapsed+dt*otherCrossing;
+      this.finishTime=crossing===null?null:elapsed+worldDt*crossing;
+      this.opponentFinishTime=otherCrossing===null?null:elapsed+worldDt*otherCrossing;
       const tie=crossing!==null&&otherCrossing!==null&&Math.abs(crossing-otherCrossing)<1e-9;
       this.finish(crossing!==null&&(otherCrossing===null||crossing<otherCrossing-1e-9)?'win':'loss',tie?'PHOTO FINISH - RIVAL HOLDS RANK':undefined);
     }

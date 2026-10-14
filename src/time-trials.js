@@ -55,26 +55,27 @@ const TimeTrialRider=Base=>class extends RaceRider(Base) {
     if(!this.course||!this.trial)return;
     this.objectiveText=`TIME TRIAL ${this.trial.number}/${TIME_TRIALS.length} · ${this.trial.name} · ${this.nextCheckpoint<this.course.checkpoints.length?`SUN RING ${this.nextCheckpoint+1}/${this.course.checkpoints.length}`:`FINISH ${Math.ceil(this.distanceRemaining)}m`}`;
   }
-  stepSurf(dt,input) {this.stepTrial(dt,input,(step,controls)=>super.stepSurf(step,controls));}
-  stepPark(dt,input) {this.stepTrial(dt,input,(step,controls)=>super.stepPark(step,controls));}
-  stepTrial(dt,input,stepPhysics) {
-    if(this.phase!=='running'||!Number.isFinite(dt)||dt<=0)return;
+  stepSurf(dt,input,worldDt=dt) {this.stepTrial(dt,input,(step,controls,worldStep)=>super.stepSurf(step,controls,worldStep),worldDt);}
+  stepPark(dt,input,worldDt=dt) {this.stepTrial(dt,input,(step,controls,worldStep)=>super.stepPark(step,controls,worldStep),worldDt);}
+  stepTrial(dt,input,stepPhysics,worldDt=dt) {
+    if(this.phase!=='running'||!Number.isFinite(dt)||!Number.isFinite(worldDt)||(dt<=0&&worldDt<=0))return;
     if(this.countdownRemaining>0) {
-      const countdownStep=Math.min(dt,this.countdownRemaining);
-      this.countdownRemaining=Math.max(0,this.countdownRemaining-countdownStep);dt-=countdownStep;
+      const countdownStep=Math.min(worldDt,this.countdownRemaining);
+      dt*=worldDt>0?1-countdownStep/worldDt:0;
+      this.countdownRemaining=Math.max(0,this.countdownRemaining-countdownStep);worldDt-=countdownStep;
       if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo',timeTrial:true});}
-      if(dt<1e-9)return;
+      if(dt<1e-9&&worldDt<1e-9)return;
     }
     const remaining=this.trial.timeLimit-this.elapsed;
     if(remaining<=1e-9){this.time=0;this.elapsed=this.trial.timeLimit;this.finish('loss','TIME EXPIRED');return;}
-    dt=Math.min(dt,remaining);
+    const fraction=worldDt>0?Math.min(1,remaining/worldDt):1;dt*=fraction;worldDt*=fraction;
     const from={x:this.x,y:this.y,z:this.z,distance:this.distance,elapsed:this.elapsed};
     this._pendingRaceBoost=null;
     if(this.mode==='surf') {
       const index=Math.max(0,Math.floor((this.distance-this.rules.firstGate)/this.rules.spacing));
       this.processed.add(`g${index}`);this.processed.add(`g${index+1}`);
     }
-    stepPhysics(dt,input);
+    stepPhysics(dt,input,worldDt);
     if(this.phase!=='running')return;
     drainRaceBoost(this,dt);
     this.time=Math.max(0,this.trial.timeLimit-this.elapsed);
@@ -82,7 +83,7 @@ const TimeTrialRider=Base=>class extends RaceRider(Base) {
     this.updateObjective();
     if(this.phase!=='running')return;
     if(crossing!==null) {
-      this.finishTime=from.elapsed+dt*crossing;
+      this.finishTime=from.elapsed+worldDt*crossing;
       this.finish('win');return;
     }
     if(this.time<=1e-9){this.elapsed=this.trial.timeLimit;this.time=0;this.finish('loss','TIME EXPIRED');return;}

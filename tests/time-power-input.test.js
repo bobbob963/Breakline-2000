@@ -31,8 +31,10 @@ test('two distinct power presses start six full seconds of fast-forward without 
 test('a single press resolves at 280 ms and integrates the crossing at every frame size',()=>{
   for(const frames of [[1],[.28,.72],[.279,.001,.72],Array.from({length:60},()=>1/60)]) {
     const {game,input}=fixture();input.press();
-    const simulated=frames.reduce((total,dt)=>total+input.update(dt),0);
+    let player=0;
+    const simulated=frames.reduce((total,dt)=>{const world=input.update(dt);player+=input.playerDelta;return total+world;},0);
     near(simulated,.28+.72*.4);near(game.timePowerCharge,5.28);
+    near(player,1);
     assert.equal(game.timePowerMode,'slow');assert.equal(game.timePowerActive,true);
   }
 });

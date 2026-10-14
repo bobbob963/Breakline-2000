@@ -99,12 +99,12 @@ export class TournamentGame extends WaveParkGame {
     return this.start(startId??this.rival.startId);
   }
 
-  stepPark(dt,input) {
+  stepPark(dt,input,worldDt=dt) {
     if(this.phase!=='running')return;
     const remaining=TOURNAMENT_SECONDS-this.elapsed;
     // Reuse every collision/control substep, but stop at this heat's buzzer.
     // The superclass's 120-second finish branch is never reached.
-    if(remaining>1e-9)super.stepPark(Math.min(dt,remaining),input);
+    if(remaining>1e-9){const fraction=worldDt>0?Math.min(1,remaining/worldDt):1;super.stepPark(dt*fraction,input,worldDt*fraction);}
     this.time=Math.max(0,TOURNAMENT_SECONDS-this.elapsed);
     this.rivalScore=rivalScoreAt(this.roundIndex,this.elapsed);
     if(this.time<=1e-9) {

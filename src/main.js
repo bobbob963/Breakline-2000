@@ -399,7 +399,7 @@ function showHelp(){
   <span><kbd>SHIFT</kbd> + <kbd>A</kbd> / <kbd>D</kbd></span><span>${isParkMode()?'Make a sharp cutback while riding. Near the top of a quarterpipe, Shift catches the coping instead.':'Turn while holding Shift to snap a cutback on the wave face.'} Release and turn again for another cutback. C also works.</span>
   <span><kbd>I</kbd></span><span>${game.characterSpecial.name} — ${game.characterSpecial.description} Use at 100% SPECIAL while airborne. Once full, it stays ready until used—even through a wipeout.</span>
   ${game.sewerPowerEnabled?'<span><kbd>Q</kbd></span><span>SLUDGE SURGE: five seconds of 35% more base speed and protection from debris, whirlpools and closing waves. Recharge for fifteen seconds of active play. Bad trick landings can still wipe you out. Pause freezes the ability.</span>':''}
-  ${game.timePowerEnabled?'<span><kbd>Q</kbd></span><span>Tap Q for slow motion, or double-tap Q for 2× fast-forward and a red pulse. Both use the same six-second charge, measured in real playing time. Tap Q again to stop and keep the remaining charge. Use the full charge for 50% more speed for three seconds, then recharge over twelve seconds. Pausing freezes the power.</span>':''}
+  ${game.timePowerEnabled?`<span><kbd>Q</kbd></span><span>Tap Q to slow the world while you keep normal riding, turning and trick speed (${game.timePowerDuration}s per full charge). Double-tap Q for six seconds of 2× fast-forward and a red pulse. Both share the same remaining charge. Tap Q again to stop and keep it. Use the full charge for 50% more speed for three seconds, then recharge over twelve seconds. Pausing freezes the power. Change slow-time duration in Admin.</span>`:''}
   <span><kbd>ENTER</kbd></span><span>Bank a landed combo. Pop again within ${game.comboWindow} seconds to link another air.</span>
   ${isParkMode()&&!game.isRace?'<span>TRICK BOOST</span><span>Land a completed aerial trick for a speed burst. Use a charged pop or ride a ramp for air. Link tricks in an unbanked combo for a stronger, longer boost. A plain hop gives no boost; braking eases it off and a wipeout clears it.</span>':''}
   ${game.trickBoostEnabled&&!isParkMode()?'<span>TRICK BOOST</span><span>Land a completed trick from the lip or a cutback for an automatic speed burst. Link tricks in an unbanked combo for more speed and a longer boost. Flat hops do not earn a boost.</span>':''}
@@ -604,8 +604,9 @@ function updateHud(){
     const active=game.timePowerActive,fast=active&&game.timePowerMode==='fast',burst=game.timePowerBurstTime||0,cooldown=game.timePowerCooldown||0,charge=game.timePowerCharge||0;
     $('time-power-hud').classList.toggle('active',active);$('time-power-hud').classList.toggle('fast',fast);$('time-power-hud').classList.toggle('bursting',burst>0);
     $('time-power-title').textContent=active?(fast?'FAST-FORWARD ×2':'DEADTIME · SLOW MOTION'):burst>0?'+50% SPEED BURST':'DEADTIME';
-    $('time-power-detail').textContent=active?`${charge.toFixed(1)}s LEFT · Q TO RELEASE`:burst>0?`${burst.toFixed(1)}s OF BOOST`:cooldown>0?`RECHARGING · ${cooldown.toFixed(1)}s`:game.bailTime>0?'RECOVERING':game.countdownRemaining>0?'READY AFTER GO':`Q TO SLOW · DOUBLE-TAP Q TO FAST-FORWARD · ${charge.toFixed(1)}s`;
-    $('time-power-fill').style.width=`${Math.max(0,Math.min(1,burst>0?burst/3:cooldown>0?1-cooldown/12:charge/6))*100}%`;
+    const fraction=charge/game.timePowerCapacity;
+    $('time-power-detail').textContent=active?`${charge.toFixed(1)}s LEFT · Q TO RELEASE`:burst>0?`${burst.toFixed(1)}s OF BOOST`:cooldown>0?`RECHARGING · ${cooldown.toFixed(1)}s`:game.bailTime>0?'RECOVERING':game.countdownRemaining>0?'READY AFTER GO':`Q TO SLOW · ${(fraction*game.timePowerDuration).toFixed(1)}s · DOUBLE-TAP TO FAST-FORWARD · ${(fraction*6).toFixed(1)}s`;
+    $('time-power-fill').style.width=`${Math.max(0,Math.min(1,burst>0?burst/3:cooldown>0?1-cooldown/12:fraction))*100}%`;
   }
   if(game.sewerPowerEnabled){
     const active=game.sewerPowerActive,remaining=game.sewerPowerRemaining,cooldown=game.sewerPowerCooldown;
@@ -749,15 +750,23 @@ try{
   bootReady=await loading.finish();
   if(!bootReady)throw new Error('Startup stopped before the menu was ready.');
   if(!riderIdentity.tutorialComplete)openTutorial(false);
-  let previous=performance.now(),accumulator=0,hudTime=0,animationId;
+  let previous=performance.now(),accumulator=0,worldAccumulator=0,hudTime=0,animationId;
   const frame=now=>{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     guidedTutorial.update(dt,input);
     if(practiceSession&&guidedTutorial.stepId==='special'&&game.phase==='running')special.gain(1);
     const simDt=timePowerInput.update(dt);
-    if(game.phase==='running'&&!workshopMode){accumulator+=simDt;while(accumulator>=1/120){game.update(1/120,input);accumulator-=1/120;}special.update(simDt);checkSurvivalSecret();}else accumulator=0;
+    const playerDt=timePowerInput.playerDelta;
+    if(game.phase==='running'&&!workshopMode){
+      accumulator+=playerDt;worldAccumulator+=simDt;
+      // Preserve both clocks through the fixed-step remainder, including the
+      // frame where a tap activates, a mode changes or the charge runs out.
+      const worldRatio=accumulator>0?worldAccumulator/accumulator:1;
+      while(accumulator>=1/120){const worldStep=worldRatio/120;game.update(1/120,input,worldStep);accumulator-=1/120;worldAccumulator=Math.max(0,worldAccumulator-worldStep);}
+      special.update(playerDt);checkSurvivalSecret();
+    }else {accumulator=0;worldAccumulator=0;}
     if(!document.hidden)wasted.update(dt);
-    world.update(wasted.active?0:simDt,game);if(workshopMode)preview.update(dt,workshopMode);
+    world.update(wasted.active?0:simDt,game,wasted.active?0:playerDt);if(workshopMode)preview.update(dt,workshopMode);
     timePowerScreen.update(dt,{active:game.timePowerActive,mode:game.timePowerMode,paused:game.phase==='paused',origin:world.boardScreenOrigin()});
     if(!document.hidden&&!workshopMode&&!modalMode&&!$('intro').classList.contains('hidden'))menuSurfer.update(dt);
     if(game.isRace)audio.setRaceState({progress:game.raceProgress/game.course.length,boost:game.boostTime>0?game.boostSpeed/13:0});

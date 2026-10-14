@@ -27,24 +27,27 @@ test('production unlock saves immediately at five minutes, announces once and of
   assert.match(c.rewardCard('deadtime',{unlocked:true,equipped:true}),/EQUIPPED/);
 });
 
-for(const mode of ['slow','fast'])test(`main animation loop integrates ${mode} power input for physics, meter and world while its screen pulse uses real time`,()=>{
+for(const mode of ['slow','fast'])for(const fps of [30,60,144])test(`main loop integrates ${mode} at ${fps} fps with separate player, world and pulse clocks`,()=>{
   const game=new SurfGame();game.setRewardBoard('deadtime');game.start();
   const timePowerInput=createTimePowerInput(()=>game);timePowerInput.press(0);
   if(mode==='fast')timePowerInput.press(120);
   // A single press starts after the double-tap window; a double starts fast
   // immediately, with the whole shared charge still available.
   const expected=mode==='slow'?.28+.72*.4:2;
-  const draws=[],screens=[],specials=[];
-  const c={game,timePowerInput,previous:0,accumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
+  const expectedPlayer=mode==='slow'?1:2;
+  const draws=[],playerDraws=[],screens=[],specials=[];
+  const c={game,timePowerInput,previous:0,accumulator:0,worldAccumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
     guidedTutorial:{update:noop},practiceSession:false,
-    world:{update:dt=>draws.push(dt),boardScreenOrigin:()=>({x:100,y:200})},timePowerScreen:{update:(dt,state)=>screens.push({dt,state})},wasted:{active:false,update:noop},
+    world:{update:(dt,game,playerDt)=>{draws.push(dt);playerDraws.push(playerDt);},boardScreenOrigin:()=>({x:100,y:200})},timePowerScreen:{update:(dt,state)=>screens.push({dt,state})},wasted:{active:false,update:noop},
     preview:null,menuSurfer:{update:noop},document:{hidden:false},$ :()=>({classList:{contains:()=>true,remove:noop}}),audio:{update:noop,setRaceState:noop,setRideContext:noop},
     radio:{sync:noop},updateHud:noop,checkSurvivalSecret:noop,toastTime:0,requestAnimationFrame:()=>1};
   vm.runInNewContext(block('const frame=now=>{',';animationId=requestAnimationFrame(frame);')+';globalThis.runFrame=frame;',c);
-  for(let i=1;i<=60;i++)c.runFrame(i*1000/60);
+  for(let i=1;i<=fps;i++)c.runFrame(i*1000/fps);
   assert.ok(Math.abs(game.elapsed-expected)<1/120+.00001);
+  assert.ok(Math.abs(game.playerElapsed-expectedPlayer)<1/120+.00001);
   assert.ok(Math.abs(draws.reduce((a,b)=>a+b,0)-expected)<1e-8);
-  assert.ok(Math.abs(specials.reduce((a,b)=>a+b,0)-expected)<1e-8);
+  assert.ok(Math.abs(specials.reduce((a,b)=>a+b,0)-expectedPlayer)<1e-8);
+  assert.ok(Math.abs(playerDraws.reduce((a,b)=>a+b,0)-expectedPlayer)<1e-8);
   assert.ok(Math.abs(screens.reduce((sum,row)=>sum+row.dt,0)-1)<1e-8);
   assert.deepEqual(screens.at(-1).state.origin,{x:100,y:200});assert.equal(screens.at(-1).state.active,true);
   assert.equal(screens.at(-1).state.mode,mode);

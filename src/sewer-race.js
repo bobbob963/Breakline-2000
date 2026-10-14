@@ -44,9 +44,9 @@ export class SewerRider extends RaceRider(SurfGame){
     this.cutbackActive=true;this.cutbackAge=0;this.cutbackProgress=0;this.cutback=.001;this.cutbackCooldown=1.5;this.charge=0;
     this.onEvent({type:'cutbackStart',direction:this.cutbackDirection});return true;
   }
-  stepSurf(dt,input={}){
+  stepSurf(dt,input={},worldDt=dt){
     if(this.phase!=='running')return;
-    const previous=snapshot(this);this.elapsed+=dt;this.time=this.elapsed;
+    const previous=snapshot(this);this.playerElapsed+=dt;this.elapsed+=worldDt;this.time=this.elapsed;
     this._pendingRaceBoost=null;drainRaceBoost(this,dt);this.recoverPop(dt);
     this.cutbackCooldown=Math.max(0,this.cutbackCooldown-dt);this.cutbackLaunchTime=Math.max(0,this.cutbackLaunchTime-dt);
     const steering=(input.right?1:0)-(input.left?1:0),chord=input.grind?steering:0;
@@ -67,7 +67,7 @@ export class SewerRider extends RaceRider(SurfGame){
       if(Math.abs(ahead)<14&&Math.abs(side)<hazard.radiusX+4)this.current+=Math.sign(side)*3*(1-Math.abs(ahead)/14);
     }
     const control=steering*(this.airborne?(this.characterStats?.airControl??1):(this.characterStats?.steering??1));
-    const lateral=this.bailTime>0?0:(this.airborne?control*7:control*9)+this.current+(this.cutbackActive?this.cutbackDirection*3*this.cutback:0);
+    const lateral=this.bailTime>0?0:(this.airborne?control*7:control*9)+this.current*(dt>0?worldDt/dt:0)+(this.cutbackActive?this.cutbackDirection*3*this.cutback:0);
     this.vx+=(lateral-this.vx)*(1-Math.exp(-dt*(this.airborne?4:8)));this.x+=this.vx*dt;
     this.updateShortcut(previous,travel);
     const branch=this.course.shortcuts.find(item=>item.id===this.activeShortcut),center=branch?.entryX||0,halfWidth=branch?branch.width/2:this.course.halfWidth;
@@ -93,7 +93,7 @@ export class SewerRider extends RaceRider(SurfGame){
       if(this.comboBase&&!this.cutbackActive){this.comboTime-=dt;if(this.comboTime<=0)this.bank();}
     }
     if(this.phase!=='running')return;
-    this.updateHazards(previous,dt);this.landingControl=clamp(Math.abs(this.vx)/this.rules.landingTolerance,0,1);
+    this.updateHazards(previous,worldDt);this.landingControl=clamp(Math.abs(this.vx)/this.rules.landingTolerance,0,1);
     this.landingWarning='';this.danger=Math.max(this.hazardDanger,this.bailTime>0?1:0);
     if(this.phase==='running'&&this._pendingRaceBoost)this.awardRaceBoost(this._pendingRaceBoost);
   }
@@ -208,17 +208,17 @@ export class SewerRaceGame extends SewerRider{
   retry(){return this.start();}
   restart(){return this.start();}
   updateObjective(){if(this.course)this.objectiveText=`${this.course.name} · BEAT ${this.rival?.name||'THE RIVAL'} · GATES ${this.nextCheckpoint||0}/${this.course.checkpoints.length}`;}
-  stepSurf(dt,input){
+  stepSurf(dt,input,worldDt=dt){
     if(this.phase!=='running')return;
-    if(this.countdownRemaining>0){this.countdownRemaining=Math.max(0,this.countdownRemaining-dt);if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}return;}
+    if(this.countdownRemaining>0){this.countdownRemaining=Math.max(0,this.countdownRemaining-worldDt);if(this.countdownRemaining<1e-9){this.countdownRemaining=0;this.onEvent({type:'raceGo'});}return;}
     const previous=snapshot(this),otherPrevious=snapshot(this.opponent);
-    super.stepSurf(dt,input);if(this.phase!=='running')return;
-    this.opponent.stepSurf(dt,sewerOpponentInput(this.opponent,this.course,this.rival.pace));
+    super.stepSurf(dt,input,worldDt);if(this.phase!=='running')return;
+    if(worldDt>0)this.opponent.stepSurf(worldDt,sewerOpponentInput(this.opponent,this.course,this.rival.pace));
     const playerCross=resolveMovement(this,previous,this.course,event=>this.onEvent({...event,opponent:false}));
     const rivalCross=resolveMovement(this.opponent,otherPrevious,this.course,event=>this.onEvent({...event,opponent:true}));
     this.updateObjective();
     if(playerCross!==null||rivalCross!==null){
-      this.finishTime=playerCross===null?null:previous.elapsed+dt*playerCross;this.opponentFinishTime=rivalCross===null?null:previous.elapsed+dt*rivalCross;
+      this.finishTime=playerCross===null?null:previous.elapsed+worldDt*playerCross;this.opponentFinishTime=rivalCross===null?null:previous.elapsed+worldDt*rivalCross;
       this.finish(playerCross!==null&&(rivalCross===null||playerCross<rivalCross-1e-9)?'win':'loss');
     }
   }

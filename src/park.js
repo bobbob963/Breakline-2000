@@ -441,17 +441,18 @@ export class WaveParkGame extends SurfGame {
     this.onEvent({ type: 'ramp', id: ramp.id, first });
   }
 
-  update(dt, input = {}) {
+  update(dt, input = {}, worldDt = dt) {
     if (this.phase !== 'running') return;
     // Fixed-size substeps keep ramp launches and rail catches fair at 30/60/120 Hz.
-    dt = clamp(dt, 0, 0.05);
-    if(dt===0)return;
-    const steps = Math.max(1, Math.ceil(dt * 120 - 1e-8));
-    for (let i = 0; i < steps && this.phase === 'running'; i++) this.stepPark(dt / steps, input);
+    dt=Number.isFinite(dt)?Math.max(0,dt):0;worldDt=Number.isFinite(worldDt)?Math.max(0,worldDt):0;
+    const longest=Math.max(dt,worldDt);if(longest===0)return;
+    const scale=Math.min(1,.05/longest);dt*=scale;worldDt*=scale;
+    const steps = Math.max(1, Math.ceil(Math.max(dt,worldDt) * 120 - 1e-8));
+    for (let i = 0; i < steps && this.phase === 'running'; i++) this.stepPark(dt / steps, input, worldDt / steps);
   }
 
-  stepPark(dt, input) {
-    this.elapsed += dt;
+  stepPark(dt, input, worldDt = dt) {
+    this.playerElapsed+=dt;this.elapsed += worldDt;
     this.drainSurfBoost(dt);
     this.recoverPop(dt);
     this.time = this.rules.endless?this.elapsed:Math.max(0, RUN_SECONDS - this.elapsed);
