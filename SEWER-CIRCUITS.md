@@ -1,5 +1,9 @@
 # Sewer circuits
 
+Both circuits move through six named environments with smooth expansions into pump rooms, turbine chambers and outfalls. The shared course describes the rideable water, shell dimensions, curved shortcuts and camera clearance. Shortcuts alternate sides, meet the main line tangentially and save physical travel distance. Checkpoints leave space to line up for the next entrance; hazards leave recovery space around flood sections.
+
+The chase camera follows the current rider position, eases around bends and changes its field of view gradually during boosts. It stays within the actual curved pipe even with a wide/high camera preference. Faster travel no longer drags the camera further behind the rider.
+
 Open **Tracks** from the home screen. It contains the original Waterworks freestyle park and two new head-to-head sewer races:
 
 - **Runoff Run:** a 1,360m winding brick interceptor sewer, green water, amber work lights and three maintenance bypasses.

@@ -4,6 +4,7 @@ import { createStormBarrels, resolveBarrelCamera } from './barrel-wave.js';
 import { stormDifficulty } from './storm-waves.js';
 import { createWaterworks } from './waterworks.js';
 import { createParkCameraState, stepParkCamera } from './park-camera-rig.js';
+import { createSewerCameraState, stepSewerCamera } from './sewer-camera-rig.js';
 import { normalizeViewSettings, viewCameraTarget, viewFieldOfView, viewRenderSize } from './camera-settings.js';
 import { createWastedEyeAnchor, sampleWastedCamera } from './wasted-camera.js';
 import { createRaceWorld } from './race-world.js';
@@ -92,6 +93,7 @@ export class SurfWorld {
     this.shadow.rotation.x = -Math.PI / 2;
     this.camera.position.set(14, 10, 20); this.lookAt = new THREE.Vector3(0, 2, -9);
     this.parkCamera=createParkCameraState();
+    this.sewerCamera=createSewerCameraState();
     this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(container);
     this.resize();
   }
@@ -126,6 +128,7 @@ export class SurfWorld {
     this.endWastedView();
     this.lastLiveEye = null;
     this.mode = mode === 'park' ? 'park' : mode === 'sewer' ? 'sewer' : 'surf';
+    if(this.sewerCamera)this.sewerCamera.initialized=false;
     this.weatherId=null;
     this.boardEffects.reset();
     this.raceWorld.reset();
@@ -147,9 +150,9 @@ export class SurfWorld {
     this.shadow.material.color.set(this.mode==='park'?0x182029:0x154f58);
     this.particles?.[0]?.mesh.material.color.set(this.mode==='sewer'?0xc4d794:0xf2edd5);
     if(this.mode==='sewer'){
-      this.scene.background.set(0x293a28);this.scene.fog.color.set(0x293a28);this.scene.fog.near=70;this.scene.fog.far=220;
-      this.ambientLight.color.set(0xccdbb3);this.ambientLight.groundColor.set(0x263a29);this.ambientLight.intensity=1.55;
-      this.keyLight.color.set(0xf2d6a0);this.keyLight.intensity=1.65;
+      this.scene.background.set(0x293a28);this.scene.fog.color.set(0x293a28);this.scene.fog.near=90;this.scene.fog.far=265;
+      this.ambientLight.color.set(0xd5ded8);this.ambientLight.groundColor.set(0x302d29);this.ambientLight.intensity=1.4;
+      this.keyLight.color.set(0xffd4aa);this.keyLight.intensity=1.85;
       this.rain.visible=false;this.lightning.visible=false;this.surfBoost.visible=false;
     }
   }
@@ -387,6 +390,7 @@ export class SurfWorld {
         this.camera.position.set(point.x,point.y,point.z);this.lookAt.set(focus.x,focus.y,focus.z);
       }
       this.parkCamera=createParkCameraState();
+      this.sewerCamera=createSewerCameraState();
     }
     if(event.type==='bail'&&game.mode==='park')this.parkCamera=createParkCameraState();
     if (['land', 'bail', 'jump'].includes(event.type)) {
@@ -589,11 +593,15 @@ export class SurfWorld {
     const time=attract?this.time:game.elapsed,trackId=game.trackId,distance=game.distance||0;
     this.sewerWorld.update(game,time,dt);
     const style=this.sewerWorld.style;
-    this.scene.background.set(style.fog);this.scene.fog.color.set(style.fog);this.scene.fog.near=70;this.scene.fog.far=220;
-    this.keyLight.position.set(this.camera.position.x-12,28,this.camera.position.z-55);
-    this.keyLight.target.position.set(this.camera.position.x,0,this.camera.position.z-60);this.keyLight.target.updateMatrixWorld();
+    this.keyLight.color.set(style.pressure?0xc2ded6:0xffd4aa);
+    this.scene.background.set(style.fog);this.scene.fog.color.set(style.fog);this.scene.fog.near=90;this.scene.fog.far=265;
     this.rain.visible=false;this.raceWorld.group.visible=false;
     const s=this.surfer,frame=poseSewerRider(s,game,trackId,time,dt);
+    // A broad route-relative fill keeps the rider readable through changing
+    // tunnel headings; authored lamps provide the warmer local highlights.
+    const alongX=-Math.sin(frame.heading),alongZ=-Math.cos(frame.heading);
+    this.keyLight.position.set(frame.x+Math.cos(frame.heading)*12+alongX*18,frame.y+26,frame.z-Math.sin(frame.heading)*12+alongZ*18);
+    this.keyLight.target.position.set(frame.x,frame.y,frame.z);this.keyLight.target.updateMatrixWorld();
     this.captureLiveEye(game);
     const ground=sewerWaterHeight(game.x,distance,time,trackId,game.activeShortcut);
     const contact=sewerPoint(distance,game.x,ground,trackId,game.activeShortcut);
@@ -609,17 +617,13 @@ export class SurfWorld {
       }
       for(const p of this.particles){if(p.life<=0)continue;p.life-=dt;p.vy-=9*dt;p.mesh.position.x+=p.vx*dt;p.mesh.position.y+=p.vy*dt;p.mesh.position.z+=p.vz*dt;p.mesh.scale.setScalar(Math.max(.1,p.life*1.7));p.mesh.visible=p.life>0;}
     }
-    const branch=!!game.activeShortcut, cameraY=Math.min(game.y+(attract?4:3.15),branch?6.15:14);
-    const behind=sewerPoint(distance-(attract?8:6.6),game.x+.65,cameraY,trackId,game.activeShortcut);
-    const ahead=sewerPoint(distance+4,game.x,game.y+1.05,trackId,game.activeShortcut);
-    const target=new THREE.Vector3(behind.x,behind.y,behind.z),look=new THREE.Vector3(ahead.x,ahead.y,ahead.z);
-    target.copy(viewCameraTarget(this.viewSettings,{anchor:frame,target,focus:look,rideUp:null,park:false,active:!attract,firstPerson:!!this.wastedView}));
-    // Keep the chase camera inside the narrow bypass pipe after view settings
-    // are applied; zoom-out must never put the camera through a solid wall.
-    if(branch){target.y=Math.min(target.y,6.3);const centre=sewerPoint(distance-6.6,game.x,cameraY,trackId,game.activeShortcut);target.x=THREE.MathUtils.clamp(target.x,centre.x-2,centre.x+2);target.z=THREE.MathUtils.clamp(target.z,centre.z-2,centre.z+2);}
-    this.camera.position.lerp(target,1-Math.exp(-dt*7));this.lookAt.lerp(look,1-Math.exp(-dt*8));this.camera.up.set(0,1,0);
-    const fov=viewFieldOfView(boosting&&this.viewSettings.cameraShake&&!this.reducedMotion?58:55,this.viewSettings,{active:!attract,firstPerson:!!this.wastedView});
-    if(Math.abs(this.camera.fov-fov)>.001){this.camera.fov=fov;this.camera.updateProjectionMatrix();}
+    const cameraFrame=stepSewerCamera(this.sewerCamera,{
+      x:frame.x,y:frame.y,z:frame.z,lane:game.x,distance,trackId,shortcut:game.activeShortcut,
+      speed:game.speed,boosting,motion:this.viewSettings.cameraShake&&!this.reducedMotion,
+      settings:this.viewSettings,attract,firstPerson:!!this.wastedView,
+    },dt);
+    this.camera.position.copy(cameraFrame.position);this.lookAt.copy(cameraFrame.look);this.camera.up.copy(cameraFrame.up);
+    if(Math.abs(this.camera.fov-cameraFrame.fov)>.001){this.camera.fov=cameraFrame.fov;this.camera.updateProjectionMatrix();}
     this.camera.lookAt(this.lookAt);
     this.boardEffects.update(dt,s,this.camera,{paused:game.phase==='paused',finished:game.phase==='finished'||attract,gliding:!frame.bail&&!!game.gliding});
     this.applyWastedView();this.renderer.render(this.scene,this.camera);

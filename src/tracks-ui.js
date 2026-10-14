@@ -2,8 +2,8 @@
 // ladder rewards and every venue remains available for practice.
 export const TRACK_CHOICES=Object.freeze([
   Object.freeze({id:'park',name:'THE WATERWORKS',tag:'01 / FACTORY FREESTYLE',detail:'The original concrete park. Halfpipes, rust tunnels, coping and rails.',feature:'2 MINUTE SCORE SESSION',theme:'works'}),
-  Object.freeze({id:'sewer-run',name:'RUNOFF RUN',tag:'02 / SEWER CIRCUIT',detail:'Green water through a giant brick drain. Cut through side pipes, hop debris and outrun closing surges.',feature:'RIVAL RACE / SHORTCUTS / 3 LIVES',theme:'runoff'}),
-  Object.freeze({id:'sewer-depths',name:'THE DEEP WORKS',tag:'03 / PRESSURE CIRCUIT',detail:'Descend into the industrial main. Tighter lines, dark machinery and risky maintenance bypasses.',feature:'RIVAL RACE / SHORTCUTS / 3 LIVES',theme:'depths'}),
+  Object.freeze({id:'sewer-run',name:'RUNOFF RUN',tag:'02 / SEWER CIRCUIT',detail:'Amber-lit brick tunnels, broad pump rooms and a daylight outfall. Choose side-pipe shortcuts and outrun the flood.',feature:'RIVAL RACE / SHORTCUTS / 3 LIVES',theme:'runoff'}),
+  Object.freeze({id:'sewer-depths',name:'THE DEEP WORKS',tag:'03 / PRESSURE CIRCUIT',detail:'Steel pressure mains, turbine vaults and a flooded spillway. Read the bends, dodge debris and cut through maintenance pipes.',feature:'RIVAL RACE / SHORTCUTS / 3 LIVES',theme:'depths'}),
 ]);
 
 const pipeArt=theme=>`<div class="track-art track-art-${theme}" aria-hidden="true"><i></i><b></b><span>${theme==='works'?'//':'↓'}</span></div>`;

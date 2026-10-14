@@ -148,6 +148,8 @@ async function boot() {
     $('stat-rival-boost').textContent=rival?.boostTime>0?`${rival.boostLabel} · +${rival.boostSpeed.toFixed(1)} m/s · ${rival.boostTime.toFixed(2)} s`:'None';
     $('stat-rival-combo').textContent=rival?`${rival.pendingTricks} tricks · ${rival.comboBase*rival.multiplier} points`:'—';
     $('stat-result').textContent=game.resultReason||'—';
+    if($('stat-render'))$('stat-render').textContent=`${world.renderer.info.render.calls} draws · ${Math.round(world.renderer.info.render.triangles/1000)}k triangles`;
+    if($('stat-view'))$('stat-view').textContent=`${world.renderer.domElement.width} × ${world.renderer.domElement.height} · ${world.camera.fov.toFixed(1)}°`;
     $('events').textContent=events.join('\n');$('pause').textContent=game.phase==='running'?'Pause':'Resume';
     $('hud-boost').textContent=race&&game.boostTime>0?`${game.boostLabel} +${game.boostSpeed.toFixed(0)} m/s`:'LAND TRICKS TO BOOST';
     $('hud-boost').hidden=!race;
@@ -182,13 +184,17 @@ async function boot() {
     $('restart').addEventListener('click',()=>start());
     $('pause').addEventListener('click',pause);
     $('frame').addEventListener('click',()=>{if(!scenario||game.phase==='finished')return;game.resume();tick();game.pause();counters();});
-    $('advance').addEventListener('click',()=>{
+    function advanceTime(seconds){
       if(!scenario||game.phase==='finished')return;
       game.resume();
-      for(let step=0;step<600&&game.phase==='running';step++){game.updateTimePower(STEP);tick();}
+      for(let step=0;step<seconds/STEP&&game.phase==='running';step++){game.updateTimePower(STEP);tick();}
       if(game.phase==='running')game.pause();
-      world.update(0,game);counters();
-    });
+      // A hidden review tab may not receive animation frames. Advance the real
+      // camera/renderer alongside the final simulated position before pausing.
+      world.update(1/60,game);counters();
+    }
+    $('advance').addEventListener('click',()=>advanceTime(5));
+    $('advance-second').addEventListener('click',()=>advanceTime(1));
     $('autopilot').addEventListener('change',clearInput);
     const actions={
       toggleSound(){},closeWorkshop(){},cycleCharacter(){},closeModal(){},rotatePreview(){},isWardrobeOpen:()=>false,hideWardrobe(){},

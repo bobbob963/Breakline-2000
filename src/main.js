@@ -428,7 +428,7 @@ function showTrials(){
   openModal('trials','BEAT THE CLOCK',trialListMarkup(trialProgress),`START ${TIME_TRIALS[trialProgress.selectedTrial].name}`,'CHAMPION CIRCUIT / TIME TRIALS');
 }
 function showTracks(){
-  openModal('tracks','PICK YOUR TRACK',tracksMarkup(selectedTrack),game.isSewer?`RACE ${game.course.name}`:selectedMode==='park'?'DROP INTO WATERWORKS':'BACK TO SESSIONS','COASTAL DIVISION / TRACK SELECT');
+  openModal('tracks','PICK YOUR TRACK',tracksMarkup(selectedTrack),selectedMode==='sewer'?`RACE ${game.course.name}`:selectedMode==='park'?'DROP INTO WATERWORKS':'BACK TO SESSIONS','COASTAL DIVISION / TRACK SELECT');
 }
 function selectTrack(id){
   if(!TRACK_CHOICES.some(track=>track.id===id))return;

@@ -7,6 +7,7 @@ import { SurfGame,courseItem,waveHeight } from '../src/game.js';
 import { WaveParkGame } from '../src/park.js';
 import { SurfRaceGame } from '../src/surf-race.js';
 import { ParkRaceGame } from '../src/park-race.js';
+import { SewerRaceGame } from '../src/sewer-race.js';
 import { rewardBoardUnlocked } from '../src/board-rewards.js';
 import { OUTFITS,validateProfile,rewardBoardTexture,createSurfer,disposeSurfer } from '../src/appearance.js';
 import { createBoardEffects } from '../src/board-effects.js';
@@ -80,7 +81,7 @@ test('surge cooldown crosses frames consistently and pauses freeze all timers',(
 });
 
 test('all existing modes receive 35 percent base speed with surge, while brakes and rival equipment stay ordinary',()=>{
-  for(const create of [()=>new SurfGame(),()=>new SurfGame(()=>{},'storm'),()=>new SurfGame(()=>{},'rush'),()=>new WaveParkGame(),()=>new SurfRaceGame(),()=>new ParkRaceGame()]){
+  for(const create of [()=>new SurfGame(),()=>new SurfGame(()=>{},'storm'),()=>new SurfGame(()=>{},'rush'),()=>new WaveParkGame(),()=>new SurfRaceGame(),()=>new ParkRaceGame(),()=>new SewerRaceGame(),()=>new SewerRaceGame(()=>{},{trackId:'sewer-depths'})]){
     const normal=create(),boosted=create();for(const game of [normal,boosted]){game.setRewardBoard('sludge');game.start();game.countdownRemaining=0;game.speed=0;}
     assert.equal(boosted.activateSewerPower(),true);assert.equal(boosted.hazardShieldActive,true);
     normal.update(1/120,{pump:true});boosted.update(1/120,{pump:true});near(boosted.speed,normal.speed*1.35);
@@ -129,10 +130,12 @@ test('surge passes Survival driftwood, whirlpool cores and the physical wave lip
 });
 
 test('finish cancels the shield immediately and cannot spend a charge or manufacture a boost afterwards',()=>{
-  const events=[],game=new SurfGame(event=>events.push(event));game.setRewardBoard('sludge');game.start();game.activateSewerPower();game.updateTimePower(2);
+  for(const create of [emit=>new SurfGame(emit),emit=>new SewerRaceGame(emit)]){
+  const events=[],game=create(event=>events.push(event));game.setRewardBoard('sludge');game.start();game.countdownRemaining=0;game.activateSewerPower();game.updateTimePower(2);
   game.finish('SESSION COMPLETE');assert.equal(game.sewerPowerActive,false);assert.equal(game.sewerPowerRemaining,0);assert.equal(game.activateSewerPower(),false);
   game.updateTimePower(100);assert.equal(game.sewerPowerCooldown,15);assert.equal(game.baseSpeedMultiplier,1);
   assert.ok(events.some(event=>event.type==='sewerPower'&&!event.active&&event.reason==='finish'));assert.equal(events.some(event=>event.type==='timePowerBurst'),false);
+  }
 });
 
 test('sewer clothes and deck use their own low-poly art with the existing physical board geometry',()=>withCanvas(()=>{

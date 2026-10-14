@@ -18,13 +18,15 @@ test('both sewer courses are enclosed full-size pipes with distinct palettes and
     const main=renderer.group.getObjectByName('sewer-main-pipe');
     assert.equal(main.userData.radius,SEWER_TUNNEL_RADIUS);
     assert.ok(main.geometry.attributes.position.count>2000);
-    assert.equal(renderer.waters.length,game.course.shortcuts.length+1);
+    assert.ok(renderer.waters.length>game.course.shortcuts.length+1,'water is split into bounded update chunks');
     for(const shortcut of game.course.shortcuts){
       const pipe=renderer.group.getObjectByName(`shortcut-pipe-${shortcut.id}`);
       assert.ok(pipe,'every playable shortcut has a real pipe mesh');
       assert.equal(pipe.userData.start,shortcut.start);assert.equal(pipe.userData.end,shortcut.end);
-      const stream=renderer.group.getObjectByName(`shortcut-water-${shortcut.id}`),samples=stream.geometry.userData.samples;
-      assert.equal(samples[0].distance,shortcut.start);assert.equal(samples.at(-1).distance,shortcut.end);
+      const streams=renderer.waters.filter(stream=>stream.userData.pathId===shortcut.id);
+      assert.equal(streams[0].geometry.userData.samples[0].distance,shortcut.start);
+      assert.equal(streams.at(-1).geometry.userData.samples.at(-1).distance,shortcut.end);
+      for(let i=1;i<streams.length;i++)assert.equal(streams[i-1].userData.end,streams[i].userData.start,'water chunks join without a gap');
     }
     const style=renderer.style;assert.ok(new THREE.Color(style.water).g>new THREE.Color(style.water).r,'sewage stays green');
     renderer.group.traverse(object=>{if(object.geometry)assert.ok([...object.geometry.attributes.position.array].every(Number.isFinite));});
