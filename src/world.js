@@ -10,6 +10,7 @@ import { createRaceWorld } from './race-world.js';
 import { createBoardEffects } from './board-effects.js';
 import { createSurfHazardRenderer } from './surf-hazard-render.js';
 import { resolveWorldWeather, weatherLightning } from './surf-weather.js';
+import { coastSceneryZ } from './coast-scenery.js';
 import { OCEAN_MESH, alignSurfRiderToOcean } from './ocean-surface.js';
 import { waveHeight, courseItem, clamp } from './game.js';
 import { createSurfer, disposeSurfer, retroMaterial, pixelTexture, DEFAULT_PROFILE } from './appearance.js';
@@ -454,8 +455,7 @@ export class SurfWorld {
       const b = this.birds[i]; b.position.set(-28 + i * 13 + Math.sin(t * .14 + i) * 4, 25 + (i % 3) * 4 + Math.sin(t + i) * .4, -155 - i % 4 * 22); b.rotation.z = Math.sin(t * 2 + i) * .12;
     }
     for (const s of this.scenery) {
-      const relative = ((s.initialZ + d + 90) % s.length + s.length) % s.length - 90;
-      s.mesh.position.z = relative - d;
+      s.mesh.position.z = coastSceneryZ(s.initialZ, d, s.length);
     }
     for (let i = 0; i < this.foam.length; i++) {
       const z = -d + 35 - i * 3.8;
