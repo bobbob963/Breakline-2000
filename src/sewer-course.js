@@ -55,10 +55,10 @@ export function sewerWaterHeight(x,distance,time=0,trackId='sewer-run',shortcut=
   const candidate=shortcutDefinition(shortcut,trackId),branch=candidate&&distance>candidate.start&&distance<candidate.end?candidate:null;
   const lane=x-(branch?.entryX||0),bank=Math.max(0,Math.abs(lane)-(branch?2.5:7));
   const mainRipple=.07*Math.sin(distance*.055+time*1.45)+.025*Math.sin(distance*.16-x*.42+time*2);
-  const mainBank=Math.max(0,Math.abs(x)-7)**2*sewerSection(distance,trackId).bankStrength;
+  const mainBank=Math.max(0,Math.abs(x)-7)**2*sewerSection(distance,trackId).bankStrength*.25;
   if(!branch)return mainRipple+mainBank;
   const blend=smooth((distance-branch.start)/22)*smooth((branch.end-distance)/22);
-  return mainRipple+mainBank*(1-blend)+bank*bank*.055*blend;
+  return mainRipple+mainBank*(1-blend)+bank*bank*.01375*blend;
 }
 
 const SECTION_ROWS={

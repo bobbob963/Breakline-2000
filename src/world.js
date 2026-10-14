@@ -151,8 +151,8 @@ export class SurfWorld {
     this.particles?.[0]?.mesh.material.color.set(this.mode==='sewer'?0xc4d794:0xf2edd5);
     if(this.mode==='sewer'){
       this.scene.background.set(0x293a28);this.scene.fog.color.set(0x293a28);this.scene.fog.near=90;this.scene.fog.far=265;
-      this.ambientLight.color.set(0xd5ded8);this.ambientLight.groundColor.set(0x302d29);this.ambientLight.intensity=1.4;
-      this.keyLight.color.set(0xffd4aa);this.keyLight.intensity=1.85;
+      this.ambientLight.color.set(0xe7dda0);this.ambientLight.groundColor.set(0x3b3921);this.ambientLight.intensity=1.45;
+      this.keyLight.color.set(0xffdd80);this.keyLight.intensity=1.8;
       this.rain.visible=false;this.lightning.visible=false;this.surfBoost.visible=false;
     }
   }
@@ -593,7 +593,7 @@ export class SurfWorld {
     const time=attract?this.time:game.elapsed,trackId=game.trackId,distance=game.distance||0;
     this.sewerWorld.update(game,time,dt);
     const style=this.sewerWorld.style;
-    this.keyLight.color.set(style.pressure?0xc2ded6:0xffd4aa);
+    this.keyLight.color.set(style.pressure?0xe5d87d:0xffdd80);
     this.scene.background.set(style.fog);this.scene.fog.color.set(style.fog);this.scene.fog.near=90;this.scene.fog.far=265;
     this.rain.visible=false;this.raceWorld.group.visible=false;
     const s=this.surfer,frame=poseSewerRider(s,game,trackId,time,dt);

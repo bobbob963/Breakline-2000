@@ -4,10 +4,12 @@ Both circuits move through six named environments with smooth expansions into pu
 
 The chase camera follows the current rider position, eases around bends and changes its field of view gradually during boosts. It stays within the actual curved pipe even with a wide/high camera preference. Faster travel no longer drags the camera further behind the rider.
 
+Canal water and closing barrels share one flowing surface pattern. Pressure waves rise from a low shoulder, roll over the water and collapse into shallow whitewater on the original hazard deadline. Side outlets pour into the canal with animated spray and foam. Dirty yellow industrial light and haze cover both circuits. Water extends underneath the walkways and into side-pipe bores; sealed beds and distant ends prevent views into empty space below the level.
+
 Open **Tracks** from the home screen. It contains the original Waterworks freestyle park and two new head-to-head sewer races:
 
 - **Runoff Run:** a 1,360m winding brick interceptor sewer, green water, amber work lights and three maintenance bypasses.
-- **The Deep Works:** a 1,740m industrial pressure drain, green lamps, steel ribs, turbines and three longer bypasses.
+- **The Deep Works:** a 1,740m industrial pressure drain, yellow work lights, steel ribs, turbines and three longer bypasses.
 
 Both races require every sun ring in order. Shortcuts rejoin before the next checkpoint and shorten the physical route. Narrow bypasses contain debris to jump and whirlpools to avoid. The main route includes closing flood barrels: pump or carry a trick boost through before they shut. Three wipeouts end the player's race. Rivals use the same movement, hazards and earned trick boosts.
 

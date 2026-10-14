@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createSurfer, disposeSurfer } from './appearance.js';
 import { rivalProfile } from './race-world.js';
 import { sampleRiderTrick } from './rider-pose.js';
+import { waterMaterial, closingWaveGeometry, updateClosingWave, waveMaterial, createSewerWaveCrash, updateSewerWaveCrash } from './sewer-water.js';
+import { createSewerOutfalls } from './sewer-outfalls.js';
 import { sewerPoint, sewerWaterHeight, sewerBarrelState, sewerTunnelProfile, sewerSection } from './sewer-course.js';
 
 const TAU = Math.PI * 2;
@@ -15,8 +17,8 @@ export const SEWER_WHIRLPOOL_MASKS = 8;
 export function sewerTrackStyle(trackId) {
   const pressure = trackId === 'sewer-depths';
   return pressure
-    ? { pressure, wall: 0x60716a, rust: 0x9a6243, water: 0x22594b, foam: 0xa5c8a2, light: 0x9cd2c6, fog: 0x172c2a, name: 'THE DEEP WORKS' }
-    : { pressure, wall: 0x9d7c5a, rust: 0x795340, water: 0x315f45, foam: 0xb6cb91, light: 0xf4c38c, fog: 0x2b372c, name: 'RUNOFF RUN' };
+    ? { pressure, wall: 0x72715a, rust: 0x946b36, water: 0x435c3c, foam: 0xc6c78a, light: 0xe7d575, fog: 0x3a3d24, name: 'THE DEEP WORKS' }
+    : { pressure, wall: 0x9b8753, rust: 0x826036, water: 0x476348, foam: 0xd1cf8c, light: 0xffdc6e, fog: 0x454329, name: 'RUNOFF RUN' };
 }
 
 function addMesh(parent, geometry, material, x = 0, y = 0, z = 0) {
@@ -46,9 +48,10 @@ function renderTunnelProfile(distance,trackId,path=null){
 }
 function tunnelSamples(course,trackId,path=null) {
   const start=path?path.start:-48,end=path?path.end:course.length+85,samples=[];
-  for(let distance=start;distance<=end+4;distance+=4){
-    const d=Math.min(distance,end),profile=renderTunnelProfile(d,trackId,path),point=sewerPoint(d,profile.centreX||0,profile.centerY,trackId,path);
-    samples.push({...point,radius:profile.radius,distance:d});
+  const rows=Math.ceil((end-start)/2);
+  for(let row=0;row<=rows;row++){
+    const d=start+(end-start)*row/rows,profile=renderTunnelProfile(d,trackId,path),point=sewerPoint(d,profile.centreX||0,profile.centerY,trackId,path);
+    samples.push({...point,radius:profile.radius,distance:d,sectors:path?20:28});
   }
   return samples;
 }
@@ -62,16 +65,51 @@ function withinTube(point,samples,padding=.35) {
   }
   return false;
 }
-function tubeDistance(point,samples) {
+function tubeDistance(point,samples,clearance=0) {
+  const first=samples[0],last=samples.at(-1);
+  const before=-(point.x-first.x)*Math.sin(first.heading)-(point.z-first.z)*Math.cos(first.heading);
+  const after=-(point.x-last.x)*Math.sin(last.heading)-(point.z-last.z)*Math.cos(last.heading);
+  if(before<0)return -before+.04-clearance;
+  if(after>0)return after+.04-clearance;
   let nearest=1e5;
   for(let i=1;i<samples.length;i++){
     const a=samples[i-1],b=samples[i],dx=b.x-a.x,dz=b.z-a.z;
     const reach=Math.max(a.radius,b.radius)+1;
     if(point.x<Math.min(a.x,b.x)-reach||point.x>Math.max(a.x,b.x)+reach||point.z<Math.min(a.z,b.z)-reach||point.z>Math.max(a.z,b.z)+reach)continue;
     const f=clamp01(((point.x-a.x)*dx+(point.z-a.z)*dz)/(dx*dx+dz*dz||1));
-    nearest=Math.min(nearest,Math.hypot(point.x-a.x-dx*f,point.y-a.y-(b.y-a.y)*f,point.z-a.z-dz*f)-a.radius-(b.radius-a.radius)*f);
+    const length=Math.hypot(dx,dz)||1,localX=((point.x-a.x-dx*f)*-dz+(point.z-a.z-dz*f)*dx)/length,localY=point.y-a.y-(b.y-a.y)*f;
+    const sector=TAU/(a.sectors||28),angle=Math.atan2(localY,localX),edgeAngle=(Math.floor(angle/sector)+.5)*sector;
+    const radius=(a.radius+(b.radius-a.radius)*f)*Math.cos(sector/2)/Math.cos(angle-edgeAngle);
+    // Clip against the rendered polygonal bore, not a larger mathematical
+    // circle. A four-centimetre mortar overlap seals interpolation hairlines.
+    nearest=Math.min(nearest,Math.hypot(localX,localY)-radius+.04-clearance);
   }
   return nearest;
+}
+function clipTunnelPolygon(polygon,data,junctions,clearance=0){
+  const {positions,uv,colors,inside}=data;
+  for(let j=0;j<junctions.length&&polygon.length;j++){
+    const clipped=[];
+    for(let edge=0;edge<polygon.length;edge++){
+      const current=polygon[edge],next=polygon[(edge+1)%polygon.length],da=inside[current][j],db=inside[next][j];
+      if(da>=0)clipped.push(current);
+      if((da<0)===(db<0))continue;
+      let low=0,high=1;
+      for(let step=0;step<12;step++){
+        const f=(low+high)*.5,point={x:positions[current*3]+(positions[next*3]-positions[current*3])*f,y:positions[current*3+1]+(positions[next*3+1]-positions[current*3+1])*f,z:positions[current*3+2]+(positions[next*3+2]-positions[current*3+2])*f};
+        if((tubeDistance(point,junctions[j],clearance)<0)===(da<0))low=f;else high=f;
+      }
+      const f=(low+high)*.5,index=positions.length/3,point={};
+      for(let axis=0;axis<3;axis++){
+        const value=positions[current*3+axis]+(positions[next*3+axis]-positions[current*3+axis])*f;positions.push(value);
+        if(colors)colors.push(colors[current*3+axis]+(colors[next*3+axis]-colors[current*3+axis])*f);point[['x','y','z'][axis]]=value;
+      }
+      for(let axis=0;axis<2;axis++)uv.push(uv[current*2+axis]+(uv[next*2+axis]-uv[current*2+axis])*f);
+      inside.push(junctions.map(samples=>tubeDistance(point,samples,clearance)));clipped.push(index);
+    }
+    polygon=clipped;
+  }
+  return polygon;
 }
 function projectToSamples(point,samples) {
   let nearest=null,best=Infinity;
@@ -107,46 +145,56 @@ function pipeGeometry(course, start, end, trackId, path = null, junctions = []) 
       if(!path&&section.kind==='outfall'&&Math.abs(distance-(section.start+section.end)/2)<11&&Math.sin(angle)>.9&&Math.abs(Math.cos(angle)*profile.radius)<7.3)continue;
       const material=path?1:sectionMaterial(section.kind,trackId==='sewer-depths');
       for(const triangle of [[a,a+1,b],[a+1,b+1,b]]){
-        let polygon=triangle;
-        for(let j=0;j<junctions.length&&polygon.length;j++){
-          const clipped=[];
-          for(let edge=0;edge<polygon.length;edge++){
-            const current=polygon[edge],next=polygon[(edge+1)%polygon.length],da=inside[current][j],db=inside[next][j];
-            if(da>=0)clipped.push(current);
-            if((da<0)===(db<0))continue;
-            let low=0,high=1;
-            for(let step=0;step<10;step++){
-              const f=(low+high)*.5,point={x:positions[current*3]+(positions[next*3]-positions[current*3])*f,y:positions[current*3+1]+(positions[next*3+1]-positions[current*3+1])*f,z:positions[current*3+2]+(positions[next*3+2]-positions[current*3+2])*f};
-              if((tubeDistance(point,junctions[j])<0)===(da<0))low=f;else high=f;
-            }
-            const f=(low+high)*.5,index=positions.length/3,point={};
-            for(let axis=0;axis<3;axis++){const value=positions[current*3+axis]+(positions[next*3+axis]-positions[current*3+axis])*f;positions.push(value);colors.push(colors[current*3+axis]+(colors[next*3+axis]-colors[current*3+axis])*f);point[['x','y','z'][axis]]=value;}
-            for(let axis=0;axis<2;axis++)uv.push(uv[current*2+axis]+(uv[next*2+axis]-uv[current*2+axis])*f);
-            inside.push(junctions.map(samples=>tubeDistance(point,samples)));clipped.push(index);
-          }
-          polygon=clipped;
-        }
+        const polygon=clipTunnelPolygon(triangle,{positions,uv,colors,inside},junctions);
         for(let vertex=1;vertex<polygon.length-1;vertex++)groups[material].push(polygon[0],polygon[vertex],polygon[vertex+1]);
       }
+  }
+  if(!path)for(const [distance,row]of [[start,0],[end,rows]]){
+    const profile=renderTunnelProfile(distance,trackId),point=sewerPoint(distance,0,profile.centerY,trackId),centre=positions.length/3;
+    positions.push(point.x,point.y,point.z);uv.push(.5,.5);colors.push(.60,.59,.56);
+    for(let side=0;side<sectors;side++)groups[2].push(centre,row*(sectors+1)+side,row*(sectors+1)+side+1);
   }
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
   for(let index=0;index<groups.length;index++){geometry.addGroup(indices.length,groups[index].length,index);indices.push(...groups[index]);}
   geometry.setIndex(indices); geometry.computeVertexNormals(); return geometry;
 }
+function waterEdge(distance,trackId,path,side,mainSamples=null){
+  const profile=renderTunnelProfile(distance,trackId,path);
+  if(!path)return profile.halfWidth+1.10;
+  let low=profile.halfWidth,high=profile.radius+.4;
+  for(let step=0;step<12;step++){
+    const lane=(low+high)/2,height=sewerWaterHeight(path.entryX+side*lane,distance,0,trackId,path);
+    if(lane*lane+(height-profile.centerY)**2<profile.radius**2)low=lane;else high=lane;
+  }
+  let edge=low+.22;
+  if(mainSamples){
+    const candidate=profile.radius+.25,point=sewerPoint(distance,path.entryX+side*candidate,0,trackId,path),main=projectToSamples(point,mainSamples);
+    if(main){
+      const mainProfile=sewerTunnelProfile(main.distance,trackId),atSurface=Math.sqrt(Math.max(0,mainProfile.radius**2-mainProfile.centerY**2));
+      // A bore opening through a larger chamber has no branch sidewall here.
+      // Fill its whole deck notch with water rather than ending at the small
+      // standalone pipe's waterline and exposing the deep outside basin.
+      edge=THREE.MathUtils.lerp(edge,candidate,THREE.MathUtils.smoothstep(atSurface-Math.abs(main.x),-.10,.45));
+    }
+  }
+  return edge;
+}
 function waterGeometry(start, end, trackId, path = null, mainSamples = null) {
-  const positions = [], uv = [], flow=[],indices = [], columns = path ? 6 : 14, rows = Math.max(1, Math.ceil((end - start) / 4));
-  const width=sewerTunnelProfile((start+end)/2,trackId,path).halfWidth+.68,centreX=path?.entryX||0,samples=[];
+  const positions = [], uv = [], flow=[],indices = [], columns = path ? 12 : 18, rows = Math.max(1, Math.ceil((end - start) / 2));
+  const centreX=path?.entryX||0,samples=[];
   for (let row = 0; row <= rows; row++) for (let column = 0; column <= columns; column++) {
-    const distance = start + (end - start) * row / rows, x = centreX + (column / columns * 2 - 1) * width;
+    const distance = start + (end - start) * row / rows,profile=renderTunnelProfile(distance,trackId,path);
+    const lane=column===0?-waterEdge(distance,trackId,path,-1,mainSamples):column===columns?waterEdge(distance,trackId,path,1,mainSamples):((column-1)/(columns-2)*2-1)*profile.halfWidth;
+    const x=centreX+lane;
     const point = sewerPoint(distance, x, sewerWaterHeight(x, distance, 0, trackId, path), trackId, path);
     positions.push(point.x, point.y, point.z);flow.push(Math.sin(point.heading),Math.cos(point.heading));
     const sample={distance,x};
-    let u=column/columns,v=distance/10;
+    let u=(lane/(profile.halfWidth+1.10)+1)/2,v=distance/10;
     if(path&&mainSamples){
       const main=projectToSamples(point,mainSamples);
       if(main){
-        const mainWidth=sewerTunnelProfile(main.distance,trackId).halfWidth+.68;
+        const mainWidth=sewerTunnelProfile(main.distance,trackId).halfWidth+1.10;
         // Share the main canal's texture coordinates throughout a junction.
         // This removes the false triangular colour seam between water sheets.
         const join=1-THREE.MathUtils.smoothstep(Math.abs(main.x),mainWidth,mainWidth+5);
@@ -164,27 +212,18 @@ function waterGeometry(start, end, trackId, path = null, mainSamples = null) {
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));geometry.setAttribute('flow',new THREE.Float32BufferAttribute(flow,2)); geometry.setIndex(indices); geometry.computeVertexNormals();
   geometry.computeBoundingBox();geometry.computeBoundingSphere();geometry.userData = { samples, trackId, path,start,end }; return geometry;
 }
-function waterMaterial(style,cuts=[],cutEnds=[]) {
-  // This authored retro shader outputs display values directly, like the
-  // ocean shader. Keep the green palette and fog in the same colour space.
-  const colour=hex=>new THREE.Color().setHex(hex,THREE.LinearSRGBColorSpace);
-  return new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { time: { value: 0 }, base: { value: colour(style.water) }, foam: { value: colour(style.foam) }, fog: { value: colour(style.fog) },lamp:{value:colour(style.light)},
-    holeCount:{value:0},holes:{value:Array.from({length:SEWER_WHIRLPOOL_MASKS},()=>new THREE.Vector4())},holeAngles:{value:new Float32Array(SEWER_WHIRLPOOL_MASKS)},
-    cutCount:{value:Math.min(32,cuts.length)},cuts:{value:Array.from({length:32},(_,i)=>cuts[i]||new THREE.Vector4())},cutEnds:{value:Array.from({length:32},(_,i)=>cutEnds[i]||new THREE.Vector2())},cutWidth:{value:3.80} },
-    vertexShader: 'attribute vec2 flow;varying vec2 uvWater;varying vec3 world;varying vec2 flowDir;void main(){uvWater=uv;flowDir=flow;world=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(world,1.);}',
-    fragmentShader: `uniform float time;uniform vec3 base;uniform vec3 foam;uniform vec3 fog;uniform vec3 lamp;uniform int holeCount;uniform vec4 holes[8];uniform float holeAngles[8];uniform int cutCount;uniform vec4 cuts[32];uniform vec2 cutEnds[32];uniform float cutWidth;varying vec2 uvWater;varying vec3 world;varying vec2 flowDir;
-      void main(){for(int i=0;i<32;i++){if(i>=cutCount)break;vec2 a=cuts[i].xy,b=cuts[i].zw,delta=b-a;float t=dot(world.xz-a,delta)/dot(delta,delta);if((t<0.&&cutEnds[i].x>.5)||(t>1.&&cutEnds[i].y>.5))continue;if(distance(world.xz,a+delta*clamp(t,0.,1.))<cutWidth)discard;}
-      for(int i=0;i<8;i++){if(i>=holeCount)break;vec2 d=world.xz-holes[i].xy;float c=cos(holeAngles[i]),s=sin(holeAngles[i]);vec2 local=vec2(c*d.x-s*d.y,s*d.x+c*d.y);if(length(local/holes[i].zw)<.93)discard;}
-      float across=uvWater.x,along=uvWater.y*10.,drift=along+time*3.8;
-      float longWave=sin(across*29.+sin(along*.19)*.55+time*.4),fine=sin(drift*2.7+sin(across*69.)*.28);
-      float channels=.92+.055*sin(across*31.+sin(along*.11))+.045*fine;
-      float crests=pow(max(0.,fine),21.)*smoothstep(.45,.8,longWave);
-      float edge=smoothstep(.35,.5,abs(across-.5)),foamEdge=edge*pow(max(0.,sin(drift*.8+across*17.)),8.);
-      vec3 colour=base*channels;colour=mix(colour,foam,crests*.16+foamEdge*.23);
-      float reflection=pow(max(0.,cos(along/42.*6.28318)),30.)*pow(abs(across-.5)*2.,3.);
-      float broken=.6+.4*sin(drift*4.+across*27.);colour=mix(colour,lamp,reflection*broken*.22);
-      vec3 view=normalize(cameraPosition-world);float sheen=pow(1.-abs(view.y),4.)*.09;colour+=vec3(.12,.24,.19)*sheen;
-      colour=mix(colour,fog,smoothstep(90.,265.,length(world-cameraPosition)));gl_FragColor=vec4(floor(colour*64.)/64.,1.);}` });
+function channelBedGeometry(start,end,trackId,path=null,mainSamples=null){
+  const positions=[],uv=[],indices=[],rows=Math.ceil((end-start)/3),columns=10;
+  for(let row=0;row<=rows;row++){
+    const distance=start+(end-start)*row/rows;
+    for(let column=0;column<=columns;column++){
+      const across=column/columns*2-1,extent=waterEdge(distance,trackId,path,across<0?-1:1,mainSamples)+.20;
+      const lane=across*extent,depth=path?1.65:2.6,y=-depth+(depth-.18)*across*across;
+      const point=sewerPoint(distance,(path?.entryX||0)+lane,y,trackId,path);positions.push(point.x,point.y,point.z);uv.push(lane/4,distance/8);
+      if(row<rows&&column<columns){const a=row*(columns+1)+column,b=a+columns+1;indices.push(a,b,a+1,a+1,b,b+1);}
+    }
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex(indices);geometry.computeVertexNormals();return geometry;
 }
 function makeLabel(text, accent = '#d8db7c') {
   if (typeof document === 'undefined') return new THREE.Group();
@@ -206,34 +245,6 @@ function makeRing(checkpoint) {
   }
   const label = makeLabel(checkpoint.finish ? 'FINISH' : `${String(checkpoint.index + 1).padStart(2, '0')}  SUN RING`, '#ffc95c'); label.position.y = radius + 1.05; group.add(label);
   return { group, rim, rays, checkpoint, material };
-}
-function closingWaveGeometry() {
-  const geometry=new THREE.BufferGeometry(),rows=18,sectors=24,positions=new Float32Array((rows+1)*(sectors+1)*3),uv=[],indices=[];
-  for(let row=0;row<=rows;row++)for(let side=0;side<=sectors;side++)uv.push(side/sectors,row/rows);
-  for(let row=0;row<rows;row++)for(let side=0;side<sectors;side++){
-    const a=row*(sectors+1)+side,b=a+sectors+1;indices.push(a,a+1,b,a+1,b+1,b);
-  }
-  geometry.setAttribute('position',new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex(indices);
-  geometry.userData={rows,sectors};return geometry;
-}
-function updateClosingWave(geometry,item,trackId,time,closure) {
-  const {rows,sectors}=geometry.userData,positions=geometry.attributes.position;
-  for(let row=0;row<=rows;row++)for(let side=0;side<=sectors;side++){
-    const u=row/rows,alongCurl=THREE.MathUtils.smoothstep(u,0,.18)*(1-THREE.MathUtils.smoothstep(u,.82,1));
-    const curlSpan=(.42+.58*clamp01(closure*1.45))*alongCurl,angle=side/sectors*Math.PI*curlSpan,distance=item.startDistance+(item.endDistance-item.startDistance)*u;
-    const curl=Math.pow(Math.sin(Math.PI*u),.65),crash=clamp01((closure-.96)/.04);
-    const height=(7.0+(1-curl)*5.5-closure*1.5)*(1-crash*.98);
-    const lane=Math.cos(angle)*(item.width/2+.6),surface=sewerWaterHeight(lane,distance,time,trackId);
-    const point=sewerPoint(distance,lane,surface+Math.sin(angle)*height+.12,trackId);
-    positions.setXYZ(row*(sectors+1)+side,point.x,point.y,point.z);
-  }
-  positions.needsUpdate=true;geometry.computeVertexNormals();geometry.computeBoundingSphere();
-}
-function waveMaterial(style){
-  const color=hex=>new THREE.Color().setHex(hex,THREE.LinearSRGBColorSpace);
-  return new THREE.ShaderMaterial({side:THREE.DoubleSide,uniforms:{time:{value:0},water:{value:color(style.water)},foam:{value:color(style.foam)},fog:{value:color(style.fog)}},
-    vertexShader:'varying vec2 coords;varying vec3 world;void main(){coords=uv;world=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(world,1.);}',
-    fragmentShader:`uniform float time;uniform vec3 water;uniform vec3 foam;uniform vec3 fog;varying vec2 coords;varying vec3 world;void main(){float streak=pow(max(0.,sin(coords.x*94.+coords.y*6.+time*2.5)),22.);float crown=smoothstep(.18,.42,coords.x)*(1.-smoothstep(.58,.82,coords.x));float lip=smoothstep(.94,.995,coords.x)*(.48+.16*sin(coords.y*39.+time*4.));vec3 colour=water*(.85+.15*sin(coords.x*3.14159));colour=mix(colour,foam,streak*(.16+crown*.32)+lip);colour=mix(colour,fog,smoothstep(90.,265.,length(world-cameraPosition)));gl_FragColor=vec4(floor(colour*64.)/64.,1.);}`});
 }
 function hazardMesh(item, style,trackId) {
   const group = new THREE.Group(); group.name = `sewer-${item.type}-${item.id}`; group.userData = { hazardId: item.id, type: item.type, path: item.path || 'main' };
@@ -259,9 +270,7 @@ function hazardMesh(item, style,trackId) {
   } else if (item.type === 'barrel') {
     const water = waveMaterial(style);
     const roll = addMesh(group,closingWaveGeometry(),water);roll.name='sewer-closing-wave';roll.frustumCulled=false;
-    const foam = new THREE.MeshBasicMaterial({ color: style.foam });
-    const crash=new THREE.Group();crash.name='sewer-pressure-crash';crash.visible=false;group.add(crash);
-    for(let i=0;i<9;i++){const tumble=addMesh(crash,new THREE.IcosahedronGeometry(1,1),i%3===0?foam:new THREE.MeshLambertMaterial({color:style.water,flatShading:true}),(i%3-1)*item.width*.32,Math.floor(i/3)*2.5-3,Math.sin(i*1.7)*1.8);tumble.scale.set(item.width*.22,2.3,2.1);}
+    const crash=createSewerWaveCrash(style,item);group.add(crash);
     const label=makeLabel('PRESSURE WAVE','#d8db7c');group.add(label);
     group.userData.roll=roll;group.userData.crash=crash;group.userData.label=label;
   }
@@ -287,14 +296,26 @@ function deckGeometry(course,trackId,side,branchSamples){
   const positions=[],uv=[],indices=[],rows=Math.ceil((course.length+110)/4),inside=[];
   for(let row=0;row<=rows;row++){
     const distance=-40+(course.length+110)*row/rows,profile=sewerTunnelProfile(distance,trackId);
-    const inner=course.halfWidth+.88,outer=Math.max(inner+.28,Math.sqrt(profile.radius**2-(1.85-profile.centerY)**2)-.12);
+    const inner=course.halfWidth+.88,outer=Math.max(inner+.28,Math.sqrt(profile.radius**2-(1.85-profile.centerY)**2)+.25);
     for(const [lane,y]of [[inner,.25],[inner,1.85],[outer,1.85]]){
       const point=sewerPoint(distance,side*lane,y,trackId);positions.push(point.x,point.y,point.z);uv.push(lane/3,distance/8);
-      inside.push(branchSamples.some(samples=>withinTube(point,samples,.7)));
+      inside.push(branchSamples.map(samples=>tubeDistance(point,samples,.06)));
     }
   }
   for(let row=0;row<rows;row++)for(let column=0;column<2;column++){
-    const a=row*3+column,b=a+3;if(inside[a]||inside[a+1]||inside[b]||inside[b+1])continue;indices.push(a,b,a+1,a+1,b,b+1);
+    const a=row*3+column,b=a+3;
+    for(const triangle of [[a,b,a+1],[a+1,b,b+1]]){
+      const polygon=clipTunnelPolygon(triangle,{positions,uv,inside},branchSamples,.06);
+      for(let vertex=1;vertex<polygon.length-1;vertex++)indices.push(polygon[0],polygon[vertex],polygon[vertex+1]);
+      for(let vertex=0;vertex<polygon.length;vertex++){
+        const first=polygon[vertex],last=polygon[(vertex+1)%polygon.length];
+        if(Math.abs(positions[first*3+1]-1.85)>.001||Math.abs(positions[last*3+1]-1.85)>.001)continue;
+        if(!branchSamples.some((_,index)=>Math.abs(inside[first][index])<.025&&Math.abs(inside[last][index])<.025))continue;
+        const bottom=positions.length/3;
+        for(const index of [first,last]){positions.push(positions[index*3],-.24,positions[index*3+2]);uv.push(uv[index*2],uv[index*2+1]-.4);inside.push([]);}
+        indices.push(first,bottom,last,last,bottom,bottom+1);
+      }
+    }
   }
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geometry.setIndex(indices);geometry.computeVertexNormals();return geometry;
 }
@@ -381,13 +402,13 @@ function makeOutfall(section,course,trackId,materials){
 export function createSewerWorld(playerProfile) {
   const group = new THREE.Group(); group.name = 'sewer-tracks'; group.visible = false;
   let course = null, trackId = null, player = playerProfile, opponent = null, opponentLabel = null, disposed = false,rivalKey='';
-  let water = [], rings = [], hazards = [], props = [], shortcutSigns = [], materials = [], style = sewerTrackStyle('sewer-run');
+  let water = [], rings = [], hazards = [], props = [], shortcutSigns = [], materials = [], outfalls = null, style = sewerTrackStyle('sewer-run');
   const resources = new Set();
   function clear() {
     if (opponent) { group.remove(opponent.rig); disposeSurfer(opponent); }
     group.traverse(object => { if (object.geometry) resources.add(object.geometry); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) { resources.add(material); if (material.map) resources.add(material.map); } });
     for (const resource of resources) resource.dispose(); resources.clear(); group.clear();
-    water = []; rings = []; hazards = []; props = []; shortcutSigns = []; materials = []; opponent = null; opponentLabel = null; course = null;rivalKey=''; group.visible = false;
+    water = []; rings = []; hazards = []; props = []; shortcutSigns = []; materials = []; opponent = null; opponentLabel = null; course = null;outfalls = null;rivalKey=''; group.visible = false;
   }
   function prepare(game) {
     clear(); course = game.course; trackId = game.trackId || course.trackId || 'sewer-run'; style = sewerTrackStyle(trackId);
@@ -404,16 +425,27 @@ export function createSewerWorld(playerProfile) {
     const light = new THREE.MeshBasicMaterial({ color: style.light });
     const mainSamples=tunnelSamples(course,trackId),branchSamples=(course.shortcuts||[]).map(shortcut=>tunnelSamples(course,trackId,shortcut));
     const tunnel = addMesh(group, pipeGeometry(course, -45, course.length + 80, trackId,null,branchSamples), wall); tunnel.name = 'sewer-main-pipe'; tunnel.userData = { radius: SEWER_TUNNEL_RADIUS, centreY: SEWER_TUNNEL_CENTRE_Y };
+    const bedMaterial=new THREE.MeshLambertMaterial({color:0x394332,map:masonryTexture(true),flatShading:true,side:THREE.DoubleSide});
+    const addBed=(start,end,path=null)=>{const bed=addMesh(group,channelBedGeometry(start,end,trackId,path,mainSamples),bedMaterial);bed.name=`sewer-channel-bed-${path?.id||'main'}`;bed.userData={underwater:true,pathId:path?.id||'main'};};
+    addBed(-45,course.length+80);
     const addWater=(start,end,path=null)=>{
       const geometry=waterGeometry(start,end,trackId,path,mainSamples),cuts=[],cutEnds=[];
       if(!path){
         const bounds=geometry.boundingBox;
-        for(const samples of branchSamples)for(let i=0;i<samples.length-1;i+=2){
-          const a=samples[i],b=samples[Math.min(i+2,samples.length-1)];
-          if(Math.hypot(b.x-a.x,b.z-a.z)<.001)continue;
-          if(Math.max(a.x,b.x)<bounds.min.x-4||Math.min(a.x,b.x)>bounds.max.x+4||Math.max(a.z,b.z)<bounds.min.z-4||Math.min(a.z,b.z)>bounds.max.z+4)continue;
-          cuts.push(new THREE.Vector4(a.x,a.z,b.x,b.z));
-          cutEnds.push(new THREE.Vector2(i===0?1:0,i+2>=samples.length-1?1:0));
+        for(const shortcut of course.shortcuts||[]){
+          const segments=Math.ceil((shortcut.end-shortcut.start)/8);
+          for(let i=0;i<segments;i++){
+            const a=sewerPoint(shortcut.start+(shortcut.end-shortcut.start)*i/segments,shortcut.entryX,0,trackId,shortcut);
+            const b=sewerPoint(shortcut.start+(shortcut.end-shortcut.start)*(i+1)/segments,shortcut.entryX,0,trackId,shortcut);
+            const length=Math.hypot(b.x-a.x,b.z-a.z);
+            // Equal segments avoid a short final capsule reaching past the
+            // exit. The end planes use the actual mouth tangents, matching
+            // the first/last water rows rather than an approximate chord.
+            if(i===0){b.x=a.x-Math.sin(a.heading)*length;b.z=a.z-Math.cos(a.heading)*length;}
+            if(i===segments-1){a.x=b.x+Math.sin(b.heading)*length;a.z=b.z+Math.cos(b.heading)*length;}
+            if(Math.max(a.x,b.x)<bounds.min.x-4||Math.min(a.x,b.x)>bounds.max.x+4||Math.max(a.z,b.z)<bounds.min.z-4||Math.min(a.z,b.z)>bounds.max.z+4)continue;
+            cuts.push(new THREE.Vector4(a.x,a.z,b.x,b.z));cutEnds.push(new THREE.Vector2(i===0?1:0,i===segments-1?1:0));
+          }
         }
       }
       const material=waterMaterial(style,cuts,cutEnds),stream=addMesh(group,geometry,material);materials.push(material);water.push(stream);
@@ -457,6 +489,7 @@ export function createSewerWorld(playerProfile) {
     }
     for (const shortcut of course.shortcuts || []) {
       const branch = addMesh(group, pipeGeometry(course, shortcut.start, shortcut.end, trackId, shortcut,[mainSamples]), wall); branch.name = `shortcut-pipe-${shortcut.id}`; branch.userData = { shortcutId: shortcut.id, start: shortcut.start, end: shortcut.end };
+      addBed(shortcut.start,shortcut.end,shortcut);
       for(let start=shortcut.start;start<shortcut.end;start+=SEWER_WATER_CHUNK_LENGTH)addWater(start,Math.min(shortcut.end,start+SEWER_WATER_CHUNK_LENGTH),shortcut);
       for(let distance=shortcut.start+20;distance<shortcut.end-16;distance+=28){
         const profile=renderTunnelProfile(distance,trackId,shortcut),centre=sewerPoint(distance,shortcut.entryX,3,trackId,shortcut),main=projectToSamples(centre,mainSamples);
@@ -481,6 +514,7 @@ export function createSewerWorld(playerProfile) {
     }
     for (const checkpoint of [...(course.checkpoints || []),{index:course.checkpoints.length,distance:course.length,x:0,radius:10.9,finish:true}]) { const ring = makeRing(checkpoint); rings.push(ring); group.add(ring.group); }
     for (const item of course.hazards || []) { const mesh = hazardMesh(item, style,trackId); hazards.push({ mesh, item }); group.add(mesh); }
+    outfalls=createSewerOutfalls(course,trackId,style);group.add(outfalls.group);
     if (game.opponent && typeof document !== 'undefined') {
       opponent = createSurfer(rivalProfile(game.rival, player)); opponent.rig.name = 'sewer-rival'; group.add(opponent.rig);
       opponentLabel = makeLabel(game.rival?.name || 'RIVAL', '#efbc63'); opponentLabel.scale.set(1.8, .45, 1); group.add(opponentLabel);
@@ -492,6 +526,7 @@ export function createSewerWorld(playerProfile) {
     if (!game.isSewer || !game.course) { group.visible = false; return; }
     if (course !== game.course || trackId !== game.trackId||rivalKey!==JSON.stringify([game.rival?.id,game.rival?.name,game.rival?.profile,!!game.opponent])) prepare(game);
     group.visible = true;
+    outfalls?.update(time,game.distance,SEWER_DRAW_AHEAD);
     const whirlpools=hazards.filter(({item})=>item.type==='whirlpool'&&item.distance>game.distance-60&&item.distance<game.distance+SEWER_DRAW_AHEAD).sort((a,b)=>Math.abs(a.item.distance-game.distance)-Math.abs(b.item.distance-game.distance)).slice(0,SEWER_WHIRLPOOL_MASKS);
     for (const material of materials){
       material.uniforms.time.value = time;material.uniforms.holeCount.value=whirlpools.length;
@@ -533,7 +568,7 @@ export function createSewerWorld(playerProfile) {
         const closure = clamp01(state.closure ?? 1 - (state.opening ?? 1));
         if(mesh.visible){updateClosingWave(mesh.userData.roll.geometry,item,trackId,time,closure);mesh.userData.roll.material.uniforms.time.value=time;}
         positionAlong(mesh.userData.label,item.startDistance-6,0,7,trackId);
-        positionAlong(mesh.userData.crash,item.distance,0,6,trackId);mesh.userData.crash.visible=closure>=1;
+        updateSewerWaveCrash(mesh.userData.crash,item,trackId,time,closure);
         mesh.userData.closure = closure;
       }
     }
