@@ -8,7 +8,7 @@
 export const CHARACTER_TARGETS = Object.freeze({
   headHeight:      { min: .122, max: .143, label: 'Crown to chin / height' },
   headWidth:       { min: .074, max: .102, label: 'Head width / height' },
-  shoulderWidth:   { min: .252, max: .305, label: 'Garment shoulder width / height, excluding elbows' },
+  shoulderWidth:   { min: .252, max: .305, label: 'Sweatshirt shoulder width / height, excluding elbows' },
   shoulderJointWidth: { min: .200, max: .262, label: 'Shoulder joint separation / height' },
   chestWidth:      { min: .215, max: .279, label: 'Garment chest width / height' },
   hipWidth:        { min: .185, max: .255, label: 'Garment hip width / height' },
@@ -31,6 +31,17 @@ export const CHARACTER_TARGETS = Object.freeze({
   cuffToKnee:     { min: .640, max: 1.030, label: 'Baggy trouser cuff width / knee width' },
   exposedNeck:    { min: .006, max: .040, label: 'Visible collar to jaw distance / height' },
   maxClothGap:    { min: 0, max: .006, label: 'Maximum measured cloth seam separation / height' },
+});
+
+// The navy/red/pink tees and grey T-pose tee have less shoulder bulk than the
+// grey/yellow sweatshirts. These are separate estimated silhouette envelopes,
+// not different anatomical skeletons. Selecting a tee narrows the upper bound
+// as well as the lower bound; the established sweatshirt guardrail is intact.
+// Use actual shoulder-height triangle slices, excluding hanging elbows, and
+// normalize intentional character build variation before auditing this ratio.
+export const GARMENT_TARGETS = Object.freeze({
+  tee: Object.freeze({ shoulderWidth: Object.freeze({ min: .230, max: .280, label: 'Tee or shirt shoulder width / height, excluding elbows' }) }),
+  sweatshirt: Object.freeze({ shoulderWidth: CHARACTER_TARGETS.shoulderWidth }),
 });
 
 export const CHARACTER_VISUAL_CHECKS = Object.freeze([
@@ -127,9 +138,10 @@ export function auditCharacterProportions(measurement, options = {}) {
   const required = options.required || ['headHeight', 'shoulderWidth', 'shoulderY', 'kneeY', 'upperArm', 'forearm', 'thigh', 'shin'];
   const strict = options.strict ?? true;
   const ratios = measurement?.ratios || {};
+  const targets = { ...CHARACTER_TARGETS, ...GARMENT_TARGETS[options.garment] };
   const checks = [];
   const missing = [];
-  for (const [key, target] of Object.entries(CHARACTER_TARGETS)) {
+  for (const [key, target] of Object.entries(targets)) {
     const value = ratios[key];
     if (value === undefined) {
       if (required.includes(key)) missing.push(key);

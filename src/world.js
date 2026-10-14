@@ -497,7 +497,8 @@ export class SurfWorld {
     s.boardPivot.rotation.order='YXZ';
     s.boardPivot.rotation.set(boardPitch,boardSpin,flip+boardBank);
     s.boardPivot.position.set(boardSide,(air?.12:0)+boardLift,boardBack);
-    s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,cutbackDirection:game.cutbackDirection||1});
+    s.rig.userData.railBalance=THREE.MathUtils.damp(s.rig.userData.railBalance||0,game.grinding&&!bail?1:0,12,dt);
+    s.pose?.({charge:game.charge,grab,air,time:t,lean,mode:game.mode,lipGrab,tweak,comboPose,cutback,balance:s.rig.userData.railBalance,cutbackDirection:game.cutbackDirection||1});
     s.rider.visible = !bail || Math.floor(t * 12) % 2 === 0;
     this.captureLiveEye(game);
     const ground=isPark?(surface?.height??parkHeight(x,z)):contactOcean?alignSurfRiderToOcean(x,waveHeight(x,z,t),z,t,oceanZ,contactBarrel):waveHeight(x,z,t);

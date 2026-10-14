@@ -61,14 +61,16 @@ test('signature held frames keep hands on actual deck triangles and feet planted
   for(const character of Object.keys(SURFER_SPECIALS))for(const outfit of ['riptide','aloha','reefskin','yardcrew']){
     const s=make(character,outfit),parent=new THREE.Group();parent.position.set(13,3,-27);parent.rotation.set(.18,.71,-.11);parent.add(s.rig);
     try{
+      s.pose({mode:'surf'});
+      const bindings=['left','right'].map(side=>[side,s.board.worldToLocal(s.landmarks[side+'Ankle'].clone()),s.board.worldToLocal(s.landmarks[side+'Toe'].clone())]);
       for(const mode of ['surf','park'])for(const p of [.01,.1,.20,.22,.5,.8,.9,.99]){
         const a=pose(s,character,p,true,mode),label=`${character}/${outfit}/${mode}/${p}`,rows=meshes(s),lm=s.landmarks;
         for(const side of ['left','right'])for(const [one,two,length]of[['Shoulder','Elbow',.32],['Elbow','Wrist',.29],['Wrist','Fingertip',.15],['Hip','Knee',.478],['Knee','Ankle',.45]]){
           assert.ok(Math.abs(lm[side+one].distanceTo(lm[side+two])-length)<.003,`${label}: stretched ${side} ${one}-${two}`);
         }
         for(const row of rows){assert.ok(points(row).every(v=>[v.x,v.y,v.z].every(Number.isFinite)),`${label}: invalid geometry`);assert.ok([...row.geometry.attributes.normal.array].every(Number.isFinite),`${label}: invalid normals`);}
-        if(a.comboPose?.plantFeet>0)for(const[side,ankle,toe]of[['left',[-.035,.215,-.34],[.163,.181,-.36]],['right',[-.069,.215,.36],[.128,.181,.395]]]){
-          const expectedAnkle=s.board.localToWorld(new THREE.Vector3(...ankle)),expectedToe=s.board.localToWorld(new THREE.Vector3(...toe));
+        if(a.comboPose?.plantFeet>0)for(const[side,ankle,toe]of bindings){
+          const expectedAnkle=s.board.localToWorld(ankle.clone()),expectedToe=s.board.localToWorld(toe.clone());
           assert.ok(lm[side+'Ankle'].distanceTo(expectedAnkle)<1e-7,`${label}: foot left board`);
           assert.ok(lm[side+'Toe'].distanceTo(expectedToe)<1e-7,`${label}: toe left board`);
         }

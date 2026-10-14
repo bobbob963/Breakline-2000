@@ -87,13 +87,16 @@ function clothGeometry(rings,{capEnd=false,invertV=false}={}){
   if(capEnd){const c=p.length/3;p.push(0,rings.at(-1)[0],0);uv.push(.25,0);for(let j=0;j<8;j++)ix.push(c,(rings.length-1)*9+j+1,(rings.length-1)*9+j);}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(ix);g.computeVertexNormals();return g;
 }
-function clothChain(parent,rings,material,name){
+function clothChain(parent,rings,material,name,seamOrigin=false){
   const model=mesh(parent,clothGeometry(rings,{capEnd:true,invertV:true}),material),g=model.geometry,p=g.attributes.position,q=new THREE.Quaternion(),basis=new THREE.Matrix4();model.name=name;model.userData.rootIndices=Array.from({length:8},(_,i)=>i);
   return{model,set(a,b,c,root=null){
     const va=V(a),vb=V(b),vc=V(c),ab=vb.clone().sub(va).normalize(),bc=vc.clone().sub(vb).normalize();
+    // Shorts start at the sewn seat, below the anatomical hip. Growing their
+    // first cloth ring from the bone made it protrude upward during a crouch.
+    const clothStart=seamOrigin&&root?root.reduce((sum,p)=>sum.add(V(p)),new THREE.Vector3()).divideScalar(root.length):va;
     rings.forEach(([t,rx,rz,ox=0,oz=0],i)=>{
       if(i===0&&root){root.forEach((v,j)=>p.setXYZ(j,...v));p.setXYZ(8,...root[0]);return;}
-      const centre=(t<=1?va:vb).clone().lerp(t<=1?vb:vc,t<=1?t:t-1);
+      const centre=(t<=1?clothStart:vb).clone().lerp(t<=1?vb:vc,t<=1?t:t-1);
       const dir=ab.clone().lerp(bc,THREE.MathUtils.smoothstep(t,.70,1.32)).normalize();
       // Keep cloth's front/back aligned through the bend. UP-to-direction is
       // underdetermined near a downward limb and caused a 180-degree spiral
@@ -115,7 +118,7 @@ function shirtShell(body,rings,material,{sleeves=false,open=false,loose=false}={
   if(loose){
     // Cloth spans the chest, settles into the waist and hangs in an uneven
     // hem. These are authored silhouette folds, not noise in the texture.
-    const hem=[-.003,.004,-.012,-.006,.008,.003,-.009,-.004,-.003];
+    const hem=[.003,-.009,-.019,-.004,.009,-.011,-.023,-.006,.003];
     for(let j=0;j<9;j++)positions.setY(j,rings[0][0]+hem[j]);
     for(const r of [2,3])for(const j of [1,2,3])positions.setZ(r*9+j,positions.getZ(r*9+j)+.008);
     for(const j of [5,7])positions.setZ(2*9+j,positions.getZ(2*9+j)-.009);
@@ -158,7 +161,8 @@ export function createCharacter({id,character,outfit,fabricTexture}){
   // The chest has a pectoral volume, a narrower abdomen and a sloping shoulder
   // yoke. Loose tops hang almost straight from the chest over the waistband.
   const chestRings=[[-.08,.155*build,.098],[.075,.146*build,.100],[.25,.188*build,.127,0,-.008],[.397,.202*build,.120,0,.002],[.452,.184*build,.091],[.487,.103,.063],[.503,.063,.051]];
-  const garmentRings=[[-.115,.213*build,.141],[.06,.202*build,.131,0,.003],[.25,.224*build,.147,0,-.006],[.397,.225*build,.138,0,.003],[.455,.240*build,.106],[.487,.108,.068],[.503,.065,.056]];
+  const tee=loose&&!sweat;
+  const garmentRings=[[-.115,.213*build,.141],[.06,.202*build,.131,0,.003],[.25,(tee?.211:.224)*build,tee?.140:.147,0,-.006],[.397,(tee?.213:.225)*build,tee?.132:.138,0,.003],[.455,(tee?.226:.240)*build,.106],[.487,.108,.068],[.503,.065,.056]];
   const chest=mesh(body,clothGeometry(chestRings),skin);chest.name='chest';
   let shell=null;
   if(!bare){
@@ -209,7 +213,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     const hand=segment(group,[[0,.023,.014],[.23,.034,.019],[.56,.037,.018],[.76,.034,.015,0,.002],[.94,.028,.010,0,.001],[1,.021,.008]],skin);hand.model.name=prefix+'-hand';
     const thumb=segment(group,[[0,.013,.011],[.47,.012,.01],[1,.007,.007]],skin);thumb.model.name=prefix+'-thumb';
     let points;
-    return{group,set(shoulder,elbow,wrist,grip=0,handTarget=null){
+    return{group,set(shoulder,elbow,wrist,grip=0,handTarget=null,wristBend=0){
       const reach=V(wrist).sub(V(shoulder));
       if(reach.length()<.04)reach.set(0,-.04,0);else reach.clampLength(.04,.6099);
       wrist=V(shoulder).add(reach).toArray();
@@ -219,7 +223,7 @@ export function createCharacter({id,character,outfit,fabricTexture}){
       const dir=V(wrist).sub(V(elbow)).normalize();
       // Rotate a fixed-length hand toward the deck during reach/release. Full
       // contact is held by the wrist IK, never by stretching the hand mesh.
-      const handDirection=handTarget?dir.clone().lerp(V(handTarget).sub(V(wrist)).normalize(),grip).normalize():dir;
+      const handDirection=handTarget?dir.clone().lerp(V(handTarget).sub(V(wrist)).normalize(),grip).normalize():dir.clone().lerp(V([side*.8,-.25,-.20]).normalize(),wristBend).normalize();
       const tip=V(wrist).addScaledVector(handDirection,.150);hand.set(wrist,tip.toArray());points.fingertip=tip.toArray();
       const base=V(wrist).addScaledVector(dir,.036);base.x-=side*.031;thumb.set(base.toArray(),base.clone().add(new THREE.Vector3(-side*.018,-.050,-.012)).toArray());
     },get points(){return points;}};
@@ -232,7 +236,11 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     skinUpper.model.name=prefix+'-thigh';skinLower.model.name=prefix+'-calf';
     const kneeFold=[-.003,.010,-.018,.006,.002,-.004,.012,-.006],ankleFold=[.008,-.008,.018,-.005,-.010,.008,-.016,.006];
     const kneePlane=[0,.055,.025,-.035,0,0,-.025,.025],cuffPlane=[.035,.045,-.025,-.025,0,.015,.045,-.015];
-    const cloth=!wet?clothChain(rider,trousers?[[0,.113,.104],[.52,.121,.114],[.79,.117,.108,side*.003,-.006],[1.01,.105,.107,0,-.006,kneeFold,kneePlane],[1.25,.098,.089,0,.005],[1.51,.105,.099,-side*.003,.006],[1.75,.112,.105,-side*.004,.002,ankleFold,cuffPlane],[1.91,.103,.088,side*.003,0],[2,.110,.098,0,0,ankleFold,cuffPlane]]:[[0,.113,.102],[.56,.124,.110],[.80,.120,.109],[1.00,.113,.103,0,.003,kneeFold,kneePlane],[1.13,.113,.098]],shorts,prefix+(trousers?'-trousers':'-shorts')):null;
+    // A cargo leg billows above the knee, pulls into diagonal folds and ends
+    // in an uneven open-looking cuff. Straight equal rings read as two boxes.
+    const shortCuff=[.006,-.016,.012,-.009,.006,.022,-.014,.008].map((n,i)=>n*(side<0?1:i%2?.7:1.15));
+    const shortPlanes=[.02,.10,-.055,-.07,.015,.075,-.025,-.045];
+    const cloth=!wet?clothChain(rider,trousers?[[0,.113,.104],[.52,.121,.114],[.79,.117,.108,side*.003,-.006],[1.01,.105,.107,0,-.006,kneeFold,kneePlane],[1.25,.098,.089,0,.005],[1.51,.105,.099,-side*.003,.006],[1.75,.112,.105,-side*.004,.002,ankleFold,cuffPlane],[1.91,.103,.088,side*.003,0],[2,.110,.098,0,0,ankleFold,cuffPlane]]:[[0,.113,.102],[.46,.122,.110,side*.005,.002],[.76,.119,.111,-side*.003,-.006,kneeFold,shortPlanes],[1.00,.108,.103,side*.004,.003,kneeFold,kneePlane],[1.20,.104,.096,-side*.005,.001,shortCuff,shortPlanes]],shorts,prefix+(trousers?'-trousers':'-shorts'),!trousers):null;
     // Boardshorts cover the entire thigh and end below the knee. Rendering a
     // second, rigid skin tube beneath them lets its hip cap poke through the
     // tailored seat when the rider bends. The wetsuit uses this tube as cloth.
@@ -245,8 +253,10 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     // Thin contrasting lace bands are attached to the foot, not floating cubes.
     for(let i=0;i<3;i++){const lace=mesh(shoe.group,new THREE.BoxGeometry(.065,.017,.003),cream);lace.position.set(0,.25+i*.09,.047-i*.003);}
     let points;
-    return{cloth,set(hip,knee,ankle,toe,shoes,footUp=null,footBlend=1){
-      knee=jointBetween(hip,ankle,.478,.45,[0,0,-1]);
+    return{cloth,set(hip,knee,ankle,toe,shoes,footUp=null,footBlend=1,kneeDirection=null){
+      // A stable pole keeps standing/menu IK intact. Riding can turn the two
+      // knees independently instead of forcing both through the same plane.
+      knee=jointBetween(hip,ankle,.478,.45,kneeDirection||[0,0,-1]);
       points={hip,knee,ankle,toe};skinUpper.set(hip,knee);skinLower.set(knee,ankle);foot.set(ankle,toe);shoe.set(ankle,toe);sole.set(ankle,toe);sock.set(knee,ankle);
       if(footUp){
         const along=V(toe).sub(V(ankle)).normalize(),up=V(footUp).addScaledVector(along,-V(footUp).dot(along)).normalize(),right=along.clone().cross(up).normalize(),basis=new THREE.Matrix4().makeBasis(right,along,up);
@@ -289,12 +299,13 @@ export function createCharacter({id,character,outfit,fabricTexture}){
     p.needsUpdate=true;yokeGeometry.computeVertexNormals();yokeGeometry.computeBoundingSphere();
     legs.forEach((leg,i)=>leg.cloth?.set(leg.points.hip,leg.points.knee,leg.points.ankle,roots[i].map(toRider)));
   }
-  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,inspectionPose=null,comboPose=null,menuLean=null,menuHold=null}={}){
+  function pose({charge=0,grab=0,tweak=0,air=false,time=0,lean=0,standing=false,mode,lipGrab=0,boardTargetWorld=null,boardFeetWorld=null,cutback=0,cutbackDirection=1,balance=0,inspectionPose=null,comboPose=null,menuLean=null,menuHold=null}={}){
     shell?.resetNormals();
     if(mode)activeMode=mode;grab=THREE.MathUtils.clamp(Math.max(grab,lipGrab),0,1);
     tweak=air&&!standing?THREE.MathUtils.clamp(tweak,0,1):0;
     const combo=air&&!standing&&comboPose?.weight>0?comboPose:null;
     cutback=standing||air?0:THREE.MathUtils.clamp(cutback,0,1);
+    balance=standing||air?0:THREE.MathUtils.clamp(balance,0,1);
     const shoes=activeMode==='park'||standing,breath=Math.sin(time*1.7)*.002;
     rider.rotation.set(0,standing?0:-Math.PI/2,0);
     rider.position.y=air&&!standing?.12:0;
@@ -371,11 +382,11 @@ export function createCharacter({id,character,outfit,fabricTexture}){
       // knees while the chest comes forward. The previous deep seat is still
       // available to the separate airborne/board-grab choreography and IK.
       const riding=1-Math.max(grab,air?1:0),compression=Math.min(1,charge+cutback*.65);
-      const hy=THREE.MathUtils.lerp(.80-tuck*.37,.90-compression*.25,riding);
+      const hy=THREE.MathUtils.lerp(.80-tuck*.37,.98-compression*.28-balance*.075,riding);
       const hz=THREE.MathUtils.lerp(.04+tuck*.25,.055+compression*.12,riding);
       const hinge=THREE.MathUtils.lerp(-.16-tuck*.40,-.25-compression*.42,riding);
-      body.position.set(-.025*riding-lean*.03-turn*.04-.14*tweak,hy+breath+.10*tweak,hz+.13*tweak);
-      body.rotation.set(hinge+turn*.18-.01*tweak,-.07-.035*riding+turn*.20-.48*tweak,(-.025+compression*.015)*riding-lean*.12-turn*.10+.40*tweak);
+      body.position.set(-.025*riding-lean*.03-turn*.04-.14*tweak-.05*balance,hy+breath+.10*tweak,hz+.13*tweak);
+      body.rotation.set(hinge+turn*.18-.01*tweak,-.07-.09*riding+turn*.20-.48*tweak,(-.025+compression*.015)*riding-lean*.12-turn*.10+.40*tweak);
       head.rotation.set(.17+tuck*.2-.10*tweak,1.15-turn*.30+.10*tweak,-.025-.055*tweak);
       if(combo){
         body.position.add(V(combo.hip));
@@ -398,32 +409,34 @@ export function createCharacter({id,character,outfit,fabricTexture}){
       const ky=.494-tuck*.064,kz=-.254-tuck*.087;
       const inverseRider=rider.matrixWorld.clone().invert();
       const plantedFeet=boardFeetWorld&&(tweak>0||combo?.plantFeet>0);
-      const feet=plantedFeet?boardFeetWorld.map(foot=>({ankle:rider.worldToLocal(foot.ankle.clone()).toArray(),toe:rider.worldToLocal(foot.toe.clone()).toArray(),up:foot.up?.clone().transformDirection(inverseRider).toArray()})):[{ankle:[-.34,.215,.035],toe:[-.36,.181,-.163]},{ankle:[.36,.215,.069],toe:[.395,.181,-.128]}];
+      const feet=plantedFeet?boardFeetWorld.map(foot=>({ankle:rider.worldToLocal(foot.ankle.clone()).toArray(),toe:rider.worldToLocal(foot.toe.clone()).toArray(),up:foot.up?.clone().transformDirection(inverseRider).toArray()})):[{ankle:[-.285,.215,.015],toe:[-.316,.181,-.182]},{ankle:[.305,.215,.085],toe:[.338,.181,-.111]}];
       const footBlend=tweak>0?1:combo?.plantFeet||1;
-      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.236,ky,kz],feet[0].ankle,feet[0].toe,shoes,feet[0].up,footBlend);
-      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.246,ky+.012,kz+.056],feet[1].ankle,feet[1].toe,shoes,feet[1].up,footBlend);
-      const leftBalance=mix([-.46,.042,-.186],[-.365,.045-compression*.10,-.245-compression*.065],riding);
+      legs[0].set(V([-.095,0,0]).applyMatrix4(body.matrix).toArray(),[-.236,ky,kz],feet[0].ankle,feet[0].toe,shoes,feet[0].up,footBlend,[-.12*riding-.22*balance,0,-1]);
+      legs[1].set(V([.102,0,0]).applyMatrix4(body.matrix).toArray(),[.246,ky+.012,kz+.056],feet[1].ankle,feet[1].toe,shoes,feet[1].up,footBlend,[.20*riding-.37*balance,0,-1]);
+      const sway=Math.sin(time*1.55)*.012*riding;
+      const leftBalance=mix([-.46,.042,-.186],mix([-.48,.10-compression*.08+sway,-.25-compression*.07],[-.53,.67+sway,-.04],balance),riding);
       const leftRest=mix(leftBalance,[-.37,-.16,-.27],cutback);
       // Keep the free arm reaching upward while the torso lays over and twists;
       // raising it only in torso space made it tip sideways with the chest.
       const raisedWrist=V([-.12,.57,-.06]).applyQuaternion(body.quaternion.clone().invert()).add(V([-.194*build,.437,.002])).toArray();
-      let freeElbow=mix([-.37,.233,-.055],mix([-.29,.58,.00],[-.42,.69,.11],tweak),grab),freeWrist=mix(leftRest,mix([-.25,.86,-.12],raisedWrist,tweak),grab);
+      let freeElbow=mix(mix(mix([-.37,.233,-.055],[-.36,.20,.025],riding),[-.50,.34,-.04],balance),mix([-.29,.58,.00],[-.42,.69,.11],tweak),grab),freeWrist=mix(leftRest,mix([-.25,.86,-.12],raisedWrist,tweak),grab);
       if(combo){freeElbow=mix(freeElbow,combo.leftElbow,combo.weight);freeWrist=mix(freeWrist,combo.leftWrist,combo.weight);}
-      arms[0].set([-.194*build,.437,.002],freeElbow,freeWrist);
+      arms[0].set([-.194*build,.437,.002],freeElbow,freeWrist,0,null,balance);
       const shoulder=[.194*build,.437,.003];
       rider.updateWorldMatrix(true,true);
       const contact=body.worldToLocal(contactWorld.clone());
       const direction=contact.clone().sub(V(shoulder)).normalize();
       const targetWrist=contact.clone().addScaledVector(direction,-.15);
-      const rightBalance=mix([.42,-.018,-.14],[.365,-.035-compression*.045,.010-compression*.035],riding);
+      const rightBalance=mix([.42,-.018,-.14],mix([.43,.06-compression*.06-sway,.035-compression*.035],[.54,.61-sway,-.15],balance),riding);
       let rightRest=mix(rightBalance,[.41,.075,-.30],cutback);
       if(combo?.rightWrist)rightRest=mix(rightRest,combo.rightWrist,combo.weight);
       const wrist=mix(rightRest,targetWrist.toArray(),grab),delta=V(wrist).sub(V(shoulder));
       const d=Math.min(.609,delta.length()),axis=delta.normalize(),upper=.32,lower=.29;
       const along=(upper*upper-lower*lower+d*d)/(2*d),off=Math.sqrt(Math.max(0,upper*upper-along*along));
-      const bend=new THREE.Vector3(1,0,.4).addScaledVector(axis,-new THREE.Vector3(1,0,.4).dot(axis)).normalize();
+      const bendHint=V(mix(mix([1,0,.4],[1,-.30,.5],riding*(1-grab)),[1,-.5,.1],balance));
+      const bend=bendHint.addScaledVector(axis,-bendHint.dot(axis)).normalize();
       const elbow=V(shoulder).addScaledVector(axis,along).addScaledVector(bend,off);
-      arms[1].set(shoulder,elbow.toArray(),wrist,grab,grab>0?contact.toArray():null);
+      arms[1].set(shoulder,elbow.toArray(),wrist,grab,grab>0?contact.toArray():null,balance);
       landmarks.boardGrabTarget=body.localToWorld(contact.clone());
     }
     body.updateMatrix();updateLowerCloth();poseHangingHair();rider.updateMatrixWorld(true);

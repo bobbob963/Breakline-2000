@@ -184,7 +184,10 @@ export function createRaceWorld(playerProfile) {
     surfer.boardPivot.rotation.order = 'YXZ';
     surfer.boardPivot.rotation.set(pose.boardPitch, pose.boardSpin, pose.flip + pose.boardBank);
     surfer.boardPivot.position.set(pose.boardSide, (air ? .12 : 0) + pose.boardLift, pose.boardBack);
-    surfer.pose({ charge: opponent.charge || 0, grab: pose.grab, air, time, lean, mode: game.mode, lipGrab: pose.lipGrab, tweak: pose.tweak, comboPose: pose.comboPose, cutback, cutbackDirection: opponent.cutbackDirection || 1 });
+    const poseDt=Math.max(0,Math.min(.1,time-(surfer.rig.userData.poseTime??time)));
+    surfer.rig.userData.poseTime=time;
+    surfer.rig.userData.railBalance=THREE.MathUtils.damp(surfer.rig.userData.railBalance||0,opponent.grinding&&!bail?1:0,12,poseDt);
+    surfer.pose({ charge: opponent.charge || 0, grab: pose.grab, air, time, lean, mode: game.mode, lipGrab: pose.lipGrab, tweak: pose.tweak, comboPose: pose.comboPose, cutback, cutbackDirection: opponent.cutbackDirection || 1, balance:surfer.rig.userData.railBalance });
     surfer.rider.visible = !bail || Math.floor(time * 12) % 2 === 0;
     shadow.position.set(x, surface + .06, z); shadow.visible = !bail && !opponent.pipeRide;
     shadow.scale.setScalar(air ? Math.max(.4, 1 - (y - surface) * .07) : 1);

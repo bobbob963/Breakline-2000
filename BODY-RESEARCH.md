@@ -155,3 +155,56 @@ The geometry checks retain all 48 combinations, nine demanding ordinary poses, 1
 All **12 character-model tests passed** after this pass. The new triangle-slice check measures a loose-shirt waist/chest ratio of **0.9241**, and the actual open-edge hem variation is **20.0 mm**. Across all four riders and the sampled breathing cycle, measured elbow angles are **149.1–156.3°** and knee angles **158.9–168.4°**.
 
 The model remains a stylized original low-poly interpretation. The reference pictures do not establish exact hidden depth, topology or joint positions, and numeric tests cannot establish visual likeness. Rendered comparison and production contact checks therefore remain complementary evidence.
+
+## V9 local art and posture pass — 11 October 2026
+
+The supplied references span early THPS2 presentations: the Bob selection screenshot has coloured A/B/X/Y prompts, so a single exact PS1-only specification would be misleading. The target is the references' adult low-poly silhouette, readable painted folds, matte industrial materials and close rear chase composition. Exact original mesh topology, atlas sizes and camera FOV remain unverified.
+
+The [firsthand THPS2 PC rendering investigation](https://partymod.newnet.city/writeups/1.html) distinguishes the PC port's Dreamcast texture replacements and gamma treatment from PS1 texture/vertex-colour modulation. The [original PlayStation manual](https://www.thegameisafootarcade.com/wp-content/uploads/2017/06/Tony-Hawks-Pro-Skater-2-Game-Manual.pdf) describes the abandoned Hangar's rails, halfpipes, kickers, funboxes and rusted aircraft. These inform material and scene treatment, not claimed exact mesh counts. Original supplied images remain local comparison references, not game assets.
+
+### Changes and measured cross-checks
+
+- Old painted head geometry and face textures remain unchanged. Four characters, twelve outfits and all board choices are retained.
+- Ordinary grounded pelvis rises from .80 to .90 m; full-charge pelvis rises from .486 to .650 m. A forward chest hinge replaces the seated silhouette. Full charge keeps hips at least .159 m above both knees, with a measured 38.1-degree torso hinge. Arms balance asymmetrically and remain nearer the body.
+- Shoulders slope into slightly broader/deeper chest planes. Trousers have less regular knee/shin/cuff sections; shoes have broader, flatter lasts. Jax/Yard Crew remains 2,973 triangles; shape rather than polygon count is the focus.
+- Standing body height across all 48 combinations is 1.7899–1.8223 m; face/body ratio .1342–.1366. Baggy chest width .2284–.2527H, chest depth .1610–.1615H, sleeve envelope .2881–.3112H. Largest sampled inner-leg gap is .0288 m. Existing anatomy limits were retained.
+- 240 grounded charge poses preserve four fixed limb lengths and planted feet. Existing checks still cover 12,096 joined cloth vertices (zero seam gap), 13,824 covered-hip rays, 1,248 transformed hand/deck contacts and 336 tweaked-grab poses. All 15 model tests pass.
+- Waterworks uses deterministic original 128px concrete/iron/steel textures with larger stains, seams, cracks and edge wear. All 49 render mesh position/index hashes match the previous scene, including 191,676 terrain vertices and 460,695 terrain indices. Neutral ambient/key light replaces the green-blue cast; moving water alone has animated texture offsets.
+
+### Visual evidence
+
+The source comparison page now freezes the previous body in `src/character-model-v8-reference.js` and renders v8/v9 at the same scale and camera. Root inspected Jax standing, three-quarter/side full-charge crouch, Jax grab and Kai/Sidewalk Surf ordinary riding. Saved workspace-relative evidence: `outputs/breakline-v9-body-comparison.jpg`, `work/body-v9-crouch.jpg`, and `work/body-v9-grab.jpg`. A production ramp replay cleared the lip, returned to the bowl and landed safely (2.78 seconds of air, zero wipeouts).
+
+This is an original interpretation with measurable posture improvements, not an exact reconstruction of the THPS2 models. Side-by-side screenshots judge likeness; numerical checks judge anatomy, coverage and animation contact. This pass remains local at the user's request.
+
+## Expanded local reference comparison — 11 October 2026
+
+The comparison now has ten selectable presets: grey crew three-quarter, tee lineup front, front T-pose, angled T-pose, relaxed front, grey crew selection, loose-trouser selection, rear riding, ramp grab, and the supplied snowboard tweaked-air reference. Eight additional original images are embedded locally, alongside the previous two. Their pixels are unmodified and their aspect ratios preserved. These reference assets are imported only by the review page.
+
+Each preset sets a matching character/outfit, pose and approximate camera, with both old/current models sharing the same scale and view. Camera yaw, elevation and zoom remain adjustable, including left/right sides and rear three-quarter; Reset restores the preset. Notes call out the sleeve/costume mismatch in the angled T-pose, the raised manual arms in the rear shot, and the snowboard photo's different purpose. No exact recovered camera or identical costume is claimed.
+
+An opt-in inspection T-pose was added identically to the v8 and current model builders. It activates only with standing:true and inspectionPose:'tpose'; existing production pose branches remain untouched. Model checks now pass 16/16, including 24 old/current inspection combinations, fixed limb lengths, horizontal arms, 640 real cloth seam vertices, exact restoration of default poses and ignored inspection input during riding.
+
+This update changes the comparison tools, not the character body design, faces, gameplay rules or online project. The game/StackBlitz remains unpublished.
+
+## Separate tee and sweatshirt checks — 14 October 2026
+
+The navy/red/pink tee lineup (`8abb7f61...`) and grey tee T-pose (`d9f7d867...`) were inspected again for the latest body pass. They support a slimmer shoulder crest and less fabric bulk than the grey/yellow sweatshirt pair. The old sweatshirt envelope must not force every shirt to share that breadth. The standing and T-pose images also show why arm span, hanging elbows and the complete sleeve envelope cannot substitute for a horizontal garment slice at shoulder height.
+
+`character-spec.js` now retains the existing **0.252–0.305H sweatshirt shoulder range**, and provides a separate **0.230–0.280H tee/shirt range**. These remain approximate art-direction guardrails inferred from the supplied poses, not measurements of a recovered THPS2 skeleton. The tee range has a lower maximum as well as a lower minimum; it does not globally relax the body audit. Anatomical shoulder spacing, head proportions, bone lengths, joint heights, chest checks and all cloth/contact tolerances remain unchanged.
+
+The actual-model test uses the tee range for baggy tees, oversized tees, raglans and open/layered shirts; sweatshirt outfits explicitly use the original sweatshirt range. Bare shoulders and fitted wetsuits retain their separate treatment. Triangle-derived shoulder width is divided by measured crown-to-sole height and the character's intentional build factor. Negative controls ensure a slim tee cannot pass as a broad sweatshirt, an excessively broad shirt fails the tee check, and neither garment option permits a toy-sized head or shortened shins. Visual comparison from front, side, rear and riding angles is still required for approval.
+
+## V10 body and riding silhouette — 14 October 2026
+
+This pass responds to the rear comparison screenshot: wide feet, a low seated pelvis, rigid elbows and straight shorts. The previous production body is frozen in `character-model-v9-reference.js`. The comparison now renders V9 and V10 under identical lighting, camera and scale, retaining all ten supplied reference presets. The rear manual reference is explicitly compared with the new in-game rail balance pose; ordinary Riding remains selectable for a like-for-like neutral pose comparison. The rear camera is an estimated 145-degree three-quarter view, not a recovered original camera.
+
+- Grounded ankle spacing is reduced from about 0.70 m to 0.59 m, and neutral hips rise about 8 cm. The board foot targets use the same narrower anchors during held grabs and special combos. Both legs retain their original physical lengths.
+- Balance shifts the pelvis toward one leg, uses unequal knee bend directions, and raises bent arms with relaxed wrists. Player and rival grinds use a smoothed transition into the same pose. Ordinary riding has a separate lower arm pose checked from the side.
+- Tees have a narrower shoulder/chest envelope than the retained roomy sweatshirts. An uneven hem, angled knee folds and longer tapered shorts cuffs alter the actual mesh. The first shorts section now starts at the sewn seat rather than the higher anatomical hip, eliminating the upward corner in a crouch.
+- Dockside adds a faded navy tee and muted khaki cargo shorts so the supplied tee/riding references can be judged without a high-contrast tribal print obscuring the silhouette. This is also a selectable game outfit.
+- The restored face and scalp geometry, UVs and material settings are compared against V9 for every character/outfit pairing. The head builder and face textures were not edited.
+
+Rendered checks include the navy tee front, loose crew clothing in three-quarter view, ordinary riding in profile, rear rail balance and the ramp grab. Saved workspace-relative images: `work/body-v10-front-final.png` and `work/body-v10-rear-final.png`. These checks establish the visible changes above; they do not establish exact likeness to the unavailable original THPS2 mesh.
+
+Validation covers 689 tests: an initial complete run followed by a passing 42-test recheck after updating the five stale pose/catalog fixtures. New checks measure 1,020 charge/balance poses, 29,760 sewn seam vertices, 624 upper-shorts surfaces and face/scalp preservation across all 68 character/outfit combinations. The old shorts-fin and photographic skin-protrusion defects are reproduced as negative controls; current held grabs and surfer specials retain actual deck contact. Build and standalone packaging also passed.

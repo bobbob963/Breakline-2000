@@ -42,6 +42,23 @@ test('shoulder garment width uses silhouette edges rather than just skeletal piv
   assert.ok(!checked.issues.some(check => check.key === 'shoulderJointWidth'));
 });
 
+test('tee and sweatshirt envelopes remain distinct without relaxing anatomical checks', () => {
+  const base = measureCharacterLandmarks(standingPoints());
+  const slimTee = { ...base, ratios: { ...base.ratios, shoulderWidth: .240 } };
+  assert.equal(auditCharacterProportions(slimTee, { garment: 'tee' }).pass, true);
+  for (const options of [{}, { garment: 'sweatshirt' }]) {
+    assert.ok(auditCharacterProportions(slimTee, options).issues.some(check => check.key === 'shoulderWidth'), 'sweatshirt must retain its existing minimum breadth');
+  }
+  const bulkySweatshirt = { ...base, ratios: { ...base.ratios, shoulderWidth: .300 } };
+  assert.equal(auditCharacterProportions(bulkySweatshirt, { garment: 'sweatshirt' }).pass, true);
+  assert.ok(auditCharacterProportions(bulkySweatshirt, { garment: 'tee' }).issues.some(check => check.key === 'shoulderWidth'), 'tee selection must also reject an excessively broad shoulder crest');
+  for (const garment of ['tee', 'sweatshirt']) {
+    const malformed = { ...base, ratios: { ...base.ratios, shoulderWidth: .210, headHeight: .20, shin: .15 } };
+    const issues = auditCharacterProportions(malformed, { garment }).issues.map(check => check.key);
+    for (const key of ['shoulderWidth', 'headHeight', 'shin']) assert.ok(issues.includes(key), `${garment}: ${key} guardrail was relaxed`);
+  }
+});
+
 test('a large toy head and shortened lower limbs cannot pass proportion checks', () => {
   const points = standingPoints();
   points.chin[1] = 1.39;

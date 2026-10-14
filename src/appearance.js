@@ -13,6 +13,7 @@ export const CHARACTERS = {
 export const OUTFITS = {
   riptide: { name: "RIPTIDE '99", description: 'Oversized surf tee, long panel shorts and a backwards cap.', top: 'baggy', shirt: '#d7d0b8', shorts: '#344c67', accent: '#e07338', pattern: 'sunburst', shortPattern: 'panel', hat: 'cap', sleeves: 'short' },
   blackout: { name: 'BLACKOUT TRIBE', description: 'Loose black tee and monochrome tribal boardshorts.', top: 'baggy', shirt: '#252930', shorts: '#171f27', accent: '#e1deca', pattern: 'tribal', shortPattern: 'tribal', necklace: true, sleeves: 'short' },
+  dockside: { name: 'DOCKSIDE', description: 'Faded navy skate tee, long khaki cargo shorts and worn trainers.', top: 'baggy', shirt: '#263d59', shorts: '#85846b', accent: '#a28b60', pattern: 'badge', shortPattern: 'cargo', sleeves: 'short', footwear: 'trainers' },
   aloha: { name: 'ALOHA STATIC', description: 'Open tropical shirt, bright long shorts and a bucket hat.', top: 'open', shirt: '#1c727b', shorts: '#db765a', accent: '#e7cf77', pattern: 'tropical', shortPattern: 'stripe', hat: 'bucket', sleeves: 'short' },
   castaway: { name: 'CASTAWAY', description: 'Beachwear, a straw hat, shell beads and sunburst shorts.', top: 'bare', shirt: '#c9664b', shorts: '#2c6671', accent: '#efe0ad', pattern: 'none', shortPattern: 'sunburst', hat: 'straw', necklace: true, sleeves: 'none' },
   reefskin: { name: 'REEF SKIN', description: 'Full black wetsuit with purple panels and lime seams.', top: 'wetsuit', shirt: '#202935', shorts: '#202935', accent: '#9970ad', pattern: 'wetsuit', shortPattern: 'none', sleeves: 'long' },
@@ -153,6 +154,7 @@ function fabricTexture(outfit, shorts = false) {
     ctx.fillStyle = '#c5cab7';ctx.fillRect(37,22,21,3);
   } else if (pattern === 'cargo') {
     ctx.fillStyle = '#172027';ctx.globalAlpha=.18;ctx.fillRect(0,0,2,64);ctx.fillRect(30,0,2,64);ctx.globalAlpha=1;
+    for(const x of [6,38]){ctx.fillStyle='rgba(25,30,25,.17)';ctx.fillRect(x,30,17,20);ctx.fillStyle='rgba(224,222,186,.16)';ctx.fillRect(x,29,17,3);ctx.strokeStyle='rgba(30,35,27,.35)';ctx.lineWidth=1;ctx.strokeRect(x,30,17,20);ctx.fillStyle='rgba(28,32,26,.48)';ctx.fillRect(x+7,32,2,2);}
   }
   // Hand-painted broad folds and edge shading give a textured PS1 silhouette,
   // instead of making every triangle a differently coloured flat plastic panel.
@@ -410,8 +412,8 @@ export function createSurfer(settings=DEFAULT_PROFILE,characterFactory=createCha
     // on that same deck, so leg IK follows its actual final world transform.
     // Independent kickflips retain the existing loose-board choreography.
     const boardFeetWorld=options.tweak>0||options.comboPose?.plantFeet>0?[
-      {ankle:new THREE.Vector3(-.035,.215,-.34),toe:new THREE.Vector3(.163,.181,-.36)},
-      {ankle:new THREE.Vector3(-.069,.215,.36),toe:new THREE.Vector3(.128,.181,.395)},
+      {ankle:new THREE.Vector3(-.015,.215,-.285),toe:new THREE.Vector3(.182,.181,-.316)},
+      {ankle:new THREE.Vector3(-.085,.215,.305),toe:new THREE.Vector3(.111,.181,.338)},
     ].map(foot=>({...Object.fromEntries(Object.entries(foot).map(([key,point])=>[key,board.localToWorld(point)])),up:new THREE.Vector3(0,1,0).transformDirection(board.matrixWorld)})):null;
     person.pose({...options,boardTargetWorld,boardFeetWorld});
   }

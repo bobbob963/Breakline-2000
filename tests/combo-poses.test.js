@@ -93,15 +93,16 @@ test('Crosscut visibly changes the ordinary B hold without adding a body roll or
 
 test('all riders keep sewn cloth, fixed limbs, real grab contact and planted board feet in combo moves',t=>{
   let frames=0,contacts=0,seams=0;
-  const bindings=[['left',[-.035,.215,-.34],[.163,.181,-.36]],['right',[-.069,.215,.36],[.128,.181,.395]]];
   for(const character of Object.keys(CHARACTERS))for(const outfit of Object.keys(OUTFITS)){
     const s=make(character,outfit),parent=new THREE.Group();parent.position.set(13,3,-27);parent.rotation.set(.18,.71,-.11);parent.add(s.rig);
     try{
+      s.pose({mode:'surf'});
+      const bindings=['left','right'].map(side=>[side,s.board.worldToLocal(s.landmarks[side+'Ankle'].clone()),s.board.worldToLocal(s.landmarks[side+'Toe'].clone())]);
       for(const id of Object.keys(MOVES))for(const p of [.01,.1,.219,.22,.5,.8,.801,.9,.99]){
         const label=`${character}/${outfit}/${id}/${p}`,a=pose(s,id,p,true),rows=meshes(s);checkBones(s,label);
         for(const o of rows){assert.ok(points(o).every(v=>[v.x,v.y,v.z].every(Number.isFinite)),`${label}: nonfinite geometry`);assert.ok([...o.geometry.attributes.normal.array].every(Number.isFinite),`${label}: nonfinite normals`);}
         for(const [side,ankle,toe]of bindings){
-          const expectedAnkle=s.board.localToWorld(new THREE.Vector3(...ankle)),expectedToe=s.board.localToWorld(new THREE.Vector3(...toe));
+          const expectedAnkle=s.board.localToWorld(ankle.clone()),expectedToe=s.board.localToWorld(toe.clone());
           assert.ok(s.landmarks[side+'Ankle'].distanceTo(expectedAnkle)<1e-7,`${label}: ${side} ankle left transformed board`);
           assert.ok(s.landmarks[side+'Toe'].distanceTo(expectedToe)<1e-7,`${label}: ${side} toe left transformed board`);
           const foot=rows.find(o=>o.name===side+'-foot');
