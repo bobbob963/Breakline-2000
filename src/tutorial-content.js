@@ -52,7 +52,7 @@ export const TUTORIAL_STEPS = Object.freeze([
     id: 'surf', chapter: 'SURF SESSION', title: 'CHASE THE PERFECT LINE.',
     lead: 'Two minutes on the wave. Build a score through clean tricks and flowing combos.',
     cards: [
-      { title: 'READ THE WATER', text: 'Use the wave lip and cutbacks for air. Catch sun rings and steer around visible reefs.' },
+      { title: 'READ THE WATER', text: 'Use the wave lip and cutbacks for air. Each sun ring adds 4 seconds to your session and awards 250 points. Steer around visible reefs.' },
       { title: 'LAND FOR POINTS', text: 'Finish lip or cutback tricks and land cleanly to build your score. Link more moves for a bigger combo multiplier. Surf Session has no trick or combo speed boosts.' },
       { title: 'A DIFFERENT SKY', text: 'Each new Surf Session picks dawn, midday, sunset or dusk. Sunset has its own chilled soundtrack. Surf Session is never stormy.' },
       { title: 'REEF RUSH', text: 'Want a checkpoint challenge? Catch 12 sun rings before the clock runs out. Each ring adds eight seconds. Land tricks and combos for speed boosts.' },

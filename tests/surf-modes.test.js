@@ -24,6 +24,41 @@ test('session modes retain the surf environment and reset their distinct objecti
   assert.equal(new SurfGame(()=>{},'__proto__').rulesId,'surf');
 });
 
+test('Surf Session adds four seconds for each caught ring and reports the same reward',()=>{
+  const events=[],game=new SurfGame(event=>events.push(event),'surf');game.start();
+  assert.equal(game.time,120);
+  for(let index=0;index<3;index++) {
+    const before=game.time;crossGate(game,index);
+    assert.equal(game.gates,index+1);
+    assert.ok(Math.abs(game.time-(before+4-1/120))<1e-8,'each ring adds four seconds after the frame countdown');
+  }
+  assert.deepEqual(events.filter(event=>event.type==='gate').map(({index,bonus})=>({index,bonus})),[
+    {index:0,bonus:4},{index:1,bonus:4},{index:2,bonus:4},
+  ]);
+  assert.ok(game.time>120,'earned time can extend the original two-minute session');
+  assert.equal(game.phase,'running');
+});
+
+test('Surf Session cannot repeat a ring reward or earn time for a miss, and restart clears bonus time',()=>{
+  const events=[],game=new SurfGame(event=>events.push(event),'surf');game.start();crossGate(game,0);
+  let before=game.time;crossGate(game,0);
+  assert.ok(Math.abs(game.time-(before-1/120))<1e-8,'crossing an already caught ring cannot add more time');
+  before=game.time;crossGate(game,1,false);
+  assert.ok(Math.abs(game.time-(before-1/120))<1e-8,'missing a ring only advances the countdown');
+  assert.equal(game.gates,1);assert.equal(events.filter(event=>event.type==='gate').length,1);
+  assert.equal(events.filter(event=>event.type==='missedGate').length,1);
+  game.start();assert.equal(game.time,120);assert.equal(game.gates,0);
+  crossGate(game,0);assert.ok(Math.abs(game.time-(124-1/120))<1e-8,'the new run may earn its first ring again');
+  assert.equal(game.gates,1);
+});
+
+test('Storm ring collection keeps its endless elapsed timer without Surf Session bonus time',()=>{
+  const events=[],game=new SurfGame(event=>events.push(event),'storm');game.start();
+  crossGate(game,0);assert.equal(game.gates,1);
+  assert.ok(Math.abs(game.time-1/120)<1e-8);assert.equal(game.time,game.elapsed);
+  assert.equal(events.find(event=>event.type==='gate').bonus,0);assert.equal(game.phase,'running');
+});
+
 test('Reef Rush adds time exactly once per ring and completes on the twelfth caught checkpoint',()=>{
   const events=[],game=new SurfGame(event=>events.push(event),'rush');game.start();
   const before=game.time;crossGate(game,0);
@@ -32,7 +67,7 @@ test('Reef Rush adds time exactly once per ring and completes on the twelfth cau
   crossGate(game,1,false);assert.equal(game.gates,1);assert.equal(game.phase,'running','a missed checkpoint can be recovered at a later ring');
   for(let i=2;i<13;i++)crossGate(game,i);
   assert.equal(game.gates,12);assert.equal(game.phase,'finished');assert.equal(game.resultReason,'RACE COMPLETE');
-  assert.equal(events.filter(event=>event.type==='gate').length,12);assert.equal(events.filter(event=>event.type==='finish').length,1);
+  assert.equal(events.filter(event=>event.type==='gate').length,12);assert.ok(events.filter(event=>event.type==='gate').every(event=>event.bonus===8));assert.equal(events.filter(event=>event.type==='finish').length,1);
   assert.equal(game.score,3000);const finalTime=game.time;advance(game,1);assert.equal(game.time,finalTime);
 });
 

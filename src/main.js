@@ -123,7 +123,7 @@ const modeInfo={
   tournament:{name:'THE HIT LIST',level:'COAST + FACTORY / RIVAL CIRCUIT',description:'Five ladders. Twenty-five rival races. Clear each ladder to win an exclusive board, trick effects and a new perk.'},
   rush:{name:'REEF RUSH',level:'CHECKPOINT COAST',description:'35 seconds to start. Every sun ring adds 8 seconds. Catch 12 to finish; a wipeout costs precious time.'},
   storm:{name:'STORM RIDER',level:'SQUALL POINT',description:'Always a storm. Three lives, no time limit. Escape closing barrels, dodge whirlpools and hop driftwood. Land tricks for the boost you need to get clear.'},
-  surf:{name:'SURF SESSION',level:'OPEN COAST',description:'A new sky every run: dawn, midday, vibrant sunset or dusk. Carve for air and land trick combos for a higher score.'},
+  surf:{name:'SURF SESSION',level:'OPEN COAST',description:'Start with two minutes. Every sun ring adds 4 seconds and 250 points. Carve for air and land trick combos under a new sky each run.'},
   park:{name:'THE WATERWORKS',level:'LOWER SEWAGE WORKS',description:'Deep beneath an abandoned factory. Ride the drainage canals, thread rust tunnels and land trick combos for speed boosts.'},
 };
 function toast(text,bail=false){$('toast').textContent=controlHint(text);$('toast').classList.toggle('bail',bail);$('toast').classList.add('visible');toastTime=2;}
@@ -226,7 +226,7 @@ function onEvent(e){
   if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
   if(e.type==='bail'){special.bail();toast(game.isTutorial?'NO WORRIES · RECOVER AND TRY AGAIN':`${e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason} · ${game.lives} ${game.lives===1?'LIFE':'LIVES'} LEFT`,true);}
-  if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
+  if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +${e.bonus} SEC`:`SUN RING +250${e.bonus>0&&!game.isTutorial?` · +${e.bonus} SEC`:''}`);
   if(e.type==='raceGate'&&!e.opponent)toast(`SUN RING ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
   if(e.type==='raceMiss'&&!e.opponent)toast(isParkMode()?'MISSED SUN RING · TURN BACK AND PASS THROUGH':'MISSED SUN RING · LINE UP WITH THE OPENING',true);
   if(e.type==='raceGo')toast('GO! · W TO PUMP');
@@ -576,7 +576,7 @@ function updateHud(){
   }
   if(isParkMode())parkMap?.update(game);
   if(!isParkMode()||game.isRace) {
-    $('surf-objective').textContent=game.isTutorial?`${selectedMode==='storm'?'STORM':'SURF'} PRACTICE · FOLLOW THE COACH`:game.isTimeTrial?`BEAT ${trialTime(game.trial.timeLimit)} · EVERY SUN RING REQUIRED`:game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
+    $('surf-objective').textContent=game.isTutorial?`${selectedMode==='storm'?'STORM':'SURF'} PRACTICE · FOLLOW THE COACH`:game.isTimeTrial?`BEAT ${trialTime(game.trial.timeLimit)} · EVERY SUN RING REQUIRED`:game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · SUN RINGS +4 SEC';
     const tube=game.barrel,barrelHint=tube?.inside?'BARREL RIDE · HOLD THE OPEN LINE':tube&&tube.startDistance-game.distance<70?(game.x>tube.x+1.5?'BARREL AHEAD · CARVE LEFT':game.x<tube.x-1.5?'BARREL AHEAD · CARVE RIGHT':'BARREL AHEAD · HOLD YOUR LINE'):'';
     const nextGate=game.isRace?game.course.checkpoints[game.nextCheckpoint]:null;
     let raceHint=nextGate?`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
