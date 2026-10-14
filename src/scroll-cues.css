@@ -1,0 +1,81 @@
+/* Visible scroll position, styled to match the worn gold menu trim. */
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page){
+  scrollbar-width:thin;
+  scrollbar-color:#a99250 #142028;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar{
+  display:block;
+  width:6px;
+  height:6px;
+  background:#142028;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar-track{
+  background:#142028;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar-thumb{
+  background:#a99250;
+  border:1px solid #142028;
+  border-radius:3px;
+  min-height:32px;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar-thumb:hover{
+  background:#e0c56b;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar-button{
+  display:none;
+  width:0;
+  height:0;
+}
+:is(#intro,#intro .home-layout,#intro .home-menu,.modal-card,.workshop .custom-options,#wardrobe .outfit-options,#admin-panel .admin-scroll,.settings-scroll,.tutorial-chapters,.tutorial-page)::-webkit-scrollbar-corner{
+  background:#142028;
+}
+
+/* Anchored outside the scrolling content so the invitation stays in view. */
+#intro .home-menu-shell{
+  position:relative;
+  min-height:0;
+  align-self:stretch;
+  display:grid;
+  grid-template-rows:minmax(0,1fr);
+}
+#intro .home-menu-shell>.home-menu{
+  min-height:0;
+  max-height:100%;
+  align-self:stretch;
+  padding-right:10px;
+  padding-bottom:30px;
+}
+.home-menu-scroll-cue{
+  position:absolute;
+  z-index:3;
+  left:0;
+  right:12px;
+  bottom:0;
+  height:30px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  padding:10px 8px 5px;
+  border:0;
+  border-radius:0;
+  color:#e1c66e;
+  background:linear-gradient(transparent,#142028ed 60%,#142028);
+  font:700 9px/1.3 var(--mono,monospace);
+  letter-spacing:1.4px;
+  text-shadow:1px 1px #07121a;
+  pointer-events:auto;
+  cursor:pointer;
+}
+.home-menu-scroll-cue:hover{color:#fff0a6}
+.home-menu-scroll-cue:focus-visible{outline:2px solid #e1c66e;outline-offset:-2px}
+.home-menu-scroll-cue::after{
+  content:'';
+  width:5px;
+  height:5px;
+  margin-top:-3px;
+  border-right:2px solid currentColor;
+  border-bottom:2px solid currentColor;
+  transform:rotate(45deg);
+}
+.home-menu-scroll-cue[hidden]{display:none}

@@ -48,8 +48,11 @@ import { createTimePowerInput } from './time-power-input.js';
 import './time-power-screen.css';
 import './time-power-hud.css';
 import './radio.css';
+import { createScrollCue } from './scroll-cues.js';
+import './scroll-cues.css';
 
 const $=id=>document.getElementById(id);
+const homeScrollCue=createScrollCue($('home-session-menu'),$('home-scroll-more'));
 const loading=createLoadingScreen();
 let bootReady=false;
 loading.set(15,'PREPARING THE CREW','Loading the original rider textures.');
@@ -636,5 +639,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);timePowerScreen.dispose();radio.dispose();settingsPanel.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);homeScrollCue.dispose();timePowerScreen.dispose();radio.dispose();settingsPanel.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}
