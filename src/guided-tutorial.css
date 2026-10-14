@@ -1,0 +1,49 @@
+.guided-tutorial{position:absolute;z-index:8;right:22px;top:110px;width:min(345px,calc(100% - 44px));max-height:calc(100% - 140px);box-sizing:border-box;overflow:auto;scrollbar-width:thin;scrollbar-color:#a99250 #142028;padding:17px 18px 12px;background:linear-gradient(145deg,#17262bf2,#111a20f2);border:1px solid #bba46491;border-top:3px solid #d8be6c;box-shadow:5px 6px 0 #080e1499;color:#eee9d6;pointer-events:none}
+.guided-tutorial[hidden]{display:none}
+.guided-topline{display:flex;justify-content:space-between;align-items:center;gap:12px;font:700 8px/1.5 var(--mono,monospace);letter-spacing:1px;color:#d1bd81}
+.guided-topline>span:first-child{max-width:230px}
+.guided-topline>span:last-child{white-space:nowrap;color:#e9dfc0}
+.guided-track{height:2px;margin:10px 0 12px;background:#c1ad7230}
+.guided-track i{display:block;height:100%;background:#dbc677;transition:width .2s ease}
+.guided-tutorial h2{margin:0 0 7px;color:#f2ebd3;font:normal 28px/.98 var(--display,Impact,sans-serif);letter-spacing:.3px;text-shadow:2px 2px #0b1117}
+.guided-objective{font:700 12px/1.4 Arial,sans-serif;margin:0 0 8px;color:#f6d778}
+.guided-detail{font:12px/1.45 Arial,sans-serif;margin:0 0 13px;color:#e1e4d9}
+.guided-controls{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px 12px;margin:0 0 12px}
+.guided-controls>span{display:grid;gap:5px;justify-items:start}
+.guided-controls kbd{display:block;padding:5px 7px;font:700 10px/1 var(--mono,monospace);border:1px solid #bba868;border-bottom-width:3px;background:#eee2b9;color:#172025;box-shadow:2px 2px #080f13}
+.guided-controls small{font:9px/1.2 Arial,sans-serif;color:#c8cbbd}
+.guided-progress{margin:0 0 9px;color:#b5cca9;font:700 9px/1.5 var(--mono,monospace);letter-spacing:.5px}
+.guided-tip{padding-top:9px;border-top:1px solid #c6b47436;margin:0;color:#c4c9bb;font:11px/1.45 Arial,sans-serif}
+.guided-feedback{margin:8px 0 0;color:#f2c598;font:11px/1.4 Arial,sans-serif}
+.guided-feedback:empty{display:none}
+.guided-actions{display:flex;justify-content:space-between;gap:8px;margin-top:13px}
+.guided-tutorial button{pointer-events:auto;cursor:pointer;border:1px solid #b6a16b66;border-radius:0;background:#18252b;color:#e1d4a9;padding:7px 8px;font:700 8px/1.2 var(--mono,monospace);letter-spacing:.3px}
+.guided-tutorial button:hover{background:#304047;border-color:#dcc580;color:#fff0be}
+.guided-tutorial button:focus-visible{outline:2px solid #ffe19b;outline-offset:3px}
+.guided-tutorial button[hidden]{display:none}
+.guided-tutorial [data-action="finish"]{flex:1;text-align:left;background:#d5b95f;color:#142025;padding:10px 12px;font-size:10px}
+.guided-tutorial .guided-exit{display:block;margin:8px auto 0;padding:3px 8px;border:0;background:none;color:#a8b3b1;text-decoration:underline;text-underline-offset:3px;font-size:8px}
+.guided-announcement{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+body.learning .goals{display:none}
+body.learning .timer-block strong{font-size:30px;letter-spacing:1px}
+@media(max-height:650px){.guided-tutorial{right:16px;top:92px;width:320px;max-height:calc(100% - 110px);padding:12px 14px 10px}.guided-tutorial h2{font-size:24px}.guided-track{margin:7px 0 9px}.guided-detail{font-size:11px;margin-bottom:10px}.guided-controls{margin-bottom:9px}.guided-tip,.guided-feedback{font-size:10px}.guided-actions{margin-top:10px}}
+/* Keep the rider visible in the app's narrower split-pane browser. */
+@media(max-width:1000px){
+  .guided-tutorial{right:16px;top:105px;width:min(300px,calc(100% - 32px));padding:10px 12px 9px}
+  .guided-topline{font-size:7px;line-height:1.3;letter-spacing:.5px;gap:8px}
+  .guided-topline>span:first-child{max-width:225px}
+  .guided-track{margin:7px 0 8px}
+  .guided-tutorial h2{font-size:23px;line-height:1;margin-bottom:5px}
+  .guided-objective{font-size:11px;line-height:1.3;margin-bottom:6px}
+  .guided-detail{font-size:11px;line-height:1.35;margin-bottom:9px}
+  .guided-controls{gap:6px 10px;margin-bottom:9px}
+  .guided-controls>span{gap:4px}
+  .guided-controls kbd{font-size:9px;padding:4px 6px}
+  .guided-controls small{font-size:8px}
+  .guided-progress{font-size:8px;line-height:1.35;letter-spacing:.15px;margin-bottom:5px}
+  .guided-tip,.guided-feedback{display:none}
+  .guided-actions{margin-top:8px;gap:6px}
+  .guided-tutorial button{font-size:7px;padding:6px 7px}
+  .guided-tutorial .guided-exit{font-size:7px;margin-top:6px;padding:2px 6px}
+}
+@media(prefers-reduced-motion:reduce){.guided-track i{transition:none}}

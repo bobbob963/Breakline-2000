@@ -38,6 +38,8 @@ import { createSettingsPanel } from './settings-panel.js';
 import { remapControlText, remapKeyLabel, remapControlsElement } from './control-labels.js';
 import { createAdminPanel } from './admin-panel.js';
 import { createTutorial } from './tutorial.js';
+import { createGuidedTutorial } from './guided-tutorial.js';
+import './guided-tutorial.css';
 import { IDENTITY_KEY, loadRiderIdentity, saveRiderIdentity, sanitizeRiderName } from './rider-identity.js';
 import { ADMIN_STORAGE_KEY, sanitizeAdminSettings, resolveAdminStats } from './admin-settings.js';
 import { everythingUnlocked, persistAdminEntries, resetBreaklineSave, resetBreaklineProgress } from './admin-save.js';
@@ -103,6 +105,7 @@ const input={left:false,right:false,pump:false,brake:false,jump:false,action:fal
 const special=new SpecialMeter();
 const pressed=new Set();
 let world,game,preview,menuSurfer,parkMap,adminPanel,tutorial,radio,settingsPanel,keydownHandler,modalMode=null,resumeAfterModal=false,workshopMode=null,toastTime=0;
+let guidedTutorial,practiceSession=false,practiceReturnMode='surf',practiceReplay=false;
 let best=0,newBest=false,secretUnlockedThisRun=false,challengeFlags=[false,false,false],soundPreference=read('breakline99-sound','auto');
 const timePowerInput=createTimePowerInput(()=>game);
 const timePowerScreen=new TimePowerScreen({reducedMotion:window.matchMedia('(prefers-reduced-motion: reduce)').matches});
@@ -128,7 +131,30 @@ function clearInput(){pressed.clear();for(const k in input)input[k]=false;keydow
 function applyPlayerSettings(){game.setCharacter(profile.character);game.setRewardBoard(profile.rewardBoard);game.setAdminStats(resolveAdminStats(adminSettings,profile));}
 function adminHomeScreen(){return bootReady&&game?.phase==='ready'&&!tutorial?.isOpen&&!settingsPanel?.isOpen&&!modalMode&&!workshopMode&&!$('intro').classList.contains('hidden');}
 function openAdmin(){if(!adminHomeScreen())return;clearInput();adminPanel.open();}
-function openTutorial(replay=true){if(!adminHomeScreen())return;clearInput();tutorial.open({replay});}
+function openTutorial(replay=true){
+  if(!adminHomeScreen()||guidedTutorial?.active)return;
+  clearInput();practiceReturnMode=selectedMode;practiceReplay=replay;practiceSession=true;
+  guidedTutorial.start({replay});
+}
+function startPracticeMode(mode){
+  wasted.reset();timePowerScreen.reset();closeWorkshop();closeModal(false);clearInput();special.reset();
+  newBest=false;secretUnlockedThisRun=false;challengeFlags=[false,false,false];
+  selectedMode=mode==='storm'?'storm':'surf';
+  game=new SurfGame(onEvent,selectedMode);
+  game.setCharacter(profile.character);game.setRewardBoard(null);game.setAdminStats(null);game.start();
+  // Real course, controls and collisions, with time to learn and unlimited retries.
+  game.rules={...game.rules,endless:true};game.lives=null;game.isTutorial=true;
+  game.weatherId=selectedMode==='storm'?'storm':'noon';
+  world.setMode(game.mode);audio.setMode(game.mode);audio.setRideContext(game);audio.setScene('ride');
+  updateModeMenu();updateSoundLabel();$('intro').classList.add('hidden');$('hud').classList.remove('hidden');
+  document.body.classList.add('playing','learning');$('stage').focus({preventScroll:true});
+}
+function finishPractice(){
+  if(!practiceSession)return;
+  selectedMode=practiceReturnMode;
+  goHome();practiceSession=false;document.body.classList.remove('learning');
+  tutorial.open({replay:practiceReplay,startStep:'waterworks'});
+}
 function completeTutorial(name,{persist=true}={}){
   const cleanName=sanitizeRiderName(name);
   if(!cleanName)throw new Error('Enter a name for your rider.');
@@ -178,8 +204,9 @@ function resetProgress(){resetBreaklineProgress(localStorage);window.location.re
 
 function syncInput(){for(const name in input)input[name]=[...pressed].some(code=>keyMap[code]===name);}
 function loadBest(){best=Math.max(0,Number(read(`breakline99-best-${selectedMode}`,selectedMode==='surf'?read('breakline99-best','0'):'0'))||0);}
-function saveBest(){if(!game)return;if(selectedMode==='storm'&&game.elapsed>bestSurvival){bestSurvival=game.elapsed;write('breakline99-survival-time',String(bestSurvival));}if(game.score<=best)return;best=game.score;newBest=true;write(`breakline99-best-${selectedMode}`,String(best));}
+function saveBest(){if(!game||game.isTutorial)return;if(selectedMode==='storm'&&game.elapsed>bestSurvival){bestSurvival=game.elapsed;write('breakline99-survival-time',String(bestSurvival));}if(game.score<=best)return;best=game.score;newBest=true;write(`breakline99-best-${selectedMode}`,String(best));}
 function checkSurvivalSecret(){
+  if(game?.isTutorial)return false;
   const award=awardSurvivalSecret(secretProgress,game);
   if(!award.unlocked)return false;
   secretProgress=award.progress;secretUnlockedThisRun=true;
@@ -193,11 +220,12 @@ function onEvent(e){
   // Rival actions are shown beside their name and on their rider. They must
   // never award the player special, replace player toasts or reset the camera.
   if(e.opponent)return;
+  if(game?.isTutorial)guidedTutorial?.onEvent(e);
   world?.onEvent(e,game);if(!(['bail','finish'].includes(e.type)&&game?.lives===0))audio.event(e.type==='surfBoost'?'raceBoost':e.type);
   if(e.type==='bank'){toast(`+${fmt(e.points)}  BANKED`);special.gain(e.points/12000*(game.characterStats?.specialGain??1));saveBest();}
   if(e.type==='trick')special.gain(.22*(game.characterStats?.specialGain??1));
   if(e.type==='trickStart'&&e.comboAnimationName)toast(e.comboAnimationName);
-  if(e.type==='bail'){special.bail();toast(`${e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason} · ${game.lives} ${game.lives===1?'LIFE':'LIVES'} LEFT`,true);}
+  if(e.type==='bail'){special.bail();toast(game.isTutorial?'NO WORRIES · RECOVER AND TRY AGAIN':`${e.lost?`WIPEOUT! ${fmt(e.lost)} LOST`:e.reason} · ${game.lives} ${game.lives===1?'LIFE':'LIVES'} LEFT`,true);}
   if(e.type==='gate')toast(selectedMode==='rush'?`CHECKPOINT ${game.gates}/12 · +8 SEC`:'SUN RING +250');
   if(e.type==='raceGate'&&!e.opponent)toast(`SUN RING ${game.nextCheckpoint}/${game.course.checkpoints.length}`);
   if(e.type==='raceMiss'&&!e.opponent)toast(isParkMode()?'MISSED SUN RING · TURN BACK AND PASS THROUGH':'MISSED SUN RING · LINE UP WITH THE OPENING',true);
@@ -273,6 +301,7 @@ function updateSoundLabel(){
 async function toggleSound(){await audio.toggle();soundPreference=audio.enabled?'on':'off';write('breakline99-sound',soundPreference);updateSoundLabel();}
 function startRun(kind='default'){
   if(adminPanel?.isOpen||tutorial?.isOpen||settingsPanel?.isOpen)return;
+  if(game?.isTutorial&&guidedTutorial?.active){guidedTutorial.restartStep();return;}
   wasted.reset();timePowerScreen.reset();closeWorkshop();closeModal(false);clearInput();newBest=false;secretUnlockedThisRun=false;challengeFlags=[false,false,false];special.reset();
   if(soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);
   if(game.isTimeTrial){
@@ -291,6 +320,7 @@ function startRun(kind='default'){
 }
 function restartRun(){startRun('retry');}
 function goHome(){
+  if(game?.isTutorial&&guidedTutorial?.active){guidedTutorial.skip();return;}
   wasted.reset();timePowerScreen.reset();checkSurvivalSecret();saveBest();closeWorkshop();closeModal(false);clearInput();special.reset();makeGame();
   $('hud').classList.add('hidden');$('intro').classList.remove('hidden');document.body.classList.remove('playing');updateModeMenu();updateSoundLabel();$('start').focus({preventScroll:true});
 }
@@ -461,14 +491,14 @@ function tryTrick(type){if(!game.isRace&&game.mode==='surf'&&game.airborne&&game
 function tryPop(){if(game.jump())return;if(game.rewardBoardDefinition?.airJumps>0&&game.airborne&&game.trick)toast('FINISH YOUR TRICK BEFORE THE EXTRA AIR');else if(!game.airborne&&game.bailTime<=0&&game.popCooldown>0)toast(`POP RECOVERING · ${game.popCooldown.toFixed(1)}s`);}
 function updateHud(){
   $('score').textContent=pad(game.score);$('best').textContent=pad(best);
-  $('timer').textContent=game.isTimeTrial?trialTime(game.time):clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',selectedMode!=='storm'&&(!game.isRace||game.isTimeTrial)&&game.time<=20);
+  $('timer').textContent=game.isTutorial?'PRACTICE':game.isTimeTrial?trialTime(game.time):clockText(selectedMode==='storm'||game.isRace?game.elapsed:Math.ceil(game.time));$('timer').parentElement.classList.toggle('urgent',!game.isTutorial&&selectedMode!=='storm'&&(!game.isRace||game.isTimeTrial)&&game.time<=20);
   const counting=game.isRace&&game.phase==='running'&&game.countdownRemaining>0;
   $('race-countdown').classList.toggle('hidden',!counting);
   if(counting)$('race-countdown-number').textContent=Math.ceil(game.countdownRemaining);
   $('speed').textContent=Math.round(game.speed*3.6);$('speed-bar').style.width=`${Math.min(100,game.speed/25*100)}%`;
   const lives=Math.max(0,Math.min(3,game.lives??3));
-  $('run-lives').textContent='◆'.repeat(lives)+'◇'.repeat(3-lives);
-  $('run-lives').setAttribute('aria-label',`${lives} ${lives===1?'life':'lives'} remaining`);
+  $('run-lives').textContent=game.isTutorial?'∞':'◆'.repeat(lives)+'◇'.repeat(3-lives);
+  $('run-lives').setAttribute('aria-label',game.isTutorial?'Unlimited practice retries':`${lives} ${lives===1?'life':'lives'} remaining`);
   if(game.isRace||game.trickBoostEnabled){
     const boostTime=game.isRace?game.boostTime:game.surfBoostTime,boostSpeed=game.isRace?game.boostSpeed:game.surfBoostSpeed,boostDuration=game.isRace?game.boostDuration:game.surfBoostDuration;
     const boosting=boostTime>0,comboBoost=game.isRace?game.boostLevel==='combo':game.surfBoostCombo;
@@ -518,7 +548,7 @@ function updateHud(){
   else if(followups.length&&!game.trick&&!game.pipeRide&&!game.lipMove&&!game.grinding)$('combo-caption').textContent=`${game.airborne?'NEXT':'NEXT AIR'}: ${followups.map(combo=>combo.keys[1]).join(' / ')} · ${followups.length===1?followups[0].name:'COMBO MOVES'}`;
   $('special-fill').style.width=`${special.value*100}%`;$('special-fill').parentElement.classList.toggle('is-full',special.ready);
   if($('special-label'))$('special-label').textContent=special.ready?'100% READY · I':`SPECIAL ${Math.floor(special.value*100)}%`;
-  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTournament&&!game.isTimeTrial&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
+  const complete=completedGoals();['goal-score','goal-combo','goal-gates'].forEach((id,i)=>{$(id).classList.toggle('complete',complete[i]);if(!game.isTutorial&&!game.isTournament&&!game.isTimeTrial&&complete[i]&&!challengeFlags[i]){challengeFlags[i]=true;toast('CHALLENGE COMPLETE!');}});
   $('goal-gates').querySelector('span').textContent=isParkMode()?`Hit 5 ramps (${Math.min(5,game.visitedRamps.size)}/5)`:selectedMode==='rush'?`Checkpoints (${Math.min(12,game.gates)}/12)`:selectedMode==='storm'?`Barrel rides (${Math.min(3,game.barrelsSurvived||0)}/3)`:`Sun rings (${Math.min(6,game.gates)}/6)`;
   if(game.isTimeTrial){
     $('rival-name').textContent=`${String(game.trialIndex+1).padStart(2,'0')} / ${game.trial.name}`;
@@ -546,7 +576,7 @@ function updateHud(){
   }
   if(isParkMode())parkMap?.update(game);
   if(!isParkMode()||game.isRace) {
-    $('surf-objective').textContent=game.isTimeTrial?`BEAT ${trialTime(game.trial.timeLimit)} · EVERY SUN RING REQUIRED`:game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
+    $('surf-objective').textContent=game.isTutorial?`${selectedMode==='storm'?'STORM':'SURF'} PRACTICE · FOLLOW THE COACH`:game.isTimeTrial?`BEAT ${trialTime(game.trial.timeLimit)} · EVERY SUN RING REQUIRED`:game.isRace?`${game.racePosition===1?'1ST':'2ND'} PLACE · BEAT ${game.rival.name} TO THE FINISH`:selectedMode==='storm'?`${'◆'.repeat(Math.max(0,game.lives))}${'◇'.repeat(3-Math.max(0,game.lives))} LIVES · SWELL ${game.stormStage||1} · ENDLESS`:selectedMode==='rush'?`CHECKPOINTS ${game.gates} / 12 · +8 SEC EACH`:'SURF SESSION · KEEP YOUR LINE';
     const tube=game.barrel,barrelHint=tube?.inside?'BARREL RIDE · HOLD THE OPEN LINE':tube&&tube.startDistance-game.distance<70?(game.x>tube.x+1.5?'BARREL AHEAD · CARVE LEFT':game.x<tube.x-1.5?'BARREL AHEAD · CARVE RIGHT':'BARREL AHEAD · HOLD YOUR LINE'):'';
     const nextGate=game.isRace?game.course.checkpoints[game.nextCheckpoint]:null;
     let raceHint=nextGate?`SUN RING ${game.nextCheckpoint+1} · ${fmt(Math.max(0,nextGate.distance-game.distance))}m · ${game.x<nextGate.x-nextGate.radius*.6?'STEER RIGHT':game.x>nextGate.x+nextGate.radius*.6?'STEER LEFT':'HOLD YOUR LINE'}`:game.isRace?'FINISH AHEAD · W TO PUMP':'';
@@ -565,6 +595,7 @@ function updateHud(){
 radio=createRadio({element:document.querySelector('.masthead'),audio,onSelection:id=>write('breakline99-radio',id),onInteract:clearInput,onExit:()=>{$('stage').focus({preventScroll:true});clearInput();},onToggleSound:toggleSound,getSoundKey:()=>playerSettings.keybinds.sound});
 settingsPanel=createSettingsPanel({getState:()=>({settings:playerSettings,name:riderIdentity.name}),onApply:applySettings,onResetProgress:resetProgress,onClose:closeSettings});
 tutorial=createTutorial({getKeybinds:()=>playerSettings.keybinds,getName:()=>riderIdentity.name,onComplete:completeTutorial,onClose:()=>{clearInput();$('start').focus({preventScroll:true});}});
+guidedTutorial=createGuidedTutorial({getGame:()=>game,getKeybinds:()=>playerSettings.keybinds,onStartMode:startPracticeMode,onFinish:finishPractice,onSkip:finishPractice});
 adminPanel=createAdminPanel({getState:()=>({settings:adminSettings,profile}),onApply:applyAdminSettings,onGiveEverything:giveEverything,onFullReset:fullReset,onTutorial:()=>openTutorial(true),onClose:clearInput});
 keydownHandler=createKeydownHandler(
   ()=>({bootReady:bootReady&&!wasted.active&&!tutorial.isOpen,workshopMode,modalMode,game,input,homeScreen:adminHomeScreen(),adminOpen:adminPanel.isOpen,settingsOpen:settingsPanel.isOpen,keybinds:playerSettings.keybinds}),
@@ -573,7 +604,7 @@ keydownHandler=createKeydownHandler(
     isWardrobeOpen:()=>!$('wardrobe').classList.contains('hidden'),
     hideWardrobe:closeWardrobe,
     rotatePreview:delta=>preview?.rotate(delta),
-    pressControl:code=>{pressed.add(code);syncInput();}}
+    pressControl:code=>{pressed.add(code);syncInput();if(practiceSession&&soundPreference!=='off'&&!audio.enabled)audio.enable().then(updateSoundLabel);}}
 );
 window.addEventListener('keydown',keydownHandler);
 window.addEventListener('keyup',e=>{if(!bootReady||wasted.active||tutorial.isOpen||adminPanel.isOpen||settingsPanel.isOpen||!keyMap[e.code])return;const wasJump=input.jump;pressed.delete(e.code);syncInput();if(keyMap[e.code]==='jump'&&wasJump&&!input.jump&&game.phase==='running')tryPop();});
@@ -634,6 +665,8 @@ try{
   let previous=performance.now(),accumulator=0,hudTime=0,animationId;
   const frame=now=>{
     const dt=Math.min((now-previous)/1000,.05);previous=now;
+    guidedTutorial.update(dt,input);
+    if(practiceSession&&guidedTutorial.stepId==='special'&&game.phase==='running')special.gain(1);
     const simDt=timePowerInput.update(dt);
     if(game.phase==='running'&&!workshopMode){accumulator+=simDt;while(accumulator>=1/120){game.update(1/120,input);accumulator-=1/120;}special.update(simDt);checkSurvivalSecret();}else accumulator=0;
     if(!document.hidden)wasted.update(dt);
@@ -648,5 +681,5 @@ try{
     animationId=requestAnimationFrame(frame);
   };animationId=requestAnimationFrame(frame);
   world.renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();game.pause();clearInput();openModal('graphics','SIGNAL LOST','<p>The graphics connection was interrupted. Reload to start a fresh session.</p>','RELOAD GAME');});
-  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);homeScrollCue.dispose();timePowerScreen.dispose();radio.dispose();settingsPanel.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
+  if(import.meta.hot)import.meta.hot.dispose(()=>{cancelAnimationFrame(animationId);homeScrollCue.dispose();timePowerScreen.dispose();radio.dispose();settingsPanel.dispose();guidedTutorial.dispose();tutorial.dispose();adminPanel.dispose();wasted.destroy();world.dispose();preview?.dispose();menuSurfer?.dispose();audio.dispose();});
 }catch(error){console.error(error);loading.fail();}

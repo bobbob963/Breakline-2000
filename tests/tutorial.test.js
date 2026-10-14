@@ -107,6 +107,17 @@ test('first visit walks through chapters and naming, trapping the background unt
   assert.equal(f.calls.closed, 1); assert.equal(f.document.activeElement, f.previousFocus);
 });
 
+test('playable practice can hand off at Waterworks and still finish rider naming',async()=>{
+  const f=tutorialFixture();
+  assert.equal(f.tutorial.open({startStep:'waterworks'}),true);
+  assert.equal(f.query('#tutorial-title').textContent,TUTORIAL_STEPS.find(step=>step.id==='waterworks').title);
+  assert.match(f.query('#tutorial-progress').textContent,/^07 \/ 11/);
+  await f.click('next');assert.equal(f.query('#tutorial-title').textContent,TUTORIAL_STEPS.find(step=>step.id==='rivals').title);
+  await f.click('skip');assert.equal(f.query('.tutorial-name-form').hidden,false);
+  await f.input('FIRST WAVE');await f.submit();
+  assert.equal(f.calls.saved[0].value,'FIRST WAVE');assert.equal(f.tutorial.isOpen,false);
+});
+
 test('empty names stay in the form and Unicode names use a twenty-codepoint limit', async () => {
   const f = tutorialFixture(); f.tutorial.open(); await f.click('skip');
   await f.input('  \n\t '); assert.equal(await f.submit(), false);

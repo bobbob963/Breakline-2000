@@ -107,3 +107,54 @@ body.playing #app > .masthead:is(:hover, :focus-within) { height: 112px; }
 @media (max-width: 1000px) { .radio-console { grid-template-columns: minmax(66px, 1fr) 64px minmax(270px, 460px) 64px; gap: 10px; padding-inline: 14px; } .radio-grille-right { display: none; } }
 @media (max-width: 680px) { #app > .masthead { padding-inline: 8px; } .radio-console { grid-template-columns: 52px minmax(175px, 1fr) 52px; gap: 10px; padding-inline: 12px; } .radio-grille-left { display: none; } .radio-console .radio-knob { width: 45px; height: 45px; min-width: 45px; flex-basis: 45px; } .radio-console .radio-knob::before { inset: 5px; } .radio-console .radio-knob::after { top: 8px; } .radio-console #music-track.edition { font-size: 10px; letter-spacing: .5px; } .radio-presets { gap: 3px; padding-inline: 0; } .radio-console .radio-preset { min-width: 42px; font-size: 6px; padding-inline: 5px; letter-spacing: 0; } .radio-console #radio-track { font-size: 6px; letter-spacing: 0; padding-left: 4px; } .radio-display-meta { letter-spacing: .4px; font-size: 5px; } }
 @media (prefers-reduced-motion: reduce) { body.playing .radio-console { transition: none; } }
+
+/* Keep the original slim masthead in the lobby; chrome belongs to the ride. */
+body:not(.playing) #app > .masthead {
+  height: 56px; min-height: 56px; padding: 0 24px;
+  align-items: center; background: #151b24; border-bottom: 2px solid #b7644d; box-shadow: none;
+}
+body:not(.playing) .radio-console {
+  width: 100%; height: 54px; flex: 1; padding: 0; border: 0; border-radius: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'brand music sound help'; gap: 24px;
+  background: transparent; box-shadow: none;
+}
+body:not(.playing) .radio-console::before,
+body:not(.playing) .radio-console::after,
+body:not(.playing) .radio-console .radio-knob::before,
+body:not(.playing) .radio-console .radio-knob::after,
+body:not(.playing) .radio-display::after,
+body:not(.playing) .radio-brand-caption,
+body:not(.playing) .radio-knob-caption,
+body:not(.playing) .radio-grille-right,
+body:not(.playing) .radio-display-meta,
+body:not(.playing) .radio-frequency,
+body:not(.playing) .radio-presets { display: none; }
+body:not(.playing) .radio-grille-left { grid-area: brand; display: flex; }
+body:not(.playing) .radio-console .brand { width: 165px; height: 54px; margin: 0; filter: none; }
+body:not(.playing) .radio-station { grid-area: music; display: block; text-align: center; }
+body:not(.playing) .radio-display { min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+body:not(.playing) .radio-console #music-track.edition {
+  padding: 0; color: #aaa4b1; font: bold 9px/1.3 var(--mono, 'Courier New', monospace);
+  letter-spacing: 1.6px; text-shadow: none;
+}
+body:not(.playing) #music-track::before { content: '♫ '; }
+body:not(.playing) .radio-tuner { height: auto; display: block; }
+body:not(.playing) .radio-tuner:nth-child(2) { grid-area: sound; }
+body:not(.playing) .radio-tuner:nth-child(4) { grid-area: help; }
+body:not(.playing) .radio-console .radio-knob {
+  display: inline-flex; width: auto; height: auto; min-width: 0; padding: 8px 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: #e5e1d4; font: bold 10px/1.3 var(--mono, 'Courier New', monospace);
+  letter-spacing: .4px; white-space: nowrap;
+}
+body:not(.playing) .radio-console .radio-knob > span { margin: 0; }
+body:not(.playing) .radio-console .radio-knob:hover { color: var(--yellow, #f2cf54); }
+body:not(.playing) #radio-sound-label::before { content: 'SOUND '; }
+body:not(.playing) .radio-help-knob > span::after { content: ' CONTROLS'; }
+@media (max-width: 680px) {
+  body:not(.playing) #app > .masthead { padding-inline: 12px; }
+  body:not(.playing) .radio-console { gap: 12px; }
+  body:not(.playing) .radio-console .brand { width: 125px; }
+  body:not(.playing) .radio-console #music-track.edition { font-size: 8px; letter-spacing: .7px; }
+}

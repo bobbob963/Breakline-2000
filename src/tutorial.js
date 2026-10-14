@@ -158,7 +158,9 @@ export function createTutorial({ getName = () => '', getKeybinds = () => undefin
     get isOpen() { return open; },
     open(options = {}) {
       if (disposed || open) return false;
-      replay = options.replay === true; step = 0; open = true; busy = false; generation++;
+      replay = options.replay === true;
+      step = Math.max(0, TUTORIAL_STEPS.findIndex(page => page.id === options.startStep));
+      open = true; busy = false; generation++;
       previousFocus = document.activeElement; appWasInert = app?.hasAttribute('inert') || false;
       nameInput.value = sanitizeRiderName(getName()); nameInput.disabled = false; nameInput.removeAttribute('aria-invalid');
       overlay.querySelectorAll('button').forEach(button => { button.disabled = false; });

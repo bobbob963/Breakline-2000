@@ -36,6 +36,7 @@ for(const mode of ['slow','fast'])test(`main animation loop integrates ${mode} p
   const expected=mode==='slow'?.28+.72*.4:2;
   const draws=[],screens=[],specials=[];
   const c={game,timePowerInput,previous:0,accumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
+    guidedTutorial:{update:noop},practiceSession:false,
     world:{update:dt=>draws.push(dt),boardScreenOrigin:()=>({x:100,y:200})},timePowerScreen:{update:(dt,state)=>screens.push({dt,state})},wasted:{active:false,update:noop},
     preview:null,menuSurfer:{update:noop},document:{hidden:false},$ :()=>({classList:{contains:()=>true,remove:noop}}),audio:{update:noop,setRaceState:noop,setRideContext:noop},
     radio:{sync:noop},updateHud:noop,checkSurvivalSecret:noop,toastTime:0,requestAnimationFrame:()=>1};
