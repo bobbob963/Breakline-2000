@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 import * as THREE from 'three';
 import {SurfWorld} from '../src/world.js';
 import {SurfGame} from '../src/game.js';
+import {SurfRaceGame} from '../src/surf-race.js';
 import {createTimePowerInput} from '../src/time-power-input.js';
 import {SECRET_STORAGE_KEY,sanitizeSecretProgress,awardSurvivalSecret} from '../src/secret-progress.js';
 import {getRewardBoard} from '../src/board-rewards.js';
@@ -27,14 +28,16 @@ test('production unlock saves immediately at five minutes, announces once and of
   assert.match(c.rewardCard('deadtime',{unlocked:true,equipped:true}),/EQUIPPED/);
 });
 
-for(const mode of ['slow','fast'])for(const fps of [30,60,144])test(`main loop integrates ${mode} at ${fps} fps with separate player, world and pulse clocks`,()=>{
-  const game=new SurfGame();game.setRewardBoard('deadtime');game.start();
+const clockModes=[['surf',()=>new SurfGame(),false],['survival',()=>new SurfGame(()=>{},'storm'),false],
+  ['Reef Rush',()=>new SurfGame(()=>{},'rush'),true],['rival',()=>new SurfRaceGame(),true]];
+for(const [name,create,keepsSpeed] of clockModes)for(const mode of ['slow','fast'])for(const fps of [30,60,144])test(`main loop integrates ${name} ${mode} at ${fps} fps with the correct rider, world and pulse clocks`,()=>{
+  const game=create();game.setRewardBoard('deadtime');game.start();game.countdownRemaining=0;
   const timePowerInput=createTimePowerInput(()=>game);timePowerInput.press(0);
   if(mode==='fast')timePowerInput.press(120);
   // A single press starts after the double-tap window; a double starts fast
   // immediately, with the whole shared charge still available.
   const expected=mode==='slow'?.28+.72*.4:2;
-  const expectedPlayer=mode==='slow'?1:2;
+  const expectedPlayer=mode==='slow'&&keepsSpeed?1:expected;
   const draws=[],playerDraws=[],screens=[],specials=[];
   const c={game,timePowerInput,previous:0,accumulator:0,worldAccumulator:0,hudTime:0,animationId:0,workshopMode:null,modalMode:null,input:{pump:true},special:{update:dt=>specials.push(dt)},
     guidedTutorial:{update:noop},practiceSession:false,

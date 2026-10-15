@@ -11,8 +11,16 @@ import { TournamentGame } from '../src/tournament.js';
 
 const near=(a,b,tolerance=1e-8)=>assert.ok(Math.abs(a-b)<tolerance,`${a} should equal ${b}`);
 const trial=index=>createTimeTrialGame(()=>{},{version:1,completedTrials:index,selectedTrial:index,bestTimes:[]});
-const modes=[()=>new SurfGame(),()=>new SurfGame(()=>{},'storm'),()=>new SurfGame(()=>{},'rush'),()=>new WaveParkGame(),
-  ()=>new SurfRaceGame(),()=>new ParkRaceGame(),()=>new SewerRaceGame(),()=>trial(0),()=>trial(5),()=>new TournamentGame()];
+const modeCases=[
+  ['Surf Session',()=>new SurfGame(),false],['Storm Rider',()=>new SurfGame(()=>{},'storm'),false],
+  ['free Waterworks',()=>new WaveParkGame(),false],['score tournament',()=>new TournamentGame(),false],
+  ['free sewer rider',()=>new SewerRider(),false],['Reef Rush',()=>new SurfGame(()=>{},'rush'),true],
+  ['surf rival',()=>new SurfRaceGame(),true],['Waterworks rival',()=>new ParkRaceGame(),true],
+  ['Runoff rival',()=>new SewerRaceGame(),true],
+  ['Deep End rival',()=>new SewerRaceGame(()=>{},{trackId:'sewer-depths'}),true],
+  ['surf time trial',()=>trial(0),true],['Waterworks time trial',()=>trial(5),true],
+];
+const modes=modeCases.map(([,create])=>create);
 function running(create){const game=create();game.start();game.countdownRemaining=0;return game;}
 function snapshot(game){return Object.fromEntries(['elapsed','playerElapsed','time','distance','x','y','z','vx','vy','vz','speed','heading','airtime','charge','popRecovery','wipeouts','nextCheckpoint'].map(key=>[key,game[key]]));}
 function timeFrame(game,realDt,input={}){const worldDt=game.updateTimePower(realDt);game.update(game.timePowerPlayerDelta,input,worldDt);}
@@ -26,30 +34,52 @@ test('explicit equal clocks preserve ordinary and fast-forward physics across ev
   }
 });
 
-test('the power preserves ordinary player acceleration while every mode advances only its slowed world clock',()=>{
-  for(const create of modes){
-    const game=running(create),normal=running(create);game.setRewardBoard('deadtime');assert.equal(game.toggleTimePower(),true);
-    for(let frame=0;frame<60;frame++){timeFrame(game,1/120,{pump:true});normal.update(1/120,{pump:true});}
-    near(game.playerElapsed,.5);near(game.elapsed,.2);near(game.timePowerCharge,5.5);
-    // Storm difficulty itself advances more slowly; the rider's acceleration
-    // remains normal while the environmental speed increase is correspondingly lower.
-    if(game.rulesId!=='storm')near(game.speed,normal.speed,1e-6);
-    else assert.ok(Math.abs(game.speed-normal.speed)<.01);
+test('slow time preserves rider speed only in real race modes and slows the entire non-race session',()=>{
+  for(const [name,create,preservesSpeed] of modeCases){
+    const game=running(create),reference=running(create);game.setRewardBoard('deadtime');assert.equal(game.toggleTimePower(),true);
+    assert.equal(game.timePowerKeepsPlayerSpeed,preservesSpeed,name);
+    for(let frame=0;frame<60;frame++){
+      timeFrame(game,1/120,{pump:true});reference.update((preservesSpeed?1:.4)/120,{pump:true});
+    }
+    near(game.playerElapsed,preservesSpeed?.5:.2);near(game.elapsed,.2);near(game.timePowerCharge,5.5);
+    near(game.speed,reference.speed,1e-6);
+    if(!preservesSpeed)assert.deepEqual(snapshot(game),snapshot(reference),name);
     if(game.isTimeTrial)near(game.time,game.trial.timeLimit-.2);
     if(game.opponent){near(game.opponent.elapsed,.2);near(game.opponent.playerElapsed,.2);}
   }
 });
 
-test('slow time leaves player steering, charged jumps, airborne tricks and pop recovery at normal pace',()=>{
-  for(const create of [()=>new SurfGame(),()=>new WaveParkGame(),()=>new SewerRider()]){
-    const normal=running(create),slow=running(create);
-    for(const game of [normal,slow]){game.rules={...game.rules,currentStrength:0};game.charge=.5;game.cutbackLaunchTime=1;assert.equal(game.jump(),true);assert.equal(game.doTrick('spin'),true);}
-    for(let frame=0;frame<30;frame++){
-      normal.update(1/120,{right:true});slow.update(1/120,{right:true},.4/120);
+test('actual slow-time activation slows session steering and tricks while race jumps stay at normal pace',()=>{
+  for(const [name,create,preservesSpeed] of modeCases){
+    const reference=running(create),powered=running(create);
+    for(const game of [reference,powered]){
+      game.rules={...game.rules,currentStrength:0};game.charge=.5;game.cutbackLaunchTime=1;
+      assert.equal(game.jump(),true,name);assert.equal(game.doTrick('spin'),true,name);
     }
-    near(slow.airtime,normal.airtime);near(slow.trick.age,normal.trick.age);near(slow.vy,normal.vy);near(slow.popRecovery,normal.popRecovery);
-    near(slow.vx,normal.vx);near(slow.x,normal.x);if(normal.heading!==undefined)near(slow.heading,normal.heading);
-    near(slow.playerElapsed,.25);near(slow.elapsed,.1);
+    powered.setRewardBoard('deadtime');assert.equal(powered.toggleTimePower(),true,name);
+    for(let frame=0;frame<30;frame++){
+      reference.update((preservesSpeed?1:.4)/120,{right:true});timeFrame(powered,1/120,{right:true});
+    }
+    near(powered.airtime,reference.airtime);near(powered.trick.age,reference.trick.age);
+    near(powered.vy,reference.vy);near(powered.popRecovery,reference.popRecovery);
+    near(powered.vx,reference.vx);near(powered.x,reference.x);
+    if(reference.heading!==undefined)near(powered.heading,reference.heading);
+    near(powered.playerElapsed,preservesSpeed?.25:.1);near(powered.elapsed,.1);
+    near(powered.timePowerCharge,5.75);
+  }
+});
+
+test('custom-duration expiry restores ordinary clocks in every mode and grants the same real-time burst',()=>{
+  for(const [name,create,preservesSpeed] of modeCases){
+    const game=running(create);game.setRewardBoard('deadtime');
+    game.setAdminStats({active:false,cheats:{timePowerDuration:1}});game.toggleTimePower();
+    for(let frame=0;frame<180;frame++)timeFrame(game,1/120,{pump:true});
+    assert.equal(game.timePowerActive,false,name);near(game.timePowerCharge,0);
+    near(game.elapsed,.9);near(game.playerElapsed,preservesSpeed?1.5:.9);
+    near(game.timePowerBurstTime,2.5);near(game.timePowerCooldown,11.5);
+    near(game.timePowerSpeedMultiplier,1.5);
+    const before=snapshot(game);timeFrame(game,.01,{pump:true});
+    near(game.elapsed-before.elapsed,.01);near(game.playerElapsed-before.playerElapsed,.01);
   }
 });
 

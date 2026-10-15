@@ -112,7 +112,7 @@ test('split clocks keep the player responsive while the rival and course clock s
 test('custom slow duration survives resets and recharge while fast-forward keeps six seconds',()=>{
   const {game}=fixture();game.setAdminStats({active:false,cheats:{timePowerDuration:15}});
   assert.equal(game.timePowerDuration,15);assert.equal(game.timePowerCapacity,15);near(game.timePowerCharge,15);
-  game.toggleTimePower();near(game.updateTimePower(5),2);near(game.timePowerPlayerDelta,5);near(game.timePowerCharge,10);
+  game.toggleTimePower();near(game.updateTimePower(5),2);near(game.timePowerPlayerDelta,2);near(game.timePowerCharge,10);
   game.fastForwardTimePower();assert.equal(game.timePowerCapacity,6);near(game.timePowerCharge,4);
   near(game.updateTimePower(1),2);near(game.timePowerPlayerDelta,2);
   game.toggleTimePower();game.toggleTimePower();near(game.timePowerCharge,7.5);
@@ -133,15 +133,18 @@ test('editing duration preserves charge fraction and cannot bypass recharge or r
   }
 });
 
-test('player clock integrates normal slow motion and scaled fast-forward exactly across expiry',()=>{
-  for(const mode of ['slow','fast'])for(const fps of [30,60,144]){
-    const p=new TimePower(),state={playing:true,equipped:true};p.setDuration(1.3);
+test('session and race player clocks integrate slow motion and fast-forward exactly across expiry',()=>{
+  const framesets=[[7],[1.29,.02,5.69],...[30,60,144].map(fps=>Array.from({length:fps*7},()=>1/fps))];
+  for(const preservePlayerSpeed of [false,true])for(const mode of ['slow','fast'])for(const frames of framesets){
+    const p=new TimePower(),state={playing:true,equipped:true,preservePlayerSpeed};p.setDuration(1.3);
     mode==='slow'?p.toggle(true):p.fastForward(true);
     let world=0,player=0;
-    for(let i=0;i<fps*7;i++){world+=p.update(1/fps,state);player+=p.lastPlayerDelta;}
-    near(world,mode==='slow'?7-1.3*.6:13);near(player,mode==='slow'?7:13);
+    for(const dt of frames){world+=p.update(dt,state);player+=p.lastPlayerDelta;}
+    const expectedWorld=mode==='slow'?7-1.3*.6:13;
+    near(world,expectedWorld);near(player,mode==='slow'&&preservePlayerSpeed?7:expectedWorld);
+    near(p.burst,mode==='slow'?0:2);near(p.cooldown,mode==='slow'?6.3:11);
   }
-  const p=new TimePower();p.toggle(true);p.update(1,{playing:true,equipped:true});
+  const p=new TimePower();p.toggle(true);near(p.update(1,{playing:true,equipped:true}),.4);near(p.lastPlayerDelta,.4);
   for(const invalid of [NaN,Infinity,-1,0]){assert.equal(p.update(invalid,{playing:true,equipped:true}),0);assert.equal(p.lastPlayerDelta,0);}
 });
 

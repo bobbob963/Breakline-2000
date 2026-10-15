@@ -5,8 +5,8 @@ export const TIME_POWER_RECHARGE = 12;
 export const TIME_POWER_BURST_SECONDS = 3;
 export const TIME_POWER_BURST_MULTIPLIER = 1.5;
 
-// Charge uses real active-play seconds. Slow motion scales the world clock but
-// leaves the rider clock alone; fast-forward scales both. Pausing spends neither.
+// Charge uses real active-play seconds. Slow motion scales both clocks in
+// regular sessions; races can preserve rider speed. Fast-forward scales both.
 export class TimePower {
   constructor(emit = () => {}) { this.emit = emit; this.duration = TIME_POWER_CHARGE; this.reset(); }
   reset() { this.revision = (this.revision ?? 0) + 1; this.active = false; this.mode = 'slow'; this.charge = this.capacity; this.cooldown = 0; this.burst = 0; this.lastPlayerDelta = 0; }
@@ -49,7 +49,7 @@ export class TimePower {
     this.emit({ type:'timePower', active:true, reason, mode:this.mode, timeScale:this.timeScale, charge:this.charge, duration:this.capacity });
     return true;
   }
-  update(dt, { playing, equipped, recovering = false, ended = false }) {
+  update(dt, { playing, equipped, recovering = false, ended = false, preservePlayerSpeed = false }) {
     this.lastPlayerDelta = 0;
     if (!equipped || recovering || ended) this.cancel(!equipped ? 'unequip' : recovering ? 'bail' : 'finish');
     if (!Number.isFinite(dt) || dt <= 0) return 0;
@@ -61,7 +61,7 @@ export class TimePower {
       const activeTime = Math.min(remaining, this.charge);
       this.charge = Math.max(0, this.charge - activeTime);
       remaining -= activeTime; simulated += activeTime * this.timeScale;
-      this.lastPlayerDelta += activeTime * (this.mode === 'fast' ? TIME_POWER_FAST_SCALE : 1);
+      this.lastPlayerDelta += activeTime * (this.mode === 'slow' && preservePlayerSpeed ? 1 : this.timeScale);
       if (this.charge < 1e-9) {
         this.charge = 0; this.stop('spent');
         this.cooldown = TIME_POWER_RECHARGE;

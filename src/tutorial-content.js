@@ -66,7 +66,7 @@ export const TUTORIAL_STEPS = Object.freeze([
       { title: 'THROUGH THE BARREL', text: 'Line up with the hollow curl. Watch the countdown, pump with W and carry trick boosts through before the wave shuts.' },
       { title: 'THE STORM BUILDS', text: 'Later reef banks funnel you into barrels. Their escape window gets shorter, down to 1.3 seconds. Set up your boost on the approach.' },
       { title: 'WATCH THE SURFACE', text: 'Tap and release Space to hop driftwood, or steer around it. Stay clear of the dark centre of a whirlpool.' },
-      { title: 'FIVE MINUTES → DEADTIME', text: 'Survive five minutes to unlock the secret board. Equip it and tap Q for slow motion while you keep normal riding and trick speed, or double-tap Q for 2× fast-forward with a red pulse. Spend its full charge for +50% speed for three seconds.' },
+      { title: 'FIVE MINUTES → DEADTIME', text: 'Survive five minutes to unlock the secret board. Equip it and tap Q for slow motion: your rider slows too in Surf Session, Survival and free Waterworks, but keeps normal speed in races. Or double-tap Q for 2× fast-forward with a red pulse. Spend its full charge for +50% speed for three seconds.' },
     ],
     note: 'Your third wipeout ends the run. DEADTIME shares its charge between powers and recharges in twelve seconds of active play. Slow motion defaults to six seconds; change its duration in Admin. Fast-forward lasts six seconds.',
   },

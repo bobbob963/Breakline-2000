@@ -43,7 +43,7 @@ export function createAdminPanel({ getState, onApply, onGiveEverything, onFullRe
         </section>
         <section class="admin-cheats" aria-labelledby="admin-cheats-title">
           <div><h3 id="admin-cheats-title">CHEATS</h3><label class="admin-enabled"><input type="checkbox" id="admin-slow-motion" aria-describedby="admin-slow-motion-description"> <span>SLOW MOTION / Q</span></label></div>
-          <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Tap Q for slow motion or double-tap Q for 2× fast-forward with a red pulse. Set the slow-motion duration below; fast-forward always lasts 6 seconds. Both use the same remaining charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
+          <p id="admin-slow-motion-description">Use slow motion with any board, even with custom stats switched off. Your rider slows with the world in regular sessions and keeps normal speed in races. Tap Q for slow motion or double-tap Q for 2× fast-forward with a red pulse. Set the slow-motion duration below; fast-forward always lasts 6 seconds. Both use the same remaining charge. Use the full charge for +50% speed for 3 seconds. The charge returns after 12 seconds.</p>
           <section class="admin-time-power-duration">${fieldMarkup(ADMIN_TIME_POWER_DURATION_FIELD, 'cheats', ADMIN_TIME_POWER_DURATION_FIELD.default)}</section>
         </section>
         <section class="admin-tutorial" aria-labelledby="admin-tutorial-title">

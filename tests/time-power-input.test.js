@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SurfGame } from '../src/game.js';
+import { SurfRaceGame } from '../src/surf-race.js';
 import { createTimePowerInput } from '../src/time-power-input.js';
 import { createKeydownHandler } from '../src/keyboard.js';
 import { DEFAULT_KEYBINDS, rebindKey } from '../src/key-bindings.js';
 
 const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-8,`${actual} should equal ${expected}`);
-function fixture() {
-  const events=[],game=new SurfGame(event=>events.push(event));
-  game.setRewardBoard('deadtime');game.start();
+function fixture(create=emit=>new SurfGame(emit)) {
+  const events=[],game=create(event=>events.push(event));
+  game.setRewardBoard('deadtime');game.start();game.countdownRemaining=0;
   const state={bootReady:true,homeScreen:false,game,input:{},keybinds:DEFAULT_KEYBINDS};
   const input=createTimePowerInput(()=>state.game);
   const handler=createKeydownHandler(()=>state,{
@@ -28,13 +29,13 @@ test('two distinct power presses start six full seconds of fast-forward without 
   assert.deepEqual(events.filter(event=>event.type==='timePower'&&event.active).map(event=>event.mode),['fast']);
 });
 
-test('a single press resolves at 280 ms and integrates the crossing at every frame size',()=>{
-  for(const frames of [[1],[.28,.72],[.279,.001,.72],Array.from({length:60},()=>1/60)]) {
-    const {game,input}=fixture();input.press();
+test('a single press resolves at 280 ms with the correct session or race rider clock at every frame size',()=>{
+  for(const race of [false,true])for(const frames of [[1],[.28,.72],[.279,.001,.72],Array.from({length:60},()=>1/60)]) {
+    const {game,input}=fixture(emit=>race?new SurfRaceGame(emit):new SurfGame(emit));input.press();
     let player=0;
     const simulated=frames.reduce((total,dt)=>{const world=input.update(dt);player+=input.playerDelta;return total+world;},0);
     near(simulated,.28+.72*.4);near(game.timePowerCharge,5.28);
-    near(player,1);
+    near(player,race?1:simulated);
     assert.equal(game.timePowerMode,'slow');assert.equal(game.timePowerActive,true);
   }
 });

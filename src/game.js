@@ -121,6 +121,7 @@ export class SurfGame {
   get timePowerDuration() {return this._timePower?.duration??6;}
   get timePowerCapacity() {return this._timePower?.capacity??6;}
   get timePowerPlayerDelta() {return this._timePower?.lastPlayerDelta??0;}
+  get timePowerKeepsPlayerSpeed() {return this.isRace===true||this.rulesId==='rush';}
   get timePowerCooldown() {return this._timePower?.cooldown??0;}
   get timePowerBurstTime() {return this.timePowerEnabled&&(this.phase==='running'||this.phase==='paused')&&this.bailTime<=0?(this._timePower?.burst??0):0;}
   get timePowerSpeedMultiplier() {return this.timePowerBurstTime>0?TIME_POWER_BURST_MULTIPLIER:1;}
@@ -133,7 +134,8 @@ export class SurfGame {
     this._sewerPower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
       equipped:this.sewerPowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});
     return this._timePower.update(realDt,{playing:this.phase==='running'&&!(this.countdownRemaining>0),
-      equipped:this.timePowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished'});
+      equipped:this.timePowerEnabled,recovering:this.bailTime>0,ended:this.phase==='ready'||this.phase==='finished',
+      preservePlayerSpeed:this.timePowerKeepsPlayerSpeed});
   }
   get glideEligible() {
     return (this.phase==='running'||this.phase==='paused')&&this.airborne&&this.bailTime<=0&&
