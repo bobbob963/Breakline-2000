@@ -31,6 +31,27 @@ test('maintenance room, tunnel and main terrain meet at closed matching floor se
   }finally{dispose(world.group);}
 }));
 
+test('flat riding floors have one visible surface, without a coplanar foundation competing for depth',()=>withCanvas(()=>{
+  const world=createWaterworks();world.group.updateMatrixWorld(true);
+  try{
+    const surfaces=[];world.group.traverse(object=>{if(object.isMesh&&object.visible)surfaces.push(object);});
+    const points=[[108.3,-9.1],[88.9,4.1],[115.4,12.7],[119.8,-10]];
+    for(const x of [124.7,139.3,157.1,165.8,167.2,177.3,204.7,238.2])for(const z of [-14.3,-8.1,-3.2])points.push([x,z]);
+    const ray=new THREE.Raycaster();
+    for(const [x,z] of points){
+      const height=parkHeight(x,z);ray.set(new THREE.Vector3(x,height+.2,z),new THREE.Vector3(0,-1,0));ray.far=.4;
+      const floor=ray.intersectObjects(surfaces.filter(object=>object.userData.terrain),false)[0];
+      assert.ok(floor,`missing riding floor at ${x}, ${z}`);
+      assert.ok(Math.abs(floor.point.y-height)<.026,`floor differs from collision at ${x}, ${z}`);
+      const hits=ray.intersectObjects(surfaces,false).filter(hit=>Math.abs(hit.point.y-floor.point.y)<.002);
+      // Adjacent triangles of one floor may both contain an edge. Distinct
+      // overlapping meshes are the problem: their colours can alternate per pixel.
+      const layers=new Set(hits.map(hit=>hit.object.uuid));
+      assert.equal(layers.size,1,`competing floor surfaces at ${x}, ${z}: ${hits.map(hit=>hit.object.name||hit.object.material.color?.getHexString()).join(', ')}`);
+    }
+  }finally{dispose(world.group);}
+}));
+
 test('hidden wall is concealed outside and clears the follow-camera crossing after entry',()=>withCanvas(()=>{
   const world=createWaterworks();
   try{

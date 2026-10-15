@@ -44,11 +44,14 @@ export function createParkMaintenance(materials){
     return mesh(group,geometry,material);
   };
   // Floors abut at x166; their solid foundations overlap underneath the seam.
+  // Keep the foundation top below the riding skin. A coplanar top flickers
+  // through the textured floor as the camera moves, including at the entrance.
+  const foundationTop=floorY-.15;
   const tunnelFloor=addTerrain(group,{minX:entrance.x,maxX:bay.minX,minZ:tunnel.minZ,maxZ:tunnel.maxZ},'maintenance-tunnel-collision-terrain');
   const bayFloor=addTerrain(group,bay,'maintenance-bay-collision-terrain');
   preserve.add(tunnelFloor);preserve.add(bayFloor);
-  box(group,damp,(entrance.x+bay.minX)/2,floorY-1.6,(tunnel.minZ+tunnel.maxZ)/2,bay.minX-entrance.x+1,3.2,tunnel.maxZ-tunnel.minZ+2);
-  box(group,damp,(bay.minX+bay.maxX)/2,floorY-1.6,(bay.minZ+bay.maxZ)/2,bay.maxX-bay.minX+2,3.2,bay.maxZ-bay.minZ+2);
+  box(group,damp,(entrance.x+bay.minX)/2,foundationTop-1.6,(tunnel.minZ+tunnel.maxZ)/2,bay.minX-entrance.x+1,3.2,tunnel.maxZ-tunnel.minZ+2);
+  box(group,damp,(bay.minX+bay.maxX)/2,foundationTop-1.6,(bay.minZ+bay.maxZ)/2,bay.maxX-bay.minX+2,3.2,bay.maxZ-bay.minZ+2);
 
   // A regular, stained concrete repair patch hides the entrance from the basin.
   // Its back is open; it also vanishes while the follow camera crosses the wall.
