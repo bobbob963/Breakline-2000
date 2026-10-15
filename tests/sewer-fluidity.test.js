@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createSewerCourse, sewerPoint, sewerWaterHeight, sewerTunnelProfile } from '../src/sewer-course.js';
+import { createSewerCourse, sewerBranches, sewerPoint, sewerWaterHeight, sewerTunnelProfile } from '../src/sewer-course.js';
 import { createSewerWorld } from '../src/sewer-world.js';
 import { createSewerCameraState, stepSewerCamera } from '../src/sewer-camera-rig.js';
 
@@ -55,7 +55,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
     try {
       await t.test('water meets every visible side margin, deck edge, shortcut mouth and streamed chunk seam', () => {
         const failures = [];
-        for (const path of [null, ...course.shortcuts]) {
+        for (const path of [null, ...sewerBranches(course)]) {
           const distances = new Set(), start = path?.start ?? 0, end = path?.end ?? course.length;
           range(distances, start + .25, end - .25, path ? 2.75 : 31);
           for (const stream of world.waters.filter(stream => (stream.geometry.userData.path?.id || null) === (path?.id || null))) {
@@ -63,7 +63,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
               for (const delta of [-.025, 0, .025]) if (seam + delta > start && seam + delta < end) distances.add(seam + delta);
             }
           }
-          for (const branch of path ? [path] : course.shortcuts) {
+          for (const branch of path ? [path] : sewerBranches(course)) {
             for (const mouth of [branch.start, branch.end]) range(distances, Math.max(start, mouth - 12), Math.min(end, mouth + 12), 1);
           }
           for (const distance of sorted(distances)) {
@@ -97,11 +97,11 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
 
       await t.test('original tunnel shells close beneath both sides of every shortcut union', () => {
         const failures = [];
-        for (const path of course.shortcuts) {
+        for (const path of sewerBranches(course)) {
           const distances = new Set();
           for (const mouth of [path.start, path.end]) range(distances, Math.max(path.start + .25, mouth - 20), Math.min(path.end - .25, mouth + 20), 1.25);
           // Exact exposed-floor regressions found independently before the fix.
-          if (trackId === 'sewer-depths' && path === course.shortcuts[0]) { distances.add(95.25); distances.add(100.25); }
+          if (trackId === 'sewer-depths' && path === sewerBranches(course)[0]) { distances.add(95.25); distances.add(100.25); }
           for (const distance of sorted(distances)) {
             for (let offset = -3.2; offset <= 3.2; offset += .4) {
               const lane = path.entryX + offset, height = sewerWaterHeight(lane, distance, 2.3, trackId, path);
@@ -114,7 +114,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
       });
 
       await t.test('every intentional whirlpool opening has an opaque basin underneath', () => {
-        assert.equal(beds.length, course.shortcuts.length + 1, 'each real route has its own basin floor');
+        assert.equal(beds.length, sewerBranches(course).length + 1, 'each real route has its own basin floor');
         for (const {mesh, item} of world.hazards.filter(entry => entry.item.type === 'whirlpool')) {
           refresh(item.distance);
           const path = item.path === 'main' ? null : item.path;
@@ -133,7 +133,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
 
       await t.test('jump-height chase views cannot look through the lower map at junctions', () => {
         const failures = [];
-        for (const path of course.shortcuts) for (const mouth of [path.start, path.end]) {
+        for (const path of sewerBranches(course)) for (const mouth of [path.start, path.end]) {
           for (const distance of [mouth - 4, mouth + .25, mouth + 4]) for (const jumpHeight of [0, 4.5]) {
             refresh(distance);
             const active = distance > path.start && distance < path.end ? path : null;

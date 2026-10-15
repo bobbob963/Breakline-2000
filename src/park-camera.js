@@ -1,8 +1,9 @@
 import { PARK_BOUNDS, PARK_PIPES, parkHeight, parkPointBlocked, parkLocal } from './park.js';
+import { PARK_MAINTENANCE, maintenanceContains, maintenanceCeilingAt, rectangleContains } from './park-maintenance.js';
 
 const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
 
-function clearView(head,camera) {
+function clearView(head,camera,maintenance=false) {
   const distance = Math.hypot(camera.x-head.x,camera.y-head.y,camera.z-head.z);
   const samples = Math.max(1,Math.ceil(distance/.05));
   for(let i=0;i<=samples;i++) {
@@ -10,14 +11,15 @@ function clearView(head,camera) {
     const x=head.x+(camera.x-head.x)*fraction;
     const z=head.z+(camera.z-head.z)*fraction;
     const y=head.y+(camera.y-head.y)*fraction;
+    if(maintenance&&(!rectangleContains(PARK_BOUNDS,x,z,-.12)&&!maintenanceContains(x,z,-.12)||y>maintenanceCeilingAt(x,z)-.18))return false;
     if(y < parkHeight(x,z)+.30||parkPointBlocked(x,y,z,.12)) return false;
   }
   return true;
 }
 
-function longestClearBoom(candidateAt,head,focus=null,endpointClearance=1.5) {
+function longestClearBoom(candidateAt,head,focus=null,endpointClearance=1.5,maintenance=false) {
   const clear=camera=> (endpointClearance===0||camera.y>=parkHeight(camera.x,camera.z)+endpointClearance) &&
-    clearView(head,camera) && (!focus||clearView(focus,camera));
+    clearView(head,camera,maintenance) && (!focus||clearView(focus,camera,maintenance));
   let rejected=1;
   for(let step=0;step<=10;step++) {
     const fraction=1-step/10,candidate=candidateAt(fraction);
@@ -41,6 +43,7 @@ function longestClearBoom(candidateAt,head,focus=null,endpointClearance=1.5) {
 // The function accepts any desired position with x/y/z fields, without a DOM or
 // renderer dependency. Callers must not interpolate Y below this result.
 export function resolveParkCamera(x,y,z,desired,rideUp=null,options={}) {
+  const maintenance=options.maintenanceAccess===true||(x>PARK_BOUNDS.maxX-.4&&maintenanceContains(x,z));
   if(rideUp) {
     // In a full pipe loop, the surfer's up vector points into the bore. Place
     // the head and camera on that same side even while completely inverted.
@@ -51,7 +54,7 @@ export function resolveParkCamera(x,y,z,desired,rideUp=null,options={}) {
     return longestClearBoom(candidateAt,head,options.focus,0)||anchor;
   }
   const requested = {
-    x:clamp(desired.x,PARK_BOUNDS.minX+.8,PARK_BOUNDS.maxX-.8),
+    x:clamp(desired.x,PARK_BOUNDS.minX+.8,maintenance?PARK_MAINTENANCE.bay.maxX-.18:PARK_BOUNDS.maxX-.8),
     z:clamp(desired.z,PARK_BOUNDS.minZ+.8,PARK_BOUNDS.maxZ-.8),
   };
   const baseHeight = Math.max(y+2.6,parkHeight(x,z)+2.6);
@@ -67,6 +70,7 @@ export function resolveParkCamera(x,y,z,desired,rideUp=null,options={}) {
       z:z+(requested.z-z)*fraction,
     };
     candidate.y = options.terrainLift===true?Math.max(baseHeight+extraHeight*fraction,parkHeight(candidate.x,candidate.z)+1.5):baseHeight+extraHeight*fraction;
+    if(maintenance)candidate.y=Math.min(candidate.y,maintenanceCeilingAt(candidate.x,candidate.z)-.25);
     if(inside) {
       const local=parkLocal(inside,candidate.x,candidate.z),radius=inside.radius-inside.thickness-.18;
       if(Math.abs(local.v)<=inside.length/2) {
@@ -78,9 +82,9 @@ export function resolveParkCamera(x,y,z,desired,rideUp=null,options={}) {
     }
     return candidate;
   };
-  const resolved=longestClearBoom(candidateAt,head,options.focus,options.terrainLift===false?.55:1.5);
+  const resolved=longestClearBoom(candidateAt,head,options.focus,options.terrainLift===false?.55:1.5,maintenance);
   if(resolved)return resolved;
   // Valid rider positions always make the zero-length horizontal boom clear.
   // Keep an above-rider fallback for transient recovery/custom debug states.
-  return {x,y:inside?Math.min(baseHeight,inside.centerY+Math.sqrt(Math.max(0,(inside.radius-inside.thickness-.18)**2-parkLocal(inside,x,z).u**2))):baseHeight,z};
+  return {x,y:inside?Math.min(baseHeight,inside.centerY+Math.sqrt(Math.max(0,(inside.radius-inside.thickness-.18)**2-parkLocal(inside,x,z).u**2))):maintenance?Math.min(baseHeight,maintenanceCeilingAt(x,z)-.25):baseHeight,z};
 }

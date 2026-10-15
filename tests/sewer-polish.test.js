@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createSewerCourse, sewerPoint, sewerWaterHeight } from '../src/sewer-course.js';
+import { createSewerCourse, sewerBranches, sewerPoint, sewerWaterHeight } from '../src/sewer-course.js';
 import { createSewerWorld } from '../src/sewer-world.js';
 import { createSewerCameraState, stepSewerCamera } from '../src/sewer-camera-rig.js';
 
@@ -64,10 +64,10 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
     const game = gameFixture(trackId), world = createSewerWorld();
     world.update(game, 0);
     const walls = shells(world);
-    assert.equal(walls.length, game.course.shortcuts.length + 1);
+    assert.equal(walls.length, sewerBranches(game.course).length + 1);
     try {
       await t.test('legal rider lines pass through both ends of every actual pipe mesh', () => {
-        for (const branch of game.course.shortcuts) {
+        for (const branch of sewerBranches(game.course)) {
           for (const mouth of [branch.start, branch.end]) {
             for (const lateral of [-branch.width * .43, 0, branch.width * .43]) {
               for (const bodyHeight of [.8, 1.85]) {
@@ -87,7 +87,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
       });
 
       await t.test('junction unions retain the outer walls beside the racing lane', () => {
-        for (const branch of game.course.shortcuts) {
+        for (const branch of sewerBranches(game.course)) {
           for (const path of [null, branch]) {
             for (let distance = branch.start + 3; distance < branch.end; distance += 7) {
               const point = sewerPoint(distance, path ? branch.entryX : 0, 3, trackId, path);
@@ -102,7 +102,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
       });
 
       await t.test('the chase lens has an unobstructed view of the rider through shortcut junctions', () => {
-        for (const branch of game.course.shortcuts) {
+        for (const branch of sewerBranches(game.course)) {
           for (const lateral of [-branch.width * .40, branch.width * .40]) {
             for (const camera of ['classic', 'wide']) {
               const state = createSewerCameraState();
@@ -129,7 +129,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
         for (let distance = 0; distance <= game.course.length; distance += 19) {
           game.distance = distance; game.elapsed += .35;
           world.update(game, game.elapsed);
-          for (const path of [null, ...game.course.shortcuts.filter(branch => distance >= branch.start && distance <= branch.end)]) {
+          for (const path of [null, ...sewerBranches(game.course).filter(branch => distance >= branch.start && distance <= branch.end)]) {
             const covering = world.waters.filter(stream => {
               const data = stream.geometry.userData;
               return (data.path?.id || null) === (path?.id || null) && distance >= data.start && distance <= data.end;
@@ -144,7 +144,7 @@ for (const trackId of ['sewer-run', 'sewer-depths']) {
       });
 
       await t.test('shortcut riders stay on the visible water rather than below overlapping main water', () => {
-        for (const branch of game.course.shortcuts) {
+        for (const branch of sewerBranches(game.course)) {
           for (let distance = branch.start + 1; distance < branch.end; distance += 11) {
             game.distance = distance;
             world.update(game, 2); world.group.updateMatrixWorld(true);

@@ -4,6 +4,8 @@ import { retroMaterial } from './appearance.js';
 import { createClassicLogoCanvas } from './classic-logo.js';
 import { waterworksTexture as texture } from './waterworks-textures.js';
 import * as PARK from './park.js';
+import { PARK_MAINTENANCE } from './park-maintenance.js';
+import { createParkMaintenance } from './park-maintenance-world.js';
 
 const TAU = Math.PI * 2;
 const mesh = (g, geo, material, x = 0, y = 0, z = 0) => {
@@ -38,13 +40,15 @@ function sign(g, text, x, y, z, width = 22, height = 3.4, rotation = 0, color = 
   const m = mesh(g, new THREE.PlaneGeometry(width, height), new THREE.MeshLambertMaterial({ map, side: THREE.DoubleSide }), x, y, z);
   m.rotation.y = rotation; return m;
 }
-function addTerrain(g, material) {
-  const { PARK_BOUNDS: b, parkHeight } = PARK;
+function addTerrain(g, material, bounds = PARK.PARK_BOUNDS, name = 'unified-collision-terrain') {
+  const b = bounds, { parkHeight } = PARK;
   const width = b.maxX - b.minX, length = b.maxZ - b.minZ;
   const nx = Math.ceil(width / 1.2), nz = Math.ceil(length / 1.2), dx = width / nx, dz = length / nz;
   const positions = [], uvs = [], colors = [], indices = [];
-  const dry = new THREE.Color('#e0ded4'), wet = new THREE.Color('#939c91'), rampColor = new THREE.Color('#d7d3c4');
+  const maintenance=name.startsWith('maintenance-');
+  const dry = new THREE.Color(maintenance?'#e1ceaa':'#e0ded4'), wet = new THREE.Color('#939c91'), rampColor = new THREE.Color(maintenance?'#dac494':'#d7d3c4');
   const worn = new THREE.Color('#eeeadb'), grime = new THREE.Color('#68736c');
+  const safetyYellow=new THREE.Color('#e9bb46'),safetyBlack=new THREE.Color('#4e4a32');
   const rampPaint = PARK.PARK_RAMPS.map(ramp => ({ ...ramp, c:Math.cos(ramp.rotation), s:Math.sin(ramp.rotation) }));
   const vertex = (x, z, biasX = 0, biasZ = 0, overrideY) => {
     if (Math.abs(x) < 1e-7) x = 0;
@@ -63,6 +67,10 @@ function addTerrain(g, material) {
         const t=v/ramp.length+.5, sideDistance=ramp.width/2-Math.abs(u);
         const nearEdge=1-THREE.MathUtils.smoothstep(sideDistance,.15,2.4);
         color.lerp(grime, nearEdge*.23);
+        if(maintenance&&sideDistance<1.4&&sideDistance>.12&&t>.12&&t<.96){
+          const stripe=Math.floor((v+u)*.42)%2===0?safetyYellow:safetyBlack;
+          color.lerp(stripe,.83);
+        }
         if(['quarter','kicker','access'].includes(ramp.type)) {
           const lip=THREE.MathUtils.smoothstep(t,.89,.975);
           color.lerp(grime,lip*.43);
@@ -176,7 +184,7 @@ function addTerrain(g, material) {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices); geo.computeVertexNormals();
   material.vertexColors = true; material.side = THREE.DoubleSide;
-  const floor = mesh(g, geo, material); floor.name = 'unified-collision-terrain';
+  const floor = mesh(g, geo, material); floor.name = name;
   floor.userData.terrain = true; return floor;
 }
 function localPoint(object, u, y, v) {
@@ -291,8 +299,19 @@ export function createWaterworks() {
   // walls begin at the exact playable boundary and rise close above the rider.
   for (const side of [-1, 1]) {
     const x = side < 0 ? b.minX - 4 : b.maxX + 4;
-    box(group, damp, x, 1, 0, 8, 8, length + 16);
-    box(group, concrete, x, 11, 0, 8, 12, length + 16);
+    if(side>0){
+      // Only this exact patched panel conceals a passage. Real retaining wall
+      // segments stop at its jambs, so no solid mesh remains inside the tunnel.
+      const entry=PARK_MAINTENANCE.entrance,lo=PARK_MAINTENANCE.tunnel.minZ,hi=PARK_MAINTENANCE.tunnel.maxZ;
+      for(const [start,end] of [[b.minZ-8,lo],[hi,b.maxZ+8]]){
+        box(group,damp,x,1,(start+end)/2,8,8,end-start);
+        box(group,concrete,x,11,(start+end)/2,8,12,end-start);
+      }
+      box(group,concrete,x,(PARK_MAINTENANCE.ceilingY+17)/2,entry.z,8,17-PARK_MAINTENANCE.ceilingY,hi-lo);
+    }else{
+      box(group, damp, x, 1, 0, 8, 8, length + 16);
+      box(group, concrete, x, 11, 0, 8, 12, length + 16);
+    }
     box(group, paleConcrete, x, 21, 0, 8, 8, length + 16);
     box(group, darkRust, x, 25.25, 0, 10, .5, length + 19);
     // Upper factory floors and loading windows overhang the basin edge.
@@ -398,8 +417,14 @@ export function createWaterworks() {
     }
   }
   // Foam belongs to actual discharge, not to the stable floor material.
+  const maintenance=createParkMaintenance({
+    concrete,paleConcrete,damp,dark,metal,rust,darkRust,pale,yellow,lamp,flowingWater,
+    addTerrain:(target,bounds,name)=>addTerrain(target,new THREE.MeshLambertMaterial({color:0xffffff,map:floorMap,flatShading:true}),bounds,name),
+    sign,
+  });
+  group.add(maintenance.group);
   batchStatic(group, new Set([...foam.map(f => f.mesh), ...flows, ...logoBanners]));
   group.userData.terrainVertexCount = terrain.geometry.attributes.position.count;
   group.userData.art = { palette:'worn-neutral-concrete', textures:128, paint:'fixed-original-baked-grime', collisionGeometryUnchanged:true };
-  return { group, waterMap, foam, update: time => { waterMap.offset.y = -time * .16; } };
+  return { group, waterMap, foam, maintenance, update: (time,game) => { waterMap.offset.y = -time * .16; maintenance.update(time,game); } };
 }

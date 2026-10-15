@@ -32,7 +32,7 @@ export function stepParkCamera(state,input,seconds) {
   state.fov=reset?targetFov:THREE.MathUtils.lerp(state.fov,targetFov,alpha(3,dt));
   const angle=state.heading+(pipe?0:.24),boom=pipe?5.3:5.0;
   const desired=anchor.clone().add(new THREE.Vector3(Math.sin(angle)*boom,0,Math.cos(angle)*boom)).addScaledVector(up,pipe?2.4:2.6);
-  const options={terrainLift:false,focus};
+  const options={terrainLift:false,focus,maintenanceAccess:input.maintenanceAccess===true};
   const safe=vector(resolveParkCamera(anchor.x,anchor.y,anchor.z,desired,pipe?up:null,options));
   const targetOffset=safe.clone().sub(anchor),targetFocus=focus.clone().sub(anchor);
   if(reset){state.offset.copy(targetOffset);state.focusOffset.copy(targetFocus);state.up.copy(WORLD_UP);}

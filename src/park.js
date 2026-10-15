@@ -1,4 +1,5 @@
 import { SurfGame, RUN_SECONDS, clamp } from './game.js';
+import { PARK_MAINTENANCE, MAINTENANCE_RAMPS, MAINTENANCE_RAILS, MAINTENANCE_SOLIDS, maintenanceCeilingAt, crossesMaintenanceEntrance, sweepMaintenanceBounds } from './park-maintenance.js';
 
 const CUTBACK_SECONDS=.72;
 const CUTBACK_TURN=145*Math.PI/180;
@@ -24,6 +25,7 @@ export const PARK_RAMPS = [
   { id:'east-access',name:'EAST PIPE ROOF ACCESS',type:'access',x:74,z:17,width:10,length:32,height:12,baseY:-1.6,rotation:Math.PI/2,color:0x7f8270 },
   { id:'west-transfer',name:'WEST TREATMENT SPINE',type:'spine',x:-65,z:-138,width:28,length:30,height:6,rotation:Math.PI/2,color:0x599080 },
   { id:'east-transfer',name:'EAST TREATMENT SPINE',type:'spine',x:65,z:-138,width:28,length:30,height:6,rotation:Math.PI/2,color:0x599080 },
+  ...MAINTENANCE_RAMPS,
 ];
 
 export const PARK_TERRAIN = [
@@ -38,7 +40,7 @@ export const PARK_PIPES = [
 ];
 export const PARK_COPINGS=PARK_RAMPS.filter(ramp=>ramp.type==='quarter').map(ramp=>{
   const v=ramp.length*.485,x=ramp.x-Math.sin(ramp.rotation)*v,z=ramp.z-Math.cos(ramp.rotation)*v;
-  return {id:ramp.id+'-coping',name:ramp.name+' COPING',kind:'coping',rampId:ramp.id,x,z,length:ramp.width-4,height:parkHeight(x,z)+.16,rotation:ramp.rotation-Math.PI/2,radius:.12,supportRadius:.07,supportCount:4};
+  return {id:ramp.id+'-coping',name:ramp.name+' COPING',kind:'coping',area:ramp.area,rampId:ramp.id,x,z,length:ramp.width-4,height:parkHeight(x,z)+.16,rotation:ramp.rotation-Math.PI/2,radius:.12,supportRadius:.07,supportCount:4};
 });
 
 export const PARK_RAILS = [
@@ -52,6 +54,7 @@ export const PARK_RAILS = [
   {id:'north-crossing',name:'NORTH PIPELINE',x:0,z:-105,length:34,height:.2,rotation:Math.PI/2},
   ...PARK_PIPES.map(pipe=>({id:pipe.id+'-crest',name:pipe.name+' CREST',x:pipe.x,z:pipe.z,length:pipe.length-2,height:pipe.centerY+pipe.radius+.22,rotation:pipe.rotation,pipeId:pipe.id})),
   ...PARK_COPINGS,
+  ...MAINTENANCE_RAILS,
 ].map(rail=>({radius:.18,supportRadius:.13,supportCount:4,...rail}));
 
 export const PARK_BOUNDS = { minX:-120,maxX:120,minZ:-180,maxZ:180 };
@@ -62,7 +65,7 @@ export const PARK_STARTS = {
   east:{x:52,z:48,heading:0,name:'EAST RUST TUNNEL'},
   filters:{x:-66,z:-85,heading:0,name:'FILTER HALFPIPE'},
 };
-export const PARK_SOLIDS = [-98,98].flatMap(x=>[-128,-38,125].map(z=>({id:`column-${x}-${z}`,type:'cylinder',x,z,radius:1.2,height:28,baseY:0})));
+export const PARK_SOLIDS = [...[-98,98].flatMap(x=>[-128,-38,125].map(z=>({id:`column-${x}-${z}`,type:'cylinder',x,z,radius:1.2,height:28,baseY:0}))),...MAINTENANCE_SOLIDS];
 
 export function parkLocal(object, x, z) {
   const c = Math.cos(object.rotation), s = Math.sin(object.rotation);
@@ -333,6 +336,7 @@ export class WaveParkGame extends SurfGame {
       rampHits: 0, grindCount: 0, visitedRamps: new Set(),
       railCooldown:0,rampCooldown:0,surface:parkRideSurface(spawn.x,spawn.z,parkHeight(spawn.x,spawn.z)),
       steering:0,pipeRide:null,pipeLoops:0,pipeCooldown:0,rideRoll:0,rideUp:{x:0,y:1,z:0},lipMove:null,lipGrab:0,rampReturn:null,
+      maintenanceAccess:false,maintenanceVisits:0,
     });
   }
 
@@ -518,7 +522,7 @@ export class WaveParkGame extends SurfGame {
         }
       }
       if(obstacle?.type==='grind') this.catchRail(obstacle.rail,obstacle.local,obstacle.along);
-      this.bounceEdges();
+      this.bounceEdges(from,wasAirborne);
       const surface = parkRideSurface(this.x,this.z,this.y);
       this.surface = surface;
 
@@ -794,7 +798,28 @@ export class WaveParkGame extends SurfGame {
     }
   }
 
-  bounceEdges() {
+  bounceEdges(from=null,wasAirborne=this.airborne) {
+    if(!this.isRace&&from) {
+      const to={x:this.x,y:this.y,z:this.z};
+      if(!this.maintenanceAccess&&crossesMaintenanceEntrance(from,to,wasAirborne)) {
+        this.maintenanceAccess=true;this.maintenanceVisits++;
+        if(this.maintenanceVisits===1)this.onEvent({type:'secretFound',id:PARK_MAINTENANCE.id,name:'MAINTENANCE WORKS'});
+      }
+      if(this.maintenanceAccess) {
+        const hit=sweepMaintenanceBounds(from,to,PARK_BOUNDS);
+        if(hit) {
+          this.x=hit.point.x;this.y=hit.point.y;this.z=hit.point.z;
+          this.reflectWall(hit.normal);
+        }
+        const ceiling=maintenanceCeilingAt(this.x,this.z)-2;
+        if(this.y>ceiling) {this.y=ceiling;this.vy=-Math.max(1,this.vy*.3);}
+        if(this.x<PARK_MAINTENANCE.entrance.x-.7) {
+          this.maintenanceAccess=false;
+          this.onEvent({type:'maintenanceExit',id:PARK_MAINTENANCE.id});
+        }
+        return;
+      }
+    }
     let reflected = false;
     if (this.x < PARK_BOUNDS.minX || this.x > PARK_BOUNDS.maxX) {
       this.x = clamp(this.x, PARK_BOUNDS.minX + 0.05, PARK_BOUNDS.maxX - 0.05);

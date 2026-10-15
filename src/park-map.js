@@ -1,4 +1,5 @@
 import { PARK_BOUNDS, PARK_RAILS, PARK_PIPES, parkHeight } from './park.js';
+import { PARK_MAINTENANCE, maintenanceContains } from './park-maintenance.js';
 
 // A fixed plant plan makes the larger basin navigable without interrupting a run.
 export class ParkMap {
@@ -23,15 +24,39 @@ export class ParkMap {
     }
     c.strokeStyle='#e4dcaa';c.lineWidth=1;
     for(const rail of PARK_RAILS){
+      if(rail.area==='maintenance')continue;
       const sx=Math.sin(rail.rotation)*rail.length/2,sz=Math.cos(rail.rotation)*rail.length/2;
       const a=this.point(rail.x-sx,rail.z-sz),b=this.point(rail.x+sx,rail.z+sz);
       c.beginPath();c.moveTo(a.x,a.z);c.lineTo(b.x,b.z);c.stroke();
     }
     c.fillStyle='#e7dfb0';c.font='bold 8px monospace';c.fillText('N',8,14);
   }
-  point(x,z){return{x:4+(x-PARK_BOUNDS.minX)/this.width*120,z:4+(z-PARK_BOUNDS.minZ)/this.length*176};}
+  point(x,z,maintenance=false){
+    const bounds=maintenance?this.maintenanceBounds:PARK_BOUNDS;
+    return{x:4+(x-bounds.minX)/(bounds.maxX-bounds.minX)*120,z:4+(z-bounds.minZ)/(bounds.maxZ-bounds.minZ)*176};
+  }
+  createMaintenancePlan(){
+    const bay=PARK_MAINTENANCE.bay;this.maintenanceBounds={minX:112,maxX:bay.maxX+4,minZ:bay.minZ-4,maxZ:bay.maxZ+4};
+    this.maintenancePlan=document.createElement('canvas');this.maintenancePlan.width=128;this.maintenancePlan.height=184;
+    const c=this.maintenancePlan.getContext('2d'),b=this.maintenanceBounds;c.fillStyle='#141e1b';c.fillRect(0,0,128,184);
+    for(let px=4;px<124;px+=2)for(let pz=4;pz<180;pz+=2){
+      const x=b.minX+(px-4)/120*(b.maxX-b.minX),z=b.minZ+(pz-4)/176*(b.maxZ-b.minZ);
+      if(!maintenanceContains(x,z)&&x>120)continue;
+      const shade=Math.round(54+Math.max(0,parkHeight(x,z))*7);
+      c.fillStyle=`rgb(${shade+5},${shade+6},${shade-8})`;c.fillRect(px,pz,2,2);
+    }
+    c.strokeStyle='#d2b867';c.lineWidth=1;
+    for(const rail of PARK_RAILS.filter(rail=>rail.area==='maintenance')){
+      const sx=Math.sin(rail.rotation)*rail.length/2,sz=Math.cos(rail.rotation)*rail.length/2;
+      const a=this.point(rail.x-sx,rail.z-sz,true),end=this.point(rail.x+sx,rail.z+sz,true);
+      c.beginPath();c.moveTo(a.x,a.z);c.lineTo(end.x,end.z);c.stroke();
+    }
+    c.fillStyle='#e7dfb0';c.font='bold 8px monospace';c.fillText('M-02',8,14);
+  }
   update(game){
-    const c=this.ctx,p=this.point(game.x,game.z);c.clearRect(0,0,128,184);c.drawImage(this.plan,0,0);
+    const maintenance=game.maintenanceAccess===true;
+    if(maintenance&&!this.maintenancePlan)this.createMaintenancePlan();
+    const c=this.ctx,p=this.point(game.x,game.z,maintenance);c.clearRect(0,0,128,184);c.drawImage(maintenance?this.maintenancePlan:this.plan,0,0);
     if(game.isRace&&game.course){
       const allCheckpoints=game.course.checkpoints,laps=game.course.laps||1;
       const perLap=Math.ceil(allCheckpoints.length/laps);

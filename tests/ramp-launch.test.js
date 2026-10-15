@@ -69,6 +69,16 @@ test('all ramp orientations support automatic and charged takeoff without solid-
     for(const speed of[15,23.5])for(const releaseAt of[null,...(ramp.type==='spine'?[.20,.30,.42]:[.60,.78,.86])]) {
       const manual=releaseAt!==null;
       const events=[],game=new WaveParkGame();game.onEvent=event=>events.push({...event,time:game.elapsed});game.start();
+      if(ramp.area==='maintenance') {
+        // Reach the annex through its actual secret entrance before placing
+        // the rider at an individual ramp approach; a fresh run has a solid
+        // perimeter and must not be able to spawn past that locked wall.
+        Object.assign(game,{x:112,z:-10,y:0,heading:-Math.PI/2,vx:18,vz:0,speed:18,charge:0});
+        assert.equal(game.jump(),true);
+        for(let i=0;i<330;i++)game.update(1/120,{pump:true});
+        assert.equal(game.maintenanceAccess,true);assert.equal(game.airborne,false);
+        events.length=0;
+      }
       const s=Math.sin(ramp.rotation),c=Math.cos(ramp.rotation),v=-ramp.length/2-4;
       Object.assign(game,{x:ramp.x-s*v,z:ramp.z-c*v,heading:ramp.rotation,speed,vx:-s*speed,vz:-c*speed});
       game.y=parkHeight(game.x,game.z);

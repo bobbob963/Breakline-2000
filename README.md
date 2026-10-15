@@ -1,5 +1,15 @@
 # BREAKLINE ’99 — Version 8.0
 
+**Hidden passages:** both sewer courses now have a concealed wall-jump shortcut on a bend. Jump into the patched wall to enter a real flowing-water tunnel, then merge back before the next required sun ring. The three signed side pipes remain available, and rivals keep their ordinary routes. Free Waterworks also has a concealed wall-jump passage into **Maintenance Works**, a connected construction hall with five ramps, two grind rails, three coping lines, scaffolds, exposed rebar, overhead pipework and work lights. Its minimap appears only after discovery. Ride back through the same tunnel to return to the main basin; the entrance closes behind you. Races and Time Trials retain their original Waterworks boundaries.
+
+<details><summary>Hidden entrance clues</summary>
+
+- **Runoff Run:** jump into the patched left wall around 450 metres, after the second ring.
+- **Deep Works:** jump into the patched left wall around 590 metres, after the third ring.
+- **Waterworks:** find the small **M-02** repair patch on the east retaining wall near the centre of the factory. Pop towards it; riding into it on the ground still hits the wall.
+
+</details>
+
 **Site analytics:** Vercel Web Analytics (`@vercel/analytics`) is initialised once by `src/analytics.js`. Production builds count visits on `breakline-2000.vercel.app`, `breakline99.com` and `www.breakline99.com`; local development, offline copies and StackBlitz previews do not load the tracking script. This uses standard visitor/page-view analytics without custom gameplay events or rider names. View results in the [project Analytics dashboard](https://vercel.com/teddybamford-s-projects/breakline-2000/analytics). Web Analytics must be enabled there before deployment. Add any future production domain to `productionHosts`.
 
 **Settings:** open **Settings** from the home screen or pause menu. Choose Retro or Clean graphics; Classic, Close or Wide camera framing; camera height, field of view and camera motion. Set separate music/effects volumes, change your lobby rider name, and remap all 22 gameplay actions. Click an action and press a key; occupied keys swap, Escape cancels, and the guide/HUD show your choices. Save Changes persists the draft in this browser; Cancel leaves the previous setup intact. Escape and Tab remain menu controls, and the secret admin sequence stays Left, Left, Right, Up on the home screen.

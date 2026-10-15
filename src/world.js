@@ -479,7 +479,7 @@ export class SurfWorld {
     if(surfBoost){this.surfBoost.position.set(x,y+.14,z);this.surfBoost.rotation.y=heading;this.surfBoost.scale.set(1,1,game.surfBoostCombo?1.65:1);this.surfBoost.material.opacity=.30+.2*Math.min(1,game.surfBoostTime/.25);}
     this.ocean.position.z = oceanZ;
     this.coast.position.z = -d - 80; this.sky.position.z = isPark?0:-d;
-    if(this.parkUpdate)this.parkUpdate(t);
+    if(this.parkUpdate)this.parkUpdate(t,game);
     for(const f of this.parkFoam)f.mesh.position.y=f.y+Math.sin(t*3+f.phase)*.07;
     for (let i = 0; i < this.birds.length; i++) {
       const b = this.birds[i]; b.position.set(-28 + i * 13 + Math.sin(t * .14 + i) * 4, 25 + (i % 3) * 4 + Math.sin(t + i) * .4, -155 - i % 4 * 22); b.rotation.z = Math.sin(t * 2 + i) * .12;
@@ -552,7 +552,7 @@ export class SurfWorld {
         const up=game.pipeRide?new THREE.Vector3(game.rideUp.x,game.rideUp.y,game.rideUp.z):new THREE.Vector3(0,1,0);
         const focus=new THREE.Vector3(x,y,z).addScaledVector(up,.85);
         if(!game.pipeRide){const headPosition=new THREE.Vector3();s.head.getWorldPosition(headPosition);focus.copy(s.rig.position).lerp(headPosition,.57);}
-        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:cameraMotion?game.speed:12,rideUp:game.pipeRide?game.rideUp:null,focus},playerDt);
+        parkFrame=stepParkCamera(this.parkCamera,{x,y,z,heading,speed:cameraMotion?game.speed:12,rideUp:game.pipeRide?game.rideUp:null,focus,maintenanceAccess:game.maintenanceAccess},playerDt);
         target=parkFrame.position;look=parkFrame.look;
       }
     }else{

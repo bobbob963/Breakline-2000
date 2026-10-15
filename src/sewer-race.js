@@ -1,6 +1,6 @@
 import { SurfGame,clamp } from './game.js';
 import { RaceRider,drainRaceBoost,raceTrickInput } from './race-rider.js';
-import { createSewerCourse,getSewerTrack,sewerWaterHeight,sewerPoint,sewerPathScale,sewerBarrelState,sewerTunnelProfile } from './sewer-course.js';
+import { createSewerCourse,getSewerTrack,sewerWaterHeight,sewerPoint,sewerPathScale,sewerBarrelState,sewerTunnelProfile,sewerBranches,sewerLaneBounds } from './sewer-course.js';
 
 const COUNTDOWN=3;
 const FALLBACK_RIVAL=Object.freeze({id:'drainrat',name:'DRAIN RAT',rank:5,pace:.65,
@@ -69,9 +69,9 @@ export class SewerRider extends RaceRider(SurfGame){
     const control=steering*(this.airborne?(this.characterStats?.airControl??1):(this.characterStats?.steering??1));
     const lateral=this.bailTime>0?0:(this.airborne?control*7:control*9)+this.current*(dt>0?worldDt/dt:0)+(this.cutbackActive?this.cutbackDirection*3*this.cutback:0);
     this.vx+=(lateral-this.vx)*(1-Math.exp(-dt*(this.airborne?4:8)));this.x+=this.vx*dt;
-    this.updateShortcut(previous,travel);
-    const branch=this.course.shortcuts.find(item=>item.id===this.activeShortcut),center=branch?.entryX||0,halfWidth=branch?branch.width/2:this.course.halfWidth;
-    if(Math.abs(this.x-center)>halfWidth){this.x=clamp(this.x,center-halfWidth,center+halfWidth);this.vx=0;this.speed*=Math.exp(-dt*.7);}
+    this.updateShortcut(previous,travel,steering);
+    const bounds=sewerLaneBounds(this.distance,this.trackId,this.activeShortcut);
+    if(this.x<bounds.min||this.x>bounds.max){this.x=clamp(this.x,bounds.min,bounds.max);this.vx=0;this.speed*=Math.exp(-dt*.7);}
     const ground=water(this);
     if(this.bailTime>0){this.bailTime=Math.max(0,this.bailTime-dt);this.y=ground;if(this.bailTime===0)this.onEvent({type:'recover'});}
     else if(this.airborne){
@@ -97,18 +97,33 @@ export class SewerRider extends RaceRider(SurfGame){
     this.landingWarning='';this.danger=Math.max(this.hazardDanger,this.bailTime>0?1:0);
     if(this.phase==='running'&&this._pendingRaceBoost)this.awardRaceBoost(this._pendingRaceBoost);
   }
-  updateShortcut(previous,travel){
-    const active=this.course.shortcuts.find(item=>item.id===this.activeShortcut);
+  updateShortcut(previous,travel,steering=0){
+    const active=sewerBranches(this.course).find(item=>item.id===this.activeShortcut);
     if(active&&this.distance>=active.end&&Number.isFinite(travel))this.distance=advanceAcrossSeam(previous.distance,travel,this.x,this.trackId,active);
     if(active&&this.distance>=active.end){this.activeShortcut=null;this.onEvent({type:'sewerShortcutExit',id:active.id});}
     if(this.activeShortcut)return;
-    for(const branch of this.course.shortcuts){
+    for(const branch of sewerBranches(this.course)){
       if(previous.distance<branch.start&&this.distance>=branch.start&&!this.shortcutProcessed.has(branch.id)){
         const fraction=(branch.start-previous.distance)/(this.distance-previous.distance||1),crossX=previous.x+(this.x-previous.x)*fraction;
-        if(Math.abs(crossX-branch.entryX)<branch.width*.43&&this.bailTime<=0&&!this.airborne){
+        const entryHeight=previous.y-sewerWaterHeight(crossX,branch.start,previous.elapsed,this.trackId);
+        const intoWall=Math.sign(steering)===Math.sign(branch.entryX)||this.vx*Math.sign(branch.entryX)>.65;
+        const canEnter=branch.secret
+          ? this.airborne&&entryHeight>=branch.minEntryHeight&&entryHeight<=branch.maxEntryHeight&&intoWall&&Math.abs(crossX-branch.entryX)<branch.entryWidth/2
+          : !this.airborne&&Math.abs(crossX-branch.entryX)<branch.width*.43;
+        if(canEnter&&this.bailTime<=0){
           if(Number.isFinite(travel))this.distance=advanceAcrossSeam(previous.distance,travel,this.x,this.trackId,branch);
           if(this.distance<branch.start)continue;
-          this.activeShortcut=branch.id;this.shortcutsTaken++;this.onEvent({type:'sewerShortcut',id:branch.id,name:branch.name});
+          this.activeShortcut=branch.id;this.shortcutsTaken++;this.onEvent({type:'sewerShortcut',id:branch.id,name:branch.name,secret:!!branch.secret});
+        }
+        if(branch.secret&&!canEnter&&this.bailTime<=0){
+          const bodyHeight=previous.y+1.0-3;
+          if((crossX-branch.entryX)**2+bodyHeight*bodyHeight<5.04**2){
+            // This particular infill stays solid to ordinary riding. A failed
+            // approach can still turn back toward the open centre canal.
+            this.distance=branch.start-.08;this.speed=Math.min(this.speed,8);
+            this.vx=-Math.sign(branch.entryX)*Math.max(2,Math.abs(this.vx)*.35);
+            continue;
+          }
         }
         this.shortcutProcessed.add(branch.id);
       }
@@ -147,7 +162,7 @@ export class SewerRider extends RaceRider(SurfGame){
 
 export function sewerOpponentInput(rider,course,pace=.65){
   const gate=course.checkpoints[rider.nextCheckpoint],gateAhead=gate?gate.distance-rider.distance:Infinity;
-  const branch=course.shortcuts.find(item=>item.id===rider.activeShortcut);
+  const branch=sewerBranches(course).find(item=>item.id===rider.activeShortcut);
   const nextBranch=course.shortcuts.find(item=>item.start>rider.distance&&item.start-rider.distance<105&&(!gate||item.start<gate.distance));
   let target=branch?branch.entryX:nextBranch?nextBranch.entryX:gateAhead<100?gate.x:0;
   let nearHazard=null;

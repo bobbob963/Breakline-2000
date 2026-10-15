@@ -25,7 +25,7 @@ function mainPoint(distance,x,y,track){
   return {x:center+x/length,y,z:-distance+x*slope/length,heading};
 }
 function shortcutDefinition(shortcut,trackId){
-  return typeof shortcut==='object'?shortcut:shortcut?createSewerCourse(trackId).shortcuts.find(item=>item.id===shortcut):null;
+  return typeof shortcut==='object'?shortcut:shortcut?sewerBranches(createSewerCourse(trackId)).find(item=>item.id===shortcut):null;
 }
 export function sewerPoint(distance,x=0,y=0,trackId='sewer-run',shortcut=null){
   const track=getSewerTrack(trackId),branch=shortcutDefinition(shortcut,track.id);
@@ -50,6 +50,14 @@ export function sewerPathScale(distance,trackId='sewer-run',shortcut=null,lane=n
   const branch=shortcutDefinition(shortcut,trackId),x=lane??branch?.entryX??0;
   const a=sewerPoint(distance-.01,x,0,trackId,branch),b=sewerPoint(distance+.01,x,0,trackId,branch);
   return Math.max(.2,Math.hypot(b.x-a.x,b.z-a.z)/.02);
+}
+export function sewerLaneBounds(distance,trackId='sewer-run',shortcut=null){
+  const track=getSewerTrack(trackId),branch=shortcutDefinition(shortcut,trackId);
+  if(!branch)return {min:-track.halfWidth,max:track.halfWidth};
+  const width=branch.width/2,blend=smooth((distance-(branch.end-45))/45);
+  const minimum=branch.entryX-width,maximum=branch.entryX+width;
+  return {min:minimum+(Math.max(minimum,-track.halfWidth)-minimum)*blend,
+    max:maximum+(Math.min(maximum,track.halfWidth)-maximum)*blend};
 }
 export function sewerWaterHeight(x,distance,time=0,trackId='sewer-run',shortcut=null){
   const candidate=shortcutDefinition(shortcut,trackId),branch=candidate&&distance>candidate.start&&distance<candidate.end?candidate:null;
@@ -93,12 +101,21 @@ export function sewerTunnelProfile(distance,trackId='sewer-run',shortcut=null){
   return {radius,centerY:7,centreX:0,halfWidth:track.halfWidth,ceiling:7+radius,section};
 }
 
+// Signed bypasses stay separate from the unmarked routes in menus and rival AI.
+export const sewerBranches=course=>course.paths||course.shortcuts||[];
+
 const cache=new Map();
 export function createSewerCourse(id='sewer-run'){
   const track=getSewerTrack(id);if(cache.has(track.id))return cache.get(track.id);
   const deep=track.id==='sewer-depths';
   const shortcuts=(deep?[[90,320,-8.2],[905,1020,8.2],[1090,1320,-8.2]]:[[30,200,-8.2],[700,840,8.2],[910,1080,-8.2]])
     .map(([start,end,entryX],index)=>Object.freeze({id:`${track.id}-bypass-${index+1}`,name:`BYPASS ${index+1}`,start,end,entryX,width:6.5,inset:entryX>0?8:0}));
+  const secretPassages=Object.freeze([Object.freeze({
+    id:`${track.id}-hidden-interceptor`,name:deep?'THE BLIND INTERCEPTOR':'MORTAR RUN',secret:true,
+    start:deep?590:450,end:deep?830:640,entryX:-9.3,width:6.5,inset:0,
+    entryWidth:3.2,minEntryHeight:.42,maxEntryHeight:4.8,
+  })]);
+  const paths=Object.freeze([...shortcuts,...secretPassages].sort((a,b)=>a.start-b.start));
   const distances=deep?[50,375,540,865,1040,1380,1575]:[240,420,665,860,1120,1280];
   const checkpoints=distances.map((distance,index)=>Object.freeze({index,distance,x:[0,2,-2,0,2,-1,1][index],radius:5.2}));
   const hazards=[];
@@ -114,7 +131,7 @@ export function createSewerCourse(id='sewer-run'){
     add('whirlpool',shortcut.start+(shortcut.end-shortcut.start)*.76,shortcut.entryX+2,shortcut.id,{radius:1.15,radiusX:1.15,width:2.3,radiusZ:3});
   }
   hazards.sort((a,b)=>a.distance-b.distance);
-  const course=Object.freeze({...track,sections:SECTIONS[track.id],checkpoints:Object.freeze(checkpoints),shortcuts:Object.freeze(shortcuts),hazards:Object.freeze(hazards)});
+  const course=Object.freeze({...track,sections:SECTIONS[track.id],checkpoints:Object.freeze(checkpoints),shortcuts:Object.freeze(shortcuts),secretPassages,paths,hazards:Object.freeze(hazards)});
   cache.set(track.id,course);return course;
 }
 

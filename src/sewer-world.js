@@ -4,7 +4,7 @@ import { rivalProfile } from './race-world.js';
 import { sampleRiderTrick } from './rider-pose.js';
 import { waterMaterial, closingWaveGeometry, updateClosingWave, waveMaterial, createSewerWaveCrash, updateSewerWaveCrash } from './sewer-water.js';
 import { createSewerOutfalls } from './sewer-outfalls.js';
-import { sewerPoint, sewerWaterHeight, sewerBarrelState, sewerTunnelProfile, sewerSection } from './sewer-course.js';
+import { sewerPoint, sewerWaterHeight, sewerBarrelState, sewerTunnelProfile, sewerSection, sewerBranches } from './sewer-course.js';
 
 const TAU = Math.PI * 2;
 const clamp01 = value => Math.max(0, Math.min(1, value));
@@ -51,7 +51,7 @@ function tunnelSamples(course,trackId,path=null) {
   const rows=Math.ceil((end-start)/2);
   for(let row=0;row<=rows;row++){
     const d=start+(end-start)*row/rows,profile=renderTunnelProfile(d,trackId,path),point=sewerPoint(d,profile.centreX||0,profile.centerY,trackId,path);
-    samples.push({...point,radius:profile.radius,distance:d,sectors:path?20:28});
+    samples.push({...point,radius:profile.radius,distance:d,sectors:path?40:48});
   }
   return samples;
 }
@@ -123,7 +123,7 @@ function projectToSamples(point,samples) {
 }
 function sectionMaterial(kind,pressure){return kind==='masonry'||kind==='brick'?0:kind==='steel'||kind==='service'?1:kind==='pump'||kind==='vault'||kind==='outfall'||kind==='spillway'?2:pressure?1:0;}
 function pipeGeometry(course, start, end, trackId, path = null, junctions = []) {
-  const positions = [], uv = [], colors=[], indices = [], groups=[[],[],[]], rows = Math.max(1, Math.ceil((end - start) / 4)), sectors = path ? 20 : 28,inside=[];
+  const positions = [], uv = [], colors=[], indices = [], groups=[[],[],[]], rows = Math.max(1, Math.ceil((end - start) / (path?1:2))), sectors = path ? 40 : 48,inside=[],joinEdges=[];
   for (let row = 0; row <= rows; row++) {
     const distance = start + (end - start) * row / rows;
     const profile=renderTunnelProfile(distance,trackId,path);
@@ -146,8 +146,22 @@ function pipeGeometry(course, start, end, trackId, path = null, junctions = []) 
       const material=path?1:sectionMaterial(section.kind,trackId==='sewer-depths');
       for(const triangle of [[a,a+1,b],[a+1,b+1,b]]){
         const polygon=clipTunnelPolygon(triangle,{positions,uv,colors,inside},junctions);
+        if(path)for(let edge=0;edge<polygon.length;edge++){
+          const a=polygon[edge],b=polygon[(edge+1)%polygon.length];
+          if(junctions.some((_,j)=>Math.abs(inside[a][j])<.003&&Math.abs(inside[b][j])<.003))joinEdges.push([positions.slice(a*3,a*3+3),positions.slice(b*3,b*3+3)]);
+        }
         for(let vertex=1;vertex<polygon.length-1;vertex++)groups[material].push(polygon[0],polygon[vertex],polygon[vertex+1]);
       }
+  }
+  if(path)for(const [distance,row]of [[start,0],[end,rows]]){
+    const profile=renderTunnelProfile(distance,trackId,path),point=sewerPoint(distance,path.entryX,profile.centerY,trackId,path),centre=positions.length/3;
+    positions.push(point.x,point.y,point.z);uv.push(.5,.5);colors.push(.60,.59,.56);inside.push(junctions.map(samples=>tubeDistance(point,samples)));
+    // Only the circular mouth's exposed crescent is capped. Its overlap with
+    // the main canal remains open, so the union has no sideways escape gap.
+    for(let side=0;side<sectors;side++){
+      const polygon=clipTunnelPolygon([centre,row*(sectors+1)+side,row*(sectors+1)+side+1],{positions,uv,colors,inside},junctions);
+      for(let vertex=1;vertex<polygon.length-1;vertex++)groups[1].push(polygon[0],polygon[vertex],polygon[vertex+1]);
+    }
   }
   if(!path)for(const [distance,row]of [[start,0],[end,rows]]){
     const profile=renderTunnelProfile(distance,trackId),point=sewerPoint(distance,0,profile.centerY,trackId),centre=positions.length/3;
@@ -156,8 +170,24 @@ function pipeGeometry(course, start, end, trackId, path = null, junctions = []) 
   }
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-  for(let index=0;index<groups.length;index++){geometry.addGroup(indices.length,groups[index].length,index);indices.push(...groups[index]);}
-  geometry.setIndex(indices); geometry.computeVertexNormals(); return geometry;
+  for(let index=0;index<groups.length;index++){geometry.addGroup(indices.length,groups[index].length,index);for(const value of groups[index])indices.push(value);}
+  geometry.setIndex(indices); geometry.computeVertexNormals(); geometry.userData.joinEdges=joinEdges; return geometry;
+}
+// A narrow cast-metal bead follows the exact clipped opening. Joining these
+// sections into one buffer keeps the hand-finished flange inexpensive to draw.
+function junctionRimGeometry(edges){
+  const positions=[],normals=[],indices=[],seen=new Set(),sides=6,radius=.19;
+  for(const [a,b]of edges){
+    const key=[a,b].map(point=>point.map(value=>Math.round(value*100)).join(',')).sort().join('/');if(seen.has(key))continue;seen.add(key);
+    const start=new THREE.Vector3(...a),end=new THREE.Vector3(...b),axis=end.clone().sub(start);if(axis.length()<.018)continue;axis.normalize();
+    const side=new THREE.Vector3().crossVectors(axis,Math.abs(axis.y)<.9?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0)).normalize(),up=new THREE.Vector3().crossVectors(axis,side).normalize(),first=positions.length/3;
+    for(const centre of [start,end])for(let i=0;i<sides;i++){
+      const normal=side.clone().multiplyScalar(Math.cos(i/sides*TAU)).addScaledVector(up,Math.sin(i/sides*TAU));
+      const point=centre.clone().addScaledVector(normal,radius);positions.push(point.x,point.y,point.z);normals.push(normal.x,normal.y,normal.z);
+    }
+    for(let i=0;i<sides;i++){const next=(i+1)%sides;indices.push(first+i,first+next,first+sides+i,first+next,first+sides+next,first+sides+i);}
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));geometry.setIndex(indices);return geometry;
 }
 function waterEdge(distance,trackId,path,side,mainSamples=null){
   const profile=renderTunnelProfile(distance,trackId,path);
@@ -402,13 +432,13 @@ function makeOutfall(section,course,trackId,materials){
 export function createSewerWorld(playerProfile) {
   const group = new THREE.Group(); group.name = 'sewer-tracks'; group.visible = false;
   let course = null, trackId = null, player = playerProfile, opponent = null, opponentLabel = null, disposed = false,rivalKey='';
-  let water = [], rings = [], hazards = [], props = [], shortcutSigns = [], materials = [], outfalls = null, style = sewerTrackStyle('sewer-run');
+  let water = [], rings = [], hazards = [], props = [], shortcutSigns = [], secretWalls = [], materials = [], outfalls = null, style = sewerTrackStyle('sewer-run');
   const resources = new Set();
   function clear() {
     if (opponent) { group.remove(opponent.rig); disposeSurfer(opponent); }
     group.traverse(object => { if (object.geometry) resources.add(object.geometry); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) { resources.add(material); if (material.map) resources.add(material.map); } });
     for (const resource of resources) resource.dispose(); resources.clear(); group.clear();
-    water = []; rings = []; hazards = []; props = []; shortcutSigns = []; materials = []; opponent = null; opponentLabel = null; course = null;outfalls = null;rivalKey=''; group.visible = false;
+    water = []; rings = []; hazards = []; props = []; shortcutSigns = []; secretWalls = []; materials = []; opponent = null; opponentLabel = null; course = null;outfalls = null;rivalKey=''; group.visible = false;
   }
   function prepare(game) {
     clear(); course = game.course; trackId = game.trackId || course.trackId || 'sewer-run'; style = sewerTrackStyle(trackId);
@@ -423,7 +453,7 @@ export function createSewerWorld(playerProfile) {
     const concrete=new THREE.MeshLambertMaterial({color:style.pressure?0x737f73:0x8d8e76,map:masonryTexture(true),side:THREE.DoubleSide,flatShading:true});
     const dark=new THREE.MeshLambertMaterial({color:0x20332d,flatShading:true});
     const light = new THREE.MeshBasicMaterial({ color: style.light });
-    const mainSamples=tunnelSamples(course,trackId),branchSamples=(course.shortcuts||[]).map(shortcut=>tunnelSamples(course,trackId,shortcut));
+    const mainSamples=tunnelSamples(course,trackId),branchSamples=sewerBranches(course).map(shortcut=>tunnelSamples(course,trackId,shortcut));
     const tunnel = addMesh(group, pipeGeometry(course, -45, course.length + 80, trackId,null,branchSamples), wall); tunnel.name = 'sewer-main-pipe'; tunnel.userData = { radius: SEWER_TUNNEL_RADIUS, centreY: SEWER_TUNNEL_CENTRE_Y };
     const bedMaterial=new THREE.MeshLambertMaterial({color:0x394332,map:masonryTexture(true),flatShading:true,side:THREE.DoubleSide});
     const addBed=(start,end,path=null)=>{const bed=addMesh(group,channelBedGeometry(start,end,trackId,path,mainSamples),bedMaterial);bed.name=`sewer-channel-bed-${path?.id||'main'}`;bed.userData={underwater:true,pathId:path?.id||'main'};};
@@ -432,7 +462,7 @@ export function createSewerWorld(playerProfile) {
       const geometry=waterGeometry(start,end,trackId,path,mainSamples),cuts=[],cutEnds=[];
       if(!path){
         const bounds=geometry.boundingBox;
-        for(const shortcut of course.shortcuts||[]){
+        for(const shortcut of sewerBranches(course)){
           const segments=Math.ceil((shortcut.end-shortcut.start)/8);
           for(let i=0;i<segments;i++){
             const a=sewerPoint(shortcut.start+(shortcut.end-shortcut.start)*i/segments,shortcut.entryX,0,trackId,shortcut);
@@ -467,7 +497,7 @@ export function createSewerWorld(playerProfile) {
       positionAlong(section, distance, 0, 0, trackId); props.push(section);
       // A full reinforcement rib is omitted throughout an intersecting branch
       // junction. Its interior must remain just as clear as the carved shell.
-      const atJunction=(course.shortcuts||[]).some(shortcut=>distance>shortcut.start-24&&distance<shortcut.end+24);
+      const atJunction=sewerBranches(course).some(shortcut=>distance>shortcut.start-24&&distance<shortcut.end+24);
       if(!atJunction){const rib=addMesh(section,ribGeometry,profile.section.kind==='masonry'?concrete:steel,0,profile.centerY,0);rib.name=`sewer-structural-arch-${i}`;rib.scale.set(profile.radius-.2,profile.radius-.2,profile.radius-.2);}
       for (const side of [-1, 1]) {
         const wallX=profile.radius-.4;
@@ -487,8 +517,9 @@ export function createSewerWorld(playerProfile) {
       const sign=makeLabel(`${String(index+1).padStart(2,'0')} / ${section.name}`,style.pressure?'#9bc6ba':'#dab880');sign.position.set(0,10.5,0);sign.scale.set(7.6,1.9,1);marker.add(sign);
       connectPipe(marker,[-Math.min(profile.radius-1,12),11.65,0],[Math.min(profile.radius-1,12),11.65,0],.09,steel);group.add(marker);props.push(marker);
     }
-    for (const shortcut of course.shortcuts || []) {
+    for (const shortcut of sewerBranches(course)) {
       const branch = addMesh(group, pipeGeometry(course, shortcut.start, shortcut.end, trackId, shortcut,[mainSamples]), wall); branch.name = `shortcut-pipe-${shortcut.id}`; branch.userData = { shortcutId: shortcut.id, start: shortcut.start, end: shortcut.end };
+      const flange=addMesh(group,junctionRimGeometry(branch.geometry.userData.joinEdges),steel);flange.name=`sewer-junction-rim-${shortcut.id}`;flange.userData.pathId=shortcut.id;
       addBed(shortcut.start,shortcut.end,shortcut);
       for(let start=shortcut.start;start<shortcut.end;start+=SEWER_WATER_CHUNK_LENGTH)addWater(start,Math.min(shortcut.end,start+SEWER_WATER_CHUNK_LENGTH),shortcut);
       for(let distance=shortcut.start+20;distance<shortcut.end-16;distance+=28){
@@ -503,6 +534,22 @@ export function createSewerWorld(playerProfile) {
           addMesh(mouth,new THREE.BoxGeometry(.16,.2,2.3),light,side*4.45,1,0);
           const pool=addMesh(mouth,new THREE.PlaneGeometry(2.8,3.8),poolMaterial,side*4.5,1,0);pool.rotation.y=side*Math.PI/2;
         }
+      }
+      if(shortcut.secret){
+        // An old, apparently bricked-up maintenance bore. The hairline crack
+        // hints at the route without a glowing arrow or a shortcut sign.
+        const panel=new THREE.Group();panel.name=`sewer-secret-wall-${shortcut.id}`;
+        panel.userData={distance:shortcut.start,secretId:shortcut.id};positionAlong(panel,shortcut.start,shortcut.entryX,3,trackId);
+        const infill=new THREE.MeshLambertMaterial({color:style.wall,map:masonryTexture(false),flatShading:true,side:THREE.DoubleSide});
+        const face=addMesh(panel,new THREE.CircleGeometry(5.04,20),infill);face.name='concealed-masonry-infill';
+        face.geometry.attributes.uv.array.forEach((value,index,array)=>array[index]=value*(index%2?1.5:1));
+        const crack=new THREE.MeshBasicMaterial({color:0x34392b,side:THREE.DoubleSide});
+        for(const [ax,ay,bx,by]of [[-.55,2.8,-.32,1.6],[-.32,1.6,-.69,.5],[-.69,.5,-.42,-.7],[-.32,1.6,.18,1.26]]){
+          const seam=addMesh(panel,new THREE.PlaneGeometry(.025,Math.hypot(bx-ax,by-ay)),crack,(ax+bx)/2,(ay+by)/2,.012);seam.rotation.z=-Math.atan2(bx-ax,by-ay);
+        }
+        for(const x of [-3.6,3.6]){addMesh(panel,new THREE.BoxGeometry(.10,3.2,.08),rust,x,0,.06);for(const y of [-1.35,1.35])addMesh(panel,new THREE.BoxGeometry(.18,.18,.12),steel,x,y,.11);}
+        group.add(panel);secretWalls.push(panel);
+        continue;
       }
       const sign = makeLabel(`${shortcut.entryX < 0 ? '◀ ' : ''}${shortcut.name}${shortcut.entryX > 0 ? ' ▶' : ''}`, '#b6d493');
       positionAlong(sign, shortcut.start - 18, shortcut.entryX * .88, 4.6, trackId);sign.scale.set(4.0,1.0,1);sign.userData.distance = shortcut.start; group.add(sign); shortcutSigns.push(sign);
@@ -548,6 +595,11 @@ export function createSewerWorld(playerProfile) {
     for (const prop of props) {
       prop.visible = prop.userData.distance > game.distance - 48 && prop.userData.distance < game.distance + SEWER_DRAW_AHEAD;
       if (prop.userData.fan) prop.userData.fan.rotation.z = time * (style.pressure ? .75 : .2);
+    }
+    for(const panel of secretWalls){
+      // Opening the false wall for the rider also clears the follow camera.
+      const entry=panel.userData.distance;
+      panel.visible=game.activeShortcut!==panel.userData.secretId&&game.distance<entry+10&&game.distance>entry-SEWER_DRAW_AHEAD;
     }
     for (const sign of shortcutSigns) sign.visible = sign.userData.distance > game.distance - 8 && sign.userData.distance < game.distance + 150;
     for (const ring of rings) {

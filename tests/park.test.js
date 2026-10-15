@@ -149,10 +149,10 @@ test('same inputs at 30 and 120 Hz produce matching park trajectories and scores
 
 test('industrial park has connected terrain, pipe routes, ten freestanding rails and eight copings', () => {
   assert.ok((PARK_BOUNDS.maxX-PARK_BOUNDS.minX)*(PARK_BOUNDS.maxZ-PARK_BOUNDS.minZ) > 72*104*6);
-  assert.equal(PARK_RAMPS.length,18);
-  assert.equal(PARK_RAILS.filter(rail=>rail.kind!=='coping').length,10);
-  assert.equal(PARK_COPINGS.length,8);
-  assert.equal(PARK_RAILS.length,18);
+  assert.equal(PARK_RAMPS.filter(ramp=>ramp.area!=='maintenance').length,18);
+  assert.equal(PARK_RAILS.filter(rail=>rail.kind!=='coping'&&rail.area!=='maintenance').length,10);
+  assert.equal(PARK_COPINGS.filter(rail=>rail.area!=='maintenance').length,8);
+  assert.equal(PARK_RAILS.filter(rail=>rail.area!=='maintenance').length,18);
   assert.equal(PARK_PIPES.length,2);
   assert.equal(PARK_RAMPS.filter(ramp => ramp.zone === 'west-halfpipe').length,2);
   assert.equal(PARK_RAMPS.filter(ramp => ramp.zone === 'east-halfpipe').length,2);

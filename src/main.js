@@ -257,7 +257,9 @@ function onEvent(e){
   if(e.type==='timePowerReady')toast('DEADTIME RECHARGED · Q');
   if(e.type==='sewerPower'&&e.active)toast('SLUDGE SURGE · +35% SPEED + HAZARD SHIELD');
   if(e.type==='sewerPowerReady')toast('SLUDGE SURGE RECHARGED · Q');
-  if(e.type==='sewerShortcut')toast(`${e.name||'SIDE PIPE'} · SHORTCUT`);
+  if(e.type==='sewerShortcut'){toast(`${e.secret?'SECRET FOUND · ':''}${e.name||'SIDE PIPE'}${e.secret?'':' · SHORTCUT'}`);if(e.secret)toastTime=4;}
+  if(e.type==='secretFound'){toast(`SECRET FOUND · ${e.name||'MAINTENANCE WORKS'}`);toastTime=4;}
+  if(e.type==='maintenanceExit')toast('BACK TO THE WATERWORKS');
   if(e.type==='finish') {
     saveBest();
     if(game.isSewerLadder){
